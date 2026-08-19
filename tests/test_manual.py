@@ -64,8 +64,19 @@ def test_add_socks_http():
     assert "users" not in h.outbound["settings"]["servers"][0]
 
 
+def test_wireguard_factory_rejects_incomplete_profile():
+    with pytest.raises(ValueError, match="private key"):
+        add_wireguard("wg", "", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}])
+    with pytest.raises(ValueError, match="endpoint"):
+        add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "allowedIps": ["0.0.0.0/0"]}])
+    with pytest.raises(ValueError, match="host:port"):
+        add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "not-an-endpoint", "allowedIps": ["0.0.0.0/0"]}])
+    with pytest.raises(ValueError, match="allowed IPs"):
+        add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": []}])
+
+
 def test_add_wireguard_hysteria2_tuic():
-    w = add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "allowedIps": ["0.0.0.0/0"]}])
+    w = add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}])
     assert w.kind == "wireguard"
     assert w.outbound["settings"]["secretKey"] == "k"
 

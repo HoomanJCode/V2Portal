@@ -63,6 +63,24 @@ def _endpoint(host: str, port: int) -> tuple[str, int]:
     return host.strip(), normalized_port
 
 
+def _wireguard_endpoint(endpoint: str) -> None:
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("wireguard peer endpoint is required")
+    value = endpoint.strip()
+    if value.startswith("["):
+        end = value.find("]")
+        host = value[1:end] if end >= 0 else ""
+        port = value[end + 2 :] if end >= 0 and value[end + 1 :].startswith(":") else ""
+    else:
+        host, separator, port = value.rpartition(":")
+        if not separator:
+            host, port = "", ""
+    try:
+        _endpoint(host, port)
+    except ValueError as exc:
+        raise ValueError("wireguard peer endpoint must be host:port") from exc
+
+
 def _plain_proxy(
     kind: str, name: str, host: str, port: int, username: str | None = None, password: str | None = None
 ) -> Profile:
@@ -93,9 +111,37 @@ def add_wireguard(
     peers: list[dict],
     mtu: int | None = None,
 ) -> Profile:
+    if not isinstance(private_key, str) or not private_key.strip():
+        raise ValueError("wireguard private key is required")
+    if (
+        not isinstance(address, list)
+        or not address
+        or any(not isinstance(item, str) or not item.strip() for item in address)
+    ):
+        raise ValueError("wireguard address list is required")
+    if not isinstance(peers, list) or not peers:
+        raise ValueError("wireguard requires at least one peer")
+    for peer in peers:
+        if not isinstance(peer, dict):
+            raise ValueError("wireguard peer must be an object")
+        if not str(peer.get("publicKey", "")).strip():
+            raise ValueError("wireguard peer public key is required")
+        _wireguard_endpoint(peer.get("endpoint"))
+        allowed = peer.get("allowedIps")
+        if not isinstance(allowed, list) or not allowed:
+            raise ValueError("wireguard peer allowed IPs are required")
+    if mtu is not None:
+        if isinstance(mtu, bool):
+            raise ValueError("wireguard MTU must be an integer")
+        try:
+            mtu = int(mtu)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("wireguard MTU must be an integer") from exc
+        if not 576 <= mtu <= 65535:
+            raise ValueError("wireguard MTU must be between 576 and 65535")
     settings: dict = {"secretKey": private_key, "address": address, "peers": peers}
-    if mtu:
-        settings["mtu"] = int(mtu)
+    if mtu is not None:
+        settings["mtu"] = mtu
     outbound = {"settings": settings}
     return Profile(name=name, kind="wireguard", engine="auto", outbound=outbound, source="manual")
 
