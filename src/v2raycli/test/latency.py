@@ -101,7 +101,6 @@ def test_profile(
     settings,
     engines: dict | None = None,
     bin_dir=None,
-    runtime_dir=None,
 ) -> TestResult:
     if profile.kind in VPN_KINDS:
         return TestResult(
@@ -109,6 +108,8 @@ def test_profile(
         )
     engines = engines or {}
     engine = resolve_engine(profile.kind, "", profile.engine, settings.default_engine)
+    proc: Proc | None = None
+    path: str | None = None
     try:
         port = _free_port()
         engine, config_dict = build_test_config(profile, settings, port)
@@ -117,23 +118,16 @@ def test_profile(
         binary = locate_binary(engine, engines.get(engine, {}), bin_dir=bin_dir)
         proc = Proc()
         proc.start([str(binary), *adapter.run_args(path)])
-        try:
-            if not _wait_port(port):
-                return TestResult(
-                    profile_id=profile.id, name=profile.name, kind=profile.kind,
-                    engine=engine, ok=False, error="engine did not start",
-                )
-            ok, latency, error = _http_latency(settings.test_url, port)
+        if not _wait_port(port):
             return TestResult(
                 profile_id=profile.id, name=profile.name, kind=profile.kind,
-                engine=engine, ok=ok, latency_ms=latency, error=error,
+                engine=engine, ok=False, error="engine did not start",
             )
-        finally:
-            proc.stop()
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+        ok, latency, error = _http_latency(settings.test_url, port)
+        return TestResult(
+            profile_id=profile.id, name=profile.name, kind=profile.kind,
+            engine=engine, ok=ok, latency_ms=latency, error=error,
+        )
     except BinaryError as exc:
         return TestResult(
             profile_id=profile.id, name=profile.name, kind=profile.kind,
@@ -144,6 +138,14 @@ def test_profile(
             profile_id=profile.id, name=profile.name, kind=profile.kind,
             engine=engine, ok=False, error=str(exc),
         )
+    finally:
+        if proc is not None:
+            proc.stop()
+        if path is not None:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def test_many(
@@ -152,12 +154,11 @@ def test_many(
     engines: dict | None = None,
     concurrency: int = 8,
     bin_dir=None,
-    runtime_dir=None,
 ) -> list[TestResult]:
     results: dict[str, TestResult] = {}
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
         futures = {
-            pool.submit(test_profile, p, settings, engines, bin_dir, runtime_dir): p.id
+            pool.submit(test_profile, p, settings, engines, bin_dir): p.id
             for p in profiles
         }
         for future in as_completed(futures):
