@@ -1,3 +1,5 @@
+import pytest
+
 from v2raycli.engines import get_adapter
 from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
 from v2raycli.storage import ConfigStore
@@ -265,6 +267,19 @@ def test_split_routing_rules(tmp_path):
     rule = cfg["route"]["rules"][0]
     assert rule["outbound"] == "direct"
     assert rule["domain_suffix"] == ["example.com"]
+
+
+def test_xray_rejects_malformed_manual_outbound(tmp_path):
+    store = _store(tmp_path)
+    malformed = store.add_profile(Profile(name="bad", kind="manual", outbound=[]))
+    with pytest.raises(ValueError, match="must be an object"):
+        _generate(store, malformed, default="xray")
+
+    unsupported = store.add_profile(
+        Profile(name="unsupported", kind="manual", outbound={"protocol": "not-a-protocol"})
+    )
+    with pytest.raises(ValueError, match="does not support manual protocol"):
+        _generate(store, unsupported, default="xray")
 
 
 def test_manual_xray_outbound(tmp_path):
