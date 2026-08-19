@@ -24,6 +24,8 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
   optional username/password auth.
 - **Latency testing** — test all outbounds, one subscription, or a selection,
   with a sorted, color-coded table.
+- **Traffic stats** — cumulative per-profile/group up/down usage (sing-box),
+  recorded on disconnect.
 - **Config on disk** — a single JSON file in your platform config dir.
 
 ## Install
@@ -156,6 +158,15 @@ Each rule targets a profile, a group, `direct`, or `block`.
 In Settings, enable `allow_lan` (default on) — the inbound listens on `0.0.0.0`
 so other devices on your network can use `socks5://<your-ip>:1080` /
 `http://<your-ip>:1080`. Optionally enable inbound auth (username/password).
+
+## Traffic stats
+
+Enable **Settings → Traffic stats** (or set `settings.traffic_api: true` in the
+config) to have sing-box expose its Clash API on `127.0.0.1`
+(`traffic_api_port`, default 9090). The CLI polls cumulative up/down bytes and
+adds them to the connected profile or group on disconnect; `--connect` prints
+the session totals. Works with sing-box (the default engine); xray has no
+Clash-compatible HTTP API so its traffic is not counted.
 
 ## Run as a service
 

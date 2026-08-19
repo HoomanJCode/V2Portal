@@ -22,6 +22,7 @@ def run(store) -> None:
                 ("loglevel", f"Log level: {settings.log_level}"),
                 ("testurl", f"Test URL: {settings.test_url}"),
                 ("engine", f"Default engine: {settings.default_engine}"),
+                ("traffic", f"Traffic stats: {'on' if settings.traffic_api else 'off'}"),
                 ("back", "Back"),
             ],
         )
@@ -48,4 +49,8 @@ def run(store) -> None:
             )
             if engine:
                 settings.default_engine = engine
+        elif action == "traffic":
+            settings.traffic_api = widgets.confirm("Enable traffic stats (sing-box Clash API)?")
+            if settings.traffic_api:
+                settings.traffic_api_port = widgets.input_int("Traffic API port", settings.traffic_api_port)
         store.save()

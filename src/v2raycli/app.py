@@ -227,7 +227,12 @@ def _connect(store: ConfigStore, selection_id: str) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        final = controller.traffic()
         controller.disconnect()
+        if final:
+            from .subs.health import human_bytes
+
+            print(f"session traffic: up={human_bytes(final['up'])}, down={human_bytes(final['down'])}")
     return 0
 
 

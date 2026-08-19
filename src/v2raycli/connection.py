@@ -59,11 +59,13 @@ class ConnectionController:
         self.runtime_dir = runtime_dir
         self.proc = Proc()
         self.status = ConnectionStatus()
+        self._selection = None
 
     # -- public API ---------------------------------------------------------
 
     def connect(self, selection) -> ConnectionStatus:
         self.disconnect()
+        self._selection = selection
         target = resolve_target(
             self.store, selection, default_engine=self.store.config.settings.default_engine
         )
@@ -74,6 +76,7 @@ class ConnectionController:
                 return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
         except (ConnectionError, BinaryError) as exc:
+            self._selection = None
             self.status = ConnectionStatus(
                 state="error", target_name=target.name, engine=engine_label, error=str(exc)
             )
@@ -83,8 +86,34 @@ class ConnectionController:
         return self.connect(selection)
 
     def disconnect(self) -> None:
+        self._record_traffic()
         self.proc.stop()
         self.status = ConnectionStatus()
+        self._selection = None
+
+    def traffic(self) -> dict | None:
+        """Return the engine's cumulative ``{"up", "down"}`` bytes, or None."""
+        settings = self.store.config.settings
+        if not settings.traffic_api or self.status.state != "connected":
+            return None
+        from .traffic import read_traffic
+
+        return read_traffic("127.0.0.1", settings.traffic_api_port)
+
+    def _record_traffic(self) -> None:
+        """Accumulate this session's traffic onto the connected target."""
+        selection = self._selection
+        if selection is None:
+            return
+        current = self.traffic()
+        if not current:
+            return
+        selection.traffic_up += current["up"]
+        selection.traffic_down += current["down"]
+        try:
+            self.store.save()
+        except OSError:
+            pass
 
     # -- proxy connections --------------------------------------------------
 

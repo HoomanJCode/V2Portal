@@ -143,6 +143,14 @@ class SingBoxAdapter(EngineAdapter):
                 ]
             }
             config["route"]["default_domain_resolver"] = "dns-1"
+        if settings.traffic_api:
+            # Expose the Clash API so the controller can poll cumulative
+            # traffic via GET /connections (uploadTotal/downloadTotal).
+            config["experimental"] = {
+                "clash_api": {
+                    "external_controller": f"127.0.0.1:{settings.traffic_api_port}"
+                }
+            }
         return config
 
     def _outbound_for(self, profile) -> dict:

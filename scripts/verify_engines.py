@@ -353,6 +353,73 @@ def check_lan_binding(checks: Checks, singbox: Path) -> None:
         stop(proc)
 
 
+def check_traffic_stats(checks: Checks, singbox: Path) -> None:
+    """Confirm the sing-box Clash API meters real traffic and the controller records it."""
+    import http.server
+    import socketserver
+    import threading
+
+    upstream_port, inbound_port, api_port = free_port(), free_port(), free_port()
+    upstream = start_socks_server(singbox, upstream_port)
+    try:
+        if not wait_port(upstream_port):
+            checks.check("traffic stats (upstream)", False, "upstream port never opened")
+            return
+
+        # Serve a local file so this check doesn't depend on internet egress.
+        www = Path(tempfile.mkdtemp())
+        (www / "big.bin").write_bytes(b"x" * 300_000)
+
+        class Handler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def translate_path(self, path):
+                return str(www / path.lstrip("/"))
+
+        httpd = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+        http_port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+        store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+        store.load()
+        store.config.settings.mixed_port = inbound_port
+        store.config.settings.listen = "127.0.0.1"
+        store.config.settings.traffic_api = True
+        store.config.settings.traffic_api_port = api_port
+        profile = store.add_profile(_socks_profile("up", upstream_port))
+
+        controller = ConnectionController(store, bin_dir=singbox.parent, runtime_dir=Path(tempfile.mkdtemp()))
+        status = controller.connect(profile)
+        if status.state != "connected":
+            checks.check("traffic stats (connect)", False, status.error or status.state)
+            return
+        try:
+            import httpx
+
+            with httpx.Client(proxy=f"http://127.0.0.1:{inbound_port}", timeout=20) as client:
+                resp = client.get(f"http://127.0.0.1:{http_port}/big.bin")
+                checks.check("traffic stats (egress)", resp.status_code == 200, f"status={resp.status_code}")
+            time.sleep(0.5)
+            live = controller.traffic()
+            checks.check(
+                "traffic stats (meter)",
+                bool(live and live["down"] > 100_000),
+                f"live={live}",
+            )
+        finally:
+            controller.disconnect()
+            httpd.shutdown()
+
+        checks.check(
+            "traffic stats (recorded)",
+            profile.traffic_down > 100_000,
+            f"profile.traffic_down={profile.traffic_down}",
+        )
+    finally:
+        stop(upstream)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
     parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
@@ -378,6 +445,7 @@ def main() -> int:
     check_chain(checks, bin_dir / "sing-box")
     check_split_routing(checks, bin_dir / "sing-box")
     check_lan_binding(checks, bin_dir / "sing-box")
+    check_traffic_stats(checks, bin_dir / "sing-box")
 
     return 0 if checks.summary() else 1
 

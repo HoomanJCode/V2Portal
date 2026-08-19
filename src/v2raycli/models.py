@@ -75,6 +75,8 @@ class Settings:
     test_url: str = "http://cp.cloudflare.com/generate_204"
     default_engine: str = "sing-box"
     backup_keep: int = 10
+    traffic_api: bool = False
+    traffic_api_port: int = 9090
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -129,6 +131,8 @@ class Profile:
     source: str = "manual"
     subscription_id: str | None = None
     enabled: bool = True
+    traffic_up: int = 0
+    traffic_down: int = 0
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
@@ -170,6 +174,8 @@ class Group:
     profile_ids: list[str] = field(default_factory=list)
     engine: str = "auto"
     enabled: bool = True
+    traffic_up: int = 0
+    traffic_down: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

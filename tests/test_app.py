@@ -248,6 +248,9 @@ def test_connect_runs_and_disconnects(tmp_path, monkeypatch, capsys):
         def disconnect(self):
             self.disconnected = True
 
+        def traffic(self):
+            return None
+
     monkeypatch.setattr("v2raycli.connection.ConnectionController", FakeController)
 
     assert app._connect(store, profile.id) == 0

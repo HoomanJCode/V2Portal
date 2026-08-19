@@ -119,6 +119,22 @@ def test_singbox_dns_typed_format(tmp_path):
     assert cfg["route"]["default_domain_resolver"] == "dns-1"
 
 
+def test_singbox_traffic_api_enabled(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_vmess())
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 1234
+    cfg = _generate(store, p, default="sing-box")
+    assert cfg["experimental"]["clash_api"]["external_controller"] == "127.0.0.1:1234"
+
+
+def test_singbox_traffic_api_disabled_by_default(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_vmess())
+    cfg = _generate(store, p, default="sing-box")
+    assert "experimental" not in cfg
+
+
 def test_split_routing_rules(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())
