@@ -139,6 +139,27 @@ def test_xray_balancer_and_chain(tmp_path):
     assert cfg2["routing"]["rules"][-1]["outboundTag"] == b.id
 
 
+def test_singbox_rejects_malformed_vmess_shape(tmp_path):
+    store = _store(tmp_path)
+    missing_vnext = store.add_profile(Profile(name="bad", kind="vmess", outbound={}))
+    with pytest.raises(ValueError, match="settings.vnext"):
+        _generate(store, missing_vnext, default="sing-box")
+
+    missing_user = store.add_profile(
+        Profile(
+            name="no-user",
+            kind="vless",
+            outbound={
+                "settings": {
+                    "vnext": [{"address": "1.2.3.4", "port": 443, "users": []}]
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="missing a user"):
+        _generate(store, missing_user, default="sing-box")
+
+
 def test_singbox_single_mixed_inbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())

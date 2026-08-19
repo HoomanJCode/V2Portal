@@ -26,6 +26,30 @@ def _first_server(profile) -> dict:
     return servers[0] if servers else {}
 
 
+def _vnext_user(profile) -> tuple[dict, dict]:
+    if not isinstance(profile.outbound, dict):
+        raise ValueError(f"{profile.kind} outbound must be an object")
+    settings = profile.outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings")
+    vnext = settings.get("vnext")
+    if not isinstance(vnext, list) or not vnext or not isinstance(vnext[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings.vnext")
+    server = vnext[0]
+    if not isinstance(server.get("address"), str) or not server["address"].strip():
+        raise ValueError(f"{profile.kind} outbound is missing a server address")
+    port = server.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError(f"{profile.kind} outbound has an invalid server port")
+    users = server.get("users")
+    if not isinstance(users, list) or not users or not isinstance(users[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing a user")
+    user = users[0]
+    if not isinstance(user.get("id"), str) or not user["id"].strip():
+        raise ValueError(f"{profile.kind} outbound user is missing an id")
+    return server, user
+
+
 def _split_endpoint(endpoint: str) -> tuple[str, int]:
     if not endpoint:
         return "", 0
@@ -226,8 +250,7 @@ class SingBoxAdapter(EngineAdapter):
                 outbound["password"] = users[0].get("pass", "")
             return outbound
         if kind in ("vmess", "vless"):
-            vnext = profile.outbound["settings"]["vnext"][0]
-            user = vnext["users"][0]
+            vnext, user = _vnext_user(profile)
             outbound = {
                 "type": kind,
                 "server": vnext["address"],
