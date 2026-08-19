@@ -21,9 +21,21 @@ BALANCER_TAG = "balancer"
 
 
 def _first_server(profile) -> dict:
-    settings = profile.outbound.get("settings", {})
+    if not isinstance(profile.outbound, dict):
+        raise ValueError(f"{profile.kind} outbound must be an object")
+    settings = profile.outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings")
     servers = settings.get("servers") or settings.get("vnext")
-    return servers[0] if servers else {}
+    if not isinstance(servers, list) or not servers or not isinstance(servers[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing a server")
+    server = servers[0]
+    if not isinstance(server.get("address"), str) or not server["address"].strip():
+        raise ValueError(f"{profile.kind} outbound is missing a server address")
+    port = server.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError(f"{profile.kind} outbound has an invalid server port")
+    return server
 
 
 def _vnext_user(profile) -> tuple[dict, dict]:

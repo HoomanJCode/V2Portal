@@ -139,6 +139,25 @@ def test_xray_balancer_and_chain(tmp_path):
     assert cfg2["routing"]["rules"][-1]["outboundTag"] == b.id
 
 
+def test_singbox_rejects_malformed_server_shape(tmp_path):
+    store = _store(tmp_path)
+    missing_server = store.add_profile(
+        Profile(name="bad", kind="socks", outbound={"settings": {"servers": []}})
+    )
+    with pytest.raises(ValueError, match="missing a server"):
+        _generate(store, missing_server, default="sing-box")
+
+    invalid_port = store.add_profile(
+        Profile(
+            name="bad-port",
+            kind="trojan",
+            outbound={"settings": {"servers": [{"address": "1.2.3.4", "port": 0}]}},
+        )
+    )
+    with pytest.raises(ValueError, match="invalid server port"):
+        _generate(store, invalid_port, default="sing-box")
+
+
 def test_singbox_rejects_malformed_vmess_shape(tmp_path):
     store = _store(tmp_path)
     missing_vnext = store.add_profile(Profile(name="bad", kind="vmess", outbound={}))
