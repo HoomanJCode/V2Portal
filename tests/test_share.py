@@ -137,6 +137,29 @@ def test_unknown_scheme_raises():
         decode_link("foo://bar")
 
 
+@pytest.mark.parametrize(
+    "link",
+    [
+        "vmess://not-base64",
+        "vless://uuid@host:not-port",
+        "trojan://pw@host:not-port",
+        "ss://not-a-link",
+        "ssr://not-base64",
+        "hysteria2://pw@host:not-port",
+        "tuic://uuid:pw@host:not-port",
+        "wireguard://not-json",
+    ],
+)
+def test_malformed_links_raise_typed_error(link):
+    with pytest.raises(ShareLinkError):
+        decode_link(link)
+
+
+def test_non_text_link_raises_typed_error():
+    with pytest.raises(ShareLinkError, match="must be text"):
+        decode_link(None)
+
+
 def test_encode_ss_round_trip():
     p = decode_link(_ss_link("aes-256-gcm", "pw", "1.2.3.4", "8388"))
     p2 = decode_link(encode_link(p))

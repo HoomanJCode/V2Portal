@@ -32,8 +32,9 @@ protocols, and support updating them. Parser-heavy phase.
       (`kind=tuic`, `engine=sing-box`.)
 - [x] `wireguard://` — parse base64 JSON (private_key, address, peers…) or
       decode a plain `wg://` form. (`kind=wireguard`.)
-- [x] Unsupported scheme → collect in `parse_errors`; never crash the import.
-      (decode raises `ShareLinkError`; `parser._build` collects them.)
+- [x] Unsupported scheme or malformed link → collect in `parse_errors`; never
+      crash the import. (decode normalizes handler failures to `ShareLinkError`;
+      `parser._build` collects them.)
 - [x] `encode_link(profile) -> str` reverse (for "export" action later).
       (vmess/ss/socks/http supported; exotic kinds raise a clear error.)
 

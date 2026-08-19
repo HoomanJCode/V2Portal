@@ -451,6 +451,8 @@ _HANDLERS = {
 
 def decode_link(raw: str) -> Profile:
     """Decode a share link into a Profile, raising ShareLinkError on failure."""
+    if not isinstance(raw, str):
+        raise ShareLinkError("link must be text")
     raw = raw.strip()
     if not raw:
         raise ShareLinkError("empty link")
@@ -458,7 +460,12 @@ def decode_link(raw: str) -> Profile:
     handler = _HANDLERS.get(scheme)
     if handler is None:
         raise ShareLinkError(f"unsupported scheme: {scheme}")
-    return handler(raw)
+    try:
+        return handler(raw)
+    except ShareLinkError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize malformed links at the public boundary
+        raise ShareLinkError(f"invalid {scheme} link: {exc}") from exc
 
 
 # -- encode (reverse) -----------------------------------------------------

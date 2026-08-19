@@ -59,6 +59,16 @@ def test_import_subscription_reports_bad_links(tmp_path):
     assert len(errors) == 1
 
 
+def test_import_subscription_reports_malformed_handler_errors(tmp_path):
+    f = tmp_path / "sub.txt"
+    f.write_text("vmess://not-base64\n" + FIXTURE_LINKS[0])
+
+    _sub, profiles, errors = import_subscription("S", f"file://{f}")
+
+    assert len(profiles) == 1
+    assert len(errors) == 1
+
+
 def test_update_rejects_all_invalid_payload_without_pruning(tmp_path):
     f = tmp_path / "sub.txt"
     f.write_text(FIXTURE_LINKS[0])
