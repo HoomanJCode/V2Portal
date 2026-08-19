@@ -36,7 +36,9 @@ def add_manual_config(json_text: str, name: str, engine: str = "auto") -> Profil
     protocol = data.get("protocol")
     if protocol not in ALLOWED_MANUAL_PROTOCOLS:
         raise ValueError(f"unsupported protocol: {protocol}")
-    outbound = {k: v for k, v in data.items() if k not in ("protocol", "tag")}
+    # Keep the protocol (it identifies a manual outbound); drop only the tag,
+    # which is assigned from the profile id at config-generation time.
+    outbound = {k: v for k, v in data.items() if k != "tag"}
     return Profile(name=name, kind="manual", engine=engine, outbound=outbound, source="manual")
 
 

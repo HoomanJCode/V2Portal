@@ -20,7 +20,8 @@ def test_add_manual_config():
     raw = json.dumps({"protocol": "vmess", "tag": "x", "settings": {"vnext": []}})
     p = add_manual_config(raw, "m")
     assert p.kind == "manual"
-    assert "protocol" not in p.outbound and "tag" not in p.outbound
+    assert "tag" not in p.outbound
+    assert p.outbound["protocol"] == "vmess"
     assert p.outbound["settings"]["vnext"] == []
 
 
