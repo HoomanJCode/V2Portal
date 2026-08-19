@@ -10,6 +10,15 @@ from __future__ import annotations
 import httpx
 
 
+def _counter(value) -> int:
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError("traffic counter must be a non-negative integer")
+    counter = int(value)
+    if counter < 0:
+        raise ValueError("traffic counter must be a non-negative integer")
+    return counter
+
+
 def read_traffic(host: str, port: int, timeout: float = 3.0) -> dict | None:
     """Return ``{"up": int, "down": int}`` of cumulative bytes, or ``None``.
 
@@ -24,8 +33,8 @@ def read_traffic(host: str, port: int, timeout: float = 3.0) -> dict | None:
         if not isinstance(data, dict):
             return None
         return {
-            "up": int(data.get("uploadTotal", 0)),
-            "down": int(data.get("downloadTotal", 0)),
+            "up": _counter(data.get("uploadTotal", 0)),
+            "down": _counter(data.get("downloadTotal", 0)),
         }
-    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None

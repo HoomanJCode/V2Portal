@@ -55,6 +55,27 @@ def test_read_traffic_returns_none_on_wrong_shape(monkeypatch):
     assert traffic.read_traffic("127.0.0.1", 9090) is None
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"uploadTotal": -1, "downloadTotal": 0},
+        {"uploadTotal": 1.5, "downloadTotal": 0},
+        {"uploadTotal": float("inf"), "downloadTotal": 0},
+        {"uploadTotal": True, "downloadTotal": 0},
+    ],
+)
+def test_read_traffic_returns_none_on_invalid_counters(monkeypatch, payload):
+    class FakeResp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return payload
+
+    monkeypatch.setattr(traffic.httpx, "get", lambda url, timeout=None: FakeResp())
+    assert traffic.read_traffic("127.0.0.1", 9090) is None
+
+
 def test_traffic_disabled_when_api_off(tmp_path):
     store = ConfigStore(tmp_path / "c.json")
     store.load()
