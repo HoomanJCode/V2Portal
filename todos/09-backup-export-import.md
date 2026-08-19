@@ -13,8 +13,9 @@ share-link export/import for migration, sharing, and disaster recovery.
       subscription update, profile/group/routing-rule removal, import, restore.
 - [x] Retention: keep the last `settings.backup_keep` backups, prune older.
 - [x] `list_backups() -> list[BackupInfo]` (timestamp, reason, size).
-- [x] `restore_backup(path)` — create a safety backup of the current config,
-      then replace it with the selected backup and reload storage.
+- [x] `restore_backup(path)` — validate the current schema and structure before
+      creating a safety backup, then replace it with the selected backup and
+      reload storage.
 - [x] Set config dir (and `BACKUP_DIR`) permissions to `0700` on POSIX.
 
 ### Export (`exchange.py`)

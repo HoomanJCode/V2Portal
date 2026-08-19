@@ -112,12 +112,18 @@ def restore_backup(path, store, backup_dir=None) -> Config:
     source = Path(path)
     if not source.exists():
         raise FileNotFoundError(f"backup not found: {source}")
-    data = json.loads(source.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not data.get("schema_version"):
-        raise ValueError("not a valid v2raycli backup")
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("schema_version") != config.SCHEMA_VERSION:
+            raise ValueError("not a valid v2raycli backup")
+        restored = Config.from_dict(data)
+    except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
+        if isinstance(exc, ValueError) and str(exc) == "not a valid v2raycli backup":
+            raise
+        raise ValueError(f"invalid backup: {exc}") from exc
 
     create_backup("pre-restore", store=store, backup_dir=backup_dir)
-    store.config = Config.from_dict(data)
+    store.config = restored
     store.save()
     return store.config
 

@@ -81,6 +81,38 @@ def test_restore_creates_safety_backup_first(tmp_path):
     assert [p["name"] for p in data["profiles"]] == ["old"]
 
 
+def test_restore_rejects_unsupported_schema_before_safety_backup(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="old", kind="socks", outbound=SOCKS))
+    store.save()
+    path = bdir / "bad.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"schema_version": 999}))
+
+    with pytest.raises(ValueError, match="valid v2raycli backup"):
+        backup.restore_backup(path, store, backup_dir=bdir)
+
+    assert [p.name for p in store.config.profiles] == ["old"]
+    assert backup.list_backups(bdir) == []
+
+
+def test_restore_rejects_malformed_shape_before_safety_backup(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="old", kind="socks", outbound=SOCKS))
+    store.save()
+    path = bdir / "bad.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"schema_version": 2, "profiles": {}}))
+
+    with pytest.raises(ValueError, match="invalid backup"):
+        backup.restore_backup(path, store, backup_dir=bdir)
+
+    assert [p.name for p in store.config.profiles] == ["old"]
+    assert backup.list_backups(bdir) == []
+
+
 def test_hook_fires_on_destructive_op(tmp_path):
     bdir = tmp_path / "b"
     store = _store(tmp_path)
