@@ -26,10 +26,9 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
       with `vpn = {type:"openvpn", config_path|inline, args}`.
 - [x] `add_openconnect(name, server, args, auth)` → `Profile(kind=openconnect)`
       with `vpn = {type:"openconnect", server, args, auth_hint}`.
-- [x] Detect `openvpn` / `openconnect` on `PATH` (`shutil.which`); store a
-      `vpn.available` flag and surface a clear install hint when missing.
-      (detection is `detect_clients()`; the availability flag/install hint is
-      surfaced by the TUI in Phase 06.)
+- [x] Detect `openvpn` / `openconnect` on `PATH` (`shutil.which`); annotate
+      unavailable VPNs in the TUI and surface a clear install hint when
+      connecting. (detection is `detect_clients()`, refreshed live.)
 - [x] VPN profiles are never valid members of a balancer/chain group (guard).
 
 ### Groups (`outbounds/groups.py`)

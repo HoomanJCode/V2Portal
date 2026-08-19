@@ -1,4 +1,5 @@
 from os import terminal_size
+from types import SimpleNamespace
 
 from v2raycli.tui import widgets
 
@@ -46,3 +47,17 @@ def test_terminal_size_error_uses_simple_ui(monkeypatch):
 
     monkeypatch.setattr(widgets.shutil, "get_terminal_size", fail)
     assert widgets._use_simple_ui() is True
+
+
+def test_vpn_picker_marks_missing_client(monkeypatch):
+    profile = SimpleNamespace(id="vpn-id", kind="openvpn", name="VPN")
+    captured = []
+    monkeypatch.setattr(
+        widgets, "detect_clients", lambda: {"openvpn": None, "openconnect": "/bin/openconnect"}
+    )
+    monkeypatch.setattr(
+        widgets, "menu", lambda title, values: captured.extend(values) or None
+    )
+
+    assert widgets.pick_profile([profile], []) is None
+    assert captured[0][1].endswith("[client missing]")

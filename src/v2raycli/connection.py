@@ -15,7 +15,7 @@ from .engines.base import validate_config, write_runtime_config
 from .engines.binary import BinaryError, locate_binary
 from .geo import GeoError, ensure_geo_assets
 from .outbounds.groups import resolve_target
-from .outbounds.vpn import VPN_KINDS, detect_clients
+from .outbounds.vpn import VPN_KINDS, client_install_hint, detect_clients
 from .routing.rules import uses_geo
 from .runner import Proc
 
@@ -203,7 +203,7 @@ class ConnectionController:
         vtype = vpn.get("type") or profile.kind
         client = clients.get(vtype)
         if not client:
-            raise ConnectionError(f"{vtype} client not found on PATH")
+            raise ConnectionError(client_install_hint(vtype))
 
         argv = self.vpn_argv(vtype, client, vpn, profile)
         self.proc.start(argv)

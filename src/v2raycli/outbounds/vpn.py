@@ -25,6 +25,13 @@ def is_vpn(profile: Profile) -> bool:
     return profile.kind in VPN_KINDS
 
 
+def client_install_hint(kind: str) -> str:
+    """Return an actionable message for a missing system VPN client."""
+    if kind not in VPN_KINDS:
+        return f"unsupported VPN kind: {kind}"
+    return f"{kind} client not found on PATH; install {kind} and ensure it is available on PATH"
+
+
 def add_openvpn(
     name: str,
     config_path: str | None = None,

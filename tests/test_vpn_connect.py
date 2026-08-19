@@ -54,3 +54,4 @@ def test_vpn_missing_client_maps_error(tmp_path, monkeypatch):
     status = ctl.connect(profile)
     assert status.state == "error"
     assert "openconnect" in status.error
+    assert "install" in status.error

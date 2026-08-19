@@ -18,6 +18,8 @@ from prompt_toolkit.shortcuts import (
     radiolist_dialog,
 )
 
+from ..outbounds.vpn import VPN_KINDS, detect_clients
+
 
 _MIN_DIALOG_COLUMNS = 60
 _MIN_DIALOG_LINES = 12
@@ -126,10 +128,14 @@ def show_message(title: str, text: str) -> None:
 def pick_profile(profiles, groups, include_vpn: bool = True):
     """Return a ``("profile"|"group", id)`` selection, or None."""
     values = []
+    clients = detect_clients()
     for group in groups:
         values.append((("group", group.id), f"[GROUP] {group.name}"))
     for profile in profiles:
-        if not include_vpn and profile.kind in ("openvpn", "openconnect"):
+        if not include_vpn and profile.kind in VPN_KINDS:
             continue
-        values.append((("profile", profile.id), f"{profile.kind:>10}  {profile.name}"))
+        label = f"{profile.kind:>10}  {profile.name}"
+        if profile.kind in VPN_KINDS and not clients.get(profile.kind):
+            label += "  [client missing]"
+        values.append((("profile", profile.id), label))
     return menu("Select config", values)
