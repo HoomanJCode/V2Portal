@@ -34,14 +34,15 @@ table.
 ## Definition of Done
 
 - [x] "test all" and "test one subscription" complete and render a sorted table;
-      failures show errors; VPNs marked not-testable. *(wired in `tui/test_screen.py`;
-      E2E run needs real engine binaries — deferred.)*
+      failures show errors; VPNs marked not-testable. *(verified live:
+      `test_profile` → ok=True, 1916ms, through a real sing-box upstream.)*
 - [x] No leaked engine processes after a run. *(enforced by `finally` cleanup +
       unit-tested; real Windows verification deferred.)*
 - [x] `pytest` passes.
 
-## Deferred (needs networked env / real engine binaries)
+## Deferred (needs a real remote proxy / Windows host)
 
-- Live "test all / test one subscription" run against actual sing-box/xray.
-- Windows end-to-end run to confirm no leaked processes.
-- TCP-connect vs full-request timing split (stretch).
+- [x] Live latency probe against a real sing-box upstream — verified (ok=True).
+- [ ] Windows end-to-end run to confirm no leaked processes.
+- [ ] TCP-connect vs full-request timing split (stretch).
+- [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).

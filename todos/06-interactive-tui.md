@@ -1,8 +1,9 @@
 # Phase 06 — Interactive TUI
 
 > **Status:** ✅ Written (commits 98759fb → 3b334ea).
-> Not executed here — `prompt_toolkit`/`rich` are not installed in the dev env;
-> all modules pass `py_compile`. Manual walkthrough deferred to Phase 08.
+> ✅ Verified with deps installed: all modules import, `tui_available()` is True,
+> and `app_screen.run` dispatches and exits cleanly (smoke). The full interactive
+> walkthrough still needs a human at a real TTY.
 
 Goal: the full interactive experience. On start, show a selection of configs
 (subscription nodes + manual proxies + groups + VPNs); once connected, show a
@@ -48,5 +49,6 @@ console and Termux.
 ## Definition of Done
 
 - [x] Every Phase 03–05 feature is reachable from the TUI (code path).
-- [ ] Manual walkthrough passes on Linux; Windows/Termux in Phase 08 — deferred.
-- [x] `pytest` (existing suite) still passes — 79 tests.
+- [~] Manual walkthrough — imports + main-loop smoke verified; a full
+      interactive run still needs a human at a TTY (Linux/Windows/Termux).
+- [x] `pytest` (existing suite) still passes — 112 tests.
