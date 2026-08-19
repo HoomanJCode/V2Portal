@@ -70,6 +70,7 @@ class ConnectionController:
         self.proc = Proc()
         self.status = ConnectionStatus()
         self._selection = None
+        self._inline_path: Path | None = None
 
     # -- public API ---------------------------------------------------------
 
@@ -88,6 +89,7 @@ class ConnectionController:
                 return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
         except (ConnectionError, BinaryError, OSError, TypeError, ValueError) as exc:
+            self._cleanup_inline()
             self._selection = None
             self.status = ConnectionStatus(
                 state="error",
@@ -103,6 +105,7 @@ class ConnectionController:
     def disconnect(self) -> None:
         self._record_traffic()
         self.proc.stop()
+        self._cleanup_inline()
         self.status = ConnectionStatus()
         self._selection = None
 
@@ -264,4 +267,14 @@ class ConnectionController:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{name}.ovpn"
         path.write_text(inline, encoding="utf-8")
+        self._inline_path = path
         return path
+
+    def _cleanup_inline(self) -> None:
+        path = self._inline_path
+        self._inline_path = None
+        if path is not None:
+            try:
+                path.unlink()
+            except OSError:
+                pass

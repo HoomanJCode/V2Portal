@@ -48,6 +48,38 @@ def test_connect_openvpn_mocked(tmp_path, monkeypatch):
     ctl.disconnect()
 
 
+def test_inline_openvpn_config_removed_on_disconnect(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    fake = tmp_path / "openvpn"
+    fake.write_text("#!/bin/sh\nexec sleep 30\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
+
+    profile = store.add_profile(add_openvpn("v", inline="client\nsecret\n"))
+    ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
+    assert ctl.connect(profile).state == "connected"
+    inline_path = tmp_path / f"{profile.id}.ovpn"
+    assert inline_path.read_text(encoding="utf-8") == "client\nsecret\n"
+
+    ctl.disconnect()
+
+    assert not inline_path.exists()
+
+
+def test_inline_openvpn_config_removed_after_launch_failure(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    fake = tmp_path / "openvpn"
+    fake.write_text("#!/bin/sh\nexit 1\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
+
+    profile = store.add_profile(add_openvpn("v", inline="client\nsecret\n"))
+    ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
+
+    assert ctl.connect(profile).state == "error"
+    assert not (tmp_path / f"{profile.id}.ovpn").exists()
+
+
 def test_vpn_missing_target_maps_error(tmp_path, monkeypatch):
     store = _store(tmp_path)
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/openconnect")
