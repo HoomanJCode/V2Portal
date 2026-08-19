@@ -37,23 +37,19 @@ class ConnectionStatus:
 
 
 def lan_ips() -> list[str]:
-    """Best-effort detection of this host's IPv4 LAN addresses."""
-    ips: set[str] = set()
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None):
-            ip = info[4][0]
-            if ip not in ("127.0.0.1", "::1") and ":" not in ip:
-                ips.add(ip)
-    except Exception:
-        pass
+    """Best-effort detection of this host's IPv4 LAN address.
+
+    Uses a UDP connect to discover the source address without sending any
+    packets, so it stays fast and works offline.
+    """
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         probe.connect(("8.8.8.8", 80))
-        ips.add(probe.getsockname()[0])
+        ip = probe.getsockname()[0]
         probe.close()
+        return [ip] if ip and ip != "0.0.0.0" else []
     except Exception:
-        pass
-    return sorted(ips)
+        return []
 
 
 class ConnectionController:
@@ -71,13 +67,15 @@ class ConnectionController:
         target = resolve_target(
             self.store, selection, default_engine=self.store.config.settings.default_engine
         )
-        if target.type == "single" and target.profiles and target.profiles[0].kind in VPN_KINDS:
-            return self._connect_vpn(target.profiles[0])
+        is_vpn = target.type == "single" and target.profiles and target.profiles[0].kind in VPN_KINDS
+        engine_label = target.profiles[0].kind if is_vpn else target.engine
         try:
+            if is_vpn:
+                return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
         except (ConnectionError, BinaryError) as exc:
             self.status = ConnectionStatus(
-                state="error", target_name=target.name, engine=target.engine, error=str(exc)
+                state="error", target_name=target.name, engine=engine_label, error=str(exc)
             )
             return self.status
 
