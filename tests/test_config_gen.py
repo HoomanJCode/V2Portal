@@ -471,6 +471,17 @@ def test_xray_rejects_malformed_manual_outbound(tmp_path):
         _generate(store, unsupported, default="xray")
 
 
+def test_xray_rejects_malformed_typed_outbound(tmp_path):
+    store = _store(tmp_path)
+    malformed = store.add_profile(Profile(name="bad", kind="vmess", outbound=[]))
+    with pytest.raises(ValueError, match="must be an object"):
+        _generate(store, malformed, default="xray")
+
+    missing_settings = store.add_profile(Profile(name="no-settings", kind="vless", outbound={}))
+    with pytest.raises(ValueError, match="missing settings"):
+        _generate(store, missing_settings, default="xray")
+
+
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(

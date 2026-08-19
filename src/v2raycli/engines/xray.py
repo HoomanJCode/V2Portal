@@ -130,9 +130,9 @@ class XrayAdapter(EngineAdapter):
         return config
 
     def _outbound_for(self, profile) -> dict:
+        if not isinstance(profile.outbound, dict):
+            raise ValueError(f"{profile.kind} outbound must be an object")
         if profile.kind == "manual":
-            if not isinstance(profile.outbound, dict):
-                raise ValueError("manual outbound must be an object")
             protocol = profile.outbound.get("protocol")
             if not isinstance(protocol, str) or not protocol:
                 raise ValueError("manual outbound is missing its protocol")
@@ -144,6 +144,9 @@ class XrayAdapter(EngineAdapter):
         protocol = _KIND_PROTOCOL.get(profile.kind)
         if protocol is None:
             raise ValueError(f"xray does not support kind {profile.kind}")
+        settings = profile.outbound.get("settings")
+        if not isinstance(settings, dict):
+            raise ValueError(f"{profile.kind} outbound is missing settings")
         outbound = dict(profile.outbound)
         outbound["tag"] = profile.id
         outbound["protocol"] = protocol
