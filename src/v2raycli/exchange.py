@@ -183,11 +183,19 @@ def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
 
 def import_share_links(store, path_or_text: str) -> list[Profile]:
     """Import profiles from a file of share links, or from raw link text."""
-    candidate = Path(path_or_text)
-    if candidate.is_file():
+    if not isinstance(path_or_text, str):
+        return []
+
+    text = path_or_text
+    try:
+        candidate = Path(path_or_text)
+        is_file = candidate.is_file()
+    except (OSError, ValueError):
+        # Long or otherwise invalid path-like text is still valid input to the
+        # share-link parser; do not let the filesystem probe reject it.
+        is_file = False
+    if is_file:
         text = candidate.read_text(encoding="utf-8")
-    else:
-        text = path_or_text
 
     existing = {_profile_key(p) for p in store.config.profiles}
     added: list[Profile] = []

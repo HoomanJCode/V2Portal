@@ -32,7 +32,8 @@ share-link export/import for migration, sharing, and disaster recovery.
   - `replace`: back up current config, then load the imported file wholesale
   - re-link subscriptions → their profiles by id
 - [x] `import_share_links(path_or_text)` — reuse the subscription payload parser
-      to create profiles from a list of links.
+      to create profiles from a list of links; filesystem probe failures in
+      pasted text are treated as parser input, not import crashes.
 
 ### TUI wiring (with Phase 06)
 

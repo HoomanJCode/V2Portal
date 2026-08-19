@@ -204,6 +204,26 @@ def test_import_share_links_from_text(tmp_path):
     assert added[0].kind == "http"
 
 
+def test_import_share_links_treats_probe_error_as_text(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+
+    def fail_probe(_path):
+        raise OSError("path too long")
+
+    monkeypatch.setattr(exchange.Path, "is_file", fail_probe)
+
+    added = exchange.import_share_links(store, "http://1.2.3.4:8080#proxy")
+
+    assert len(added) == 1
+    assert added[0].kind == "http"
+
+
+def test_import_share_links_ignores_non_text_input(tmp_path):
+    store = _store(tmp_path)
+
+    assert exchange.import_share_links(store, None) == []
+
+
 def test_import_share_links_triggers_backup_hook(tmp_path):
     store = _store(tmp_path)
     backup_dir = tmp_path / "backups"
