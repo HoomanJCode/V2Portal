@@ -152,14 +152,38 @@ def check_configs(checks: Checks, bin_dir: Path) -> None:
     a = store.add_profile(Profile(name="s1", kind="socks", outbound=SOCKS_OUTBOUND))
     b = store.add_profile(Profile(name="s2", kind="socks", outbound=SOCKS_OUTBOUND))
     vm = store.add_profile(Profile(name="vm", kind="vmess", outbound=VMESS_OUTBOUND))
+    wg = store.add_profile(
+        Profile(
+            name="wg",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [
+                        {
+                            "publicKey": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+                            "endpoint": "1.2.3.4:51820",
+                            "allowedIps": ["0.0.0.0/0"],
+                        }
+                    ],
+                }
+            },
+        )
+    )
     bal = store.add_group(create_balancer_group("bal", "latency", [a.id, b.id], store))
     chain = store.add_group(create_chain_group("chain", [a.id, b.id], store))
+    wg_chain = store.add_group(create_chain_group("wg-chain", [vm.id, wg.id], store))
+    wg_bal = store.add_group(create_balancer_group("wg-bal", "latency", [vm.id, wg.id], store))
 
     cases = [
         ("sing-box", "single", a, ["check", "-c"]),
         ("sing-box", "balancer", bal, ["check", "-c"]),
         ("sing-box", "chain", chain, ["check", "-c"]),
         ("sing-box", "vmess", vm, ["check", "-c"]),
+        ("sing-box", "wireguard", wg, ["check", "-c"]),
+        ("sing-box", "wireguard chain", wg_chain, ["check", "-c"]),
+        ("sing-box", "wireguard balancer", wg_bal, ["check", "-c"]),
         ("xray", "single", a, ["run", "-test", "-config"]),
         ("xray", "vmess", vm, ["run", "-test", "-config"]),
         ("xray", "chain", chain, ["run", "-test", "-config"]),

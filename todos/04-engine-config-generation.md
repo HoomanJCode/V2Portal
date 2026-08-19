@@ -69,6 +69,12 @@ strategy details must be verified and locked in.
 - sing-box on Termux needs the `android` asset (linux builds are glibc/musl).
 - `download_binary` resolves `latest` via the GitHub API; sing-box asset names
   drop the `v` prefix.
+- sing-box >= 1.13 removed the WireGuard **outbound** — it's an **endpoint**
+  now. The adapter emits `endpoints[]` (address/private_key/peers with
+  `address`+`port`) and its tag is a first-class route target: `route.final`,
+  selector/urltest groups, rules and `detour` (both directions) all reference
+  it directly. Verified live: single/chain/balancer configs all pass `check`
+  and the engine starts.
 
 ## Tests
 

@@ -35,6 +35,77 @@ def _generate(store, selection, default="sing-box"):
     return adapter.generate(store.config.settings, store.config.routing, target)
 
 
+def _wireguard(name="wg"):
+    return Profile(
+        name=name,
+        kind="wireguard",
+        outbound={
+            "settings": {
+                "secretKey": "k1",
+                "address": ["10.0.0.2/32"],
+                "peers": [
+                    {
+                        "publicKey": "pk1",
+                        "endpoint": "1.2.3.4:51820",
+                        "allowedIps": ["0.0.0.0/0"],
+                        "preSharedKey": "psk1",
+                    }
+                ],
+                "mtu": 1408,
+            }
+        },
+    )
+
+
+def test_singbox_wireguard_is_endpoint(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_wireguard())
+    cfg = _generate(store, p, default="sing-box")
+
+    # Not an outbound anymore -- it lives in the top-level endpoints array.
+    assert not any(o.get("type") == "wireguard" for o in cfg["outbounds"])
+    ep = next(e for e in cfg["endpoints"] if e.get("tag") == p.id)
+    assert ep["type"] == "wireguard"
+    assert ep["private_key"] == "k1"
+    assert ep["address"] == ["10.0.0.2/32"]
+    assert ep["mtu"] == 1408
+    peer = ep["peers"][0]
+    assert peer["address"] == "1.2.3.4"
+    assert peer["port"] == 51820
+    assert peer["public_key"] == "pk1"
+    assert peer["pre_shared_key"] == "psk1"
+    assert peer["allowed_ips"] == ["0.0.0.0/0"]
+    # route.final may point directly at the endpoint tag
+    assert cfg["route"]["final"] == p.id
+
+
+def test_singbox_wireguard_in_chain_and_balancer(tmp_path):
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("a"))
+    w = store.add_profile(_wireguard("w"))
+
+    # Chain: vmess detours through the wireguard endpoint.
+    chain = store.add_group(Group(name="chain", type="chain", profile_ids=[a.id, w.id]))
+    cfg = _generate(store, chain, default="sing-box")
+    ep = next(e for e in cfg["endpoints"] if e.get("tag") == w.id)
+    assert ep["detour"] == a.id
+    assert cfg["route"]["final"] == w.id
+
+    # Chain in the other order: wireguard endpoint detours through vmess.
+    chain2 = store.add_group(Group(name="chain2", type="chain", profile_ids=[w.id, a.id]))
+    cfg2 = _generate(store, chain2, default="sing-box")
+    ep2 = next(e for e in cfg2["endpoints"] if e.get("tag") == w.id)
+    assert "detour" not in ep2
+    a_ob = next(o for o in cfg2["outbounds"] if o.get("tag") == a.id)
+    assert a_ob["detour"] == w.id
+
+    # Balancer: the group lists the endpoint tag like any other.
+    bal = store.add_group(Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id, w.id]))
+    cfg3 = _generate(store, bal, default="sing-box")
+    urltest = next(o for o in cfg3["outbounds"] if o.get("type") == "urltest")
+    assert set(urltest["outbounds"]) == {a.id, w.id}
+
+
 def test_xray_single(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())

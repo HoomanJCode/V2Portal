@@ -190,7 +190,9 @@ Remove it with `v2raycli --uninstall-service`.
 ## Engine selection
 
 - **sing-box** is the default and serves most protocols plus `latency`/`random`/
-  `roundRobin`.
+  `roundRobin`. WireGuard profiles are emitted as sing-box **endpoints** (the
+  format since 1.13, where the WireGuard outbound was removed) and can be
+  chained, balanced and routed to like any other outbound.
 - **xray-core** is used automatically for `ssr` and `leastLoad`.
 - Override per profile/group, or change the global default in Settings.
 

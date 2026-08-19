@@ -128,7 +128,19 @@ class SingBoxAdapter(EngineAdapter):
             {"type": "direct", "tag": "direct"},
             {"type": "block", "tag": "block"},
         ]
+        endpoints: list[dict] = []
         for idx, profile in enumerate(target.profiles):
+            if profile.kind == "wireguard":
+                # Since sing-box 1.13 WireGuard is an endpoint, not an
+                # outbound. Its tag is a first-class route target: it can be
+                # referenced by route.final, selector/urltest groups, rules
+                # and detour in either direction.
+                endpoint = self._endpoint_for(profile)
+                endpoint["tag"] = profile.id
+                if target.type == "chain" and idx > 0:
+                    endpoint["detour"] = target.profiles[idx - 1].id
+                endpoints.append(endpoint)
+                continue
             outbound = self._outbound_for(profile)
             outbound["tag"] = profile.id
             if target.type == "chain" and idx > 0:
@@ -171,6 +183,8 @@ class SingBoxAdapter(EngineAdapter):
             "outbounds": outbounds,
             "route": {"rules": rules, "final": selected},
         }
+        if endpoints:
+            config["endpoints"] = endpoints
         if rule_sets:
             config["route"]["rule_set"] = list(rule_sets.values())
         if settings.dns:
@@ -247,31 +261,39 @@ class SingBoxAdapter(EngineAdapter):
                 "password": server.get("password", ""),
             }
         if kind == "wireguard":
-            settings = profile.outbound["settings"]
-            outbound = {
-                "type": "wireguard",
-                "private_key": settings.get("secretKey", ""),
-                "local_address": settings.get("address", []),
-            }
-            peers = []
-            for peer in settings.get("peers", []):
-                host, port = _split_endpoint(peer.get("endpoint", ""))
-                entry = {
-                    "server": host,
-                    "server_port": port,
-                    "public_key": peer.get("publicKey", ""),
-                    "allowed_ips": peer.get("allowedIps", []),
-                }
-                if peer.get("preSharedKey"):
-                    entry["pre_shared_key"] = peer["preSharedKey"]
-                peers.append(entry)
-            outbound["peers"] = peers
-            if settings.get("mtu"):
-                outbound["mtu"] = settings["mtu"]
-            return outbound
+            raise ValueError("wireguard is an endpoint, not an outbound")
         if kind == "ssr":
             raise ValueError("sing-box does not support ssr")
         raise ValueError(f"sing-box cannot translate kind {kind}")
+
+    def _endpoint_for(self, profile) -> dict:
+        """Build a sing-box >= 1.13 WireGuard endpoint (top-level `endpoints`)."""
+        settings = profile.outbound["settings"]
+        peers = []
+        for peer in settings.get("peers", []):
+            host, port = _split_endpoint(peer.get("endpoint", ""))
+            entry: dict = {
+                "address": host,
+                "port": port,
+                "public_key": peer.get("publicKey", ""),
+                "allowed_ips": peer.get("allowedIps", []),
+            }
+            if peer.get("preSharedKey"):
+                entry["pre_shared_key"] = peer["preSharedKey"]
+            if peer.get("reserved"):
+                entry["reserved"] = peer["reserved"]
+            if peer.get("persistentKeepaliveInterval"):
+                entry["persistent_keepalive_interval"] = peer["persistentKeepaliveInterval"]
+            peers.append(entry)
+        endpoint: dict = {
+            "type": "wireguard",
+            "address": settings.get("address", []),
+            "private_key": settings.get("secretKey", ""),
+            "peers": peers,
+        }
+        if settings.get("mtu"):
+            endpoint["mtu"] = settings["mtu"]
+        return endpoint
 
     def _apply_stream(self, profile, outbound: dict) -> None:
         stream = profile.outbound.get("streamSettings", {})
