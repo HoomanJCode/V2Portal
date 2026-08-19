@@ -2,24 +2,91 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
+import time
 
 from . import __version__
 from . import config
 from .storage import ConfigStore
 
 
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="v2raycli",
+        description="Interactive v2ray CLI client (sing-box + xray-core).",
+    )
+    parser.add_argument("--version", action="store_true", help="print version and exit")
+    parser.add_argument(
+        "--config-dir", metavar="PATH", help="use an alternate config directory"
+    )
+    parser.add_argument(
+        "--headless", action="store_true", help="print a summary and exit (no TUI)"
+    )
+    parser.add_argument(
+        "--connect",
+        metavar="ID",
+        help="connect to a profile/group id and keep running until Ctrl+C",
+    )
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    if args.config_dir:
+        config.set_config_dir(args.config_dir)
+
+    if args.version:
+        print(f"v2raycli v{__version__}")
+        return 0
+
     config.ensure_dirs()
     store = ConfigStore()
     store.load()
 
-    if _interactive() and _tui_available():
-        from .tui.app_screen import run
+    if args.connect:
+        return _connect(store, args.connect)
 
-        return run(store)
+    if args.headless or not (_interactive() and _tui_available()):
+        return _summary(store)
 
-    return _summary(store)
+    from .tui.app_screen import run
+
+    return run(store)
+
+
+def _connect(store: ConfigStore, selection_id: str) -> int:
+    from .connection import ConnectionController
+
+    selection = store.get_profile(selection_id) or store.get_group(selection_id)
+    if selection is None:
+        print(f"unknown profile or group id: {selection_id}", file=sys.stderr)
+        return 1
+
+    controller = ConnectionController(store)
+    status = controller.connect(selection)
+    if status.state != "connected":
+        print(f"connect failed: {status.error or status.state}", file=sys.stderr)
+        return 1
+
+    print(f"connected to {status.target_name} ({status.engine})")
+    for url in status.inbound.get("urls", []):
+        print(f"  {url}")
+    for url in status.inbound.get("lan", []):
+        print(f"  LAN: {url}")
+    if status.inbound.get("auth"):
+        print("  (inbound auth enabled)")
+    print("Press Ctrl+C to disconnect.")
+
+    try:
+        while controller.proc.is_running():
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        controller.disconnect()
+    return 0
 
 
 def _interactive() -> bool:
