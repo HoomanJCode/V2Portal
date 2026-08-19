@@ -18,7 +18,8 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
   - [x] `pkg install python` + `pip install .` documented
   - [x] arm64 binaries for sing-box + xray auto-download (verified live:
         sing-box android-arm64 + xray linux-arm64 both run on bionic)
-  - [ ] `0.0.0.0` LAN binding works; show the phone's Wi-Fi IP (not verified)
+  - [x] `0.0.0.0` LAN binding works (verified live: reachable via Wi-Fi IP
+        10.8.2.75 → HTTP 200 through the mixed inbound)
   - [ ] terminal size quirks (fall back to non-fullscreen rendering if needed)
   - [x] note: `openvpn`/`openconnect` may need root — documented
 - [x] README:
