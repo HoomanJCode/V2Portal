@@ -15,34 +15,37 @@ def run(store, controller, selection) -> None:
 
     _render(status, _read_traffic(controller))
     session = PromptSession()
-    while True:
-        command = session.prompt("s=switch  d=disconnect  r=refresh  t=test  q=back > ").strip().lower()
-        if command == "q":
-            break
-        if command == "d":
-            controller.disconnect()
-            break
-        if command == "s":
-            selection = widgets.pick_profile(
-                store.list_profiles(), store.list_groups()
-            )
-            if selection is None:
-                continue
-            kind, key = selection
-            chosen = store.get_profile(key) if kind == "profile" else store.get_group(key)
-            if chosen is None:
-                continue
-            status = controller.switch(chosen)
-            if status.state != "connected":
-                widgets.show_message("Switch failed", status.error or "unknown error")
+    try:
+        while True:
+            command = session.prompt("s=switch  d=disconnect  r=refresh  t=test  q=back > ").strip().lower()
+            if command == "q":
                 break
-            _render(status, _read_traffic(controller))
-            continue
-        if command == "t":
-            from .test_screen import run as run_test
+            if command == "d":
+                controller.disconnect()
+                break
+            if command == "s":
+                selection = widgets.pick_profile(
+                    store.list_profiles(), store.list_groups()
+                )
+                if selection is None:
+                    continue
+                kind, key = selection
+                chosen = store.get_profile(key) if kind == "profile" else store.get_group(key)
+                if chosen is None:
+                    continue
+                status = controller.switch(chosen)
+                if status.state != "connected":
+                    widgets.show_message("Switch failed", status.error or "unknown error")
+                    break
+                _render(status, _read_traffic(controller))
+                continue
+            if command == "t":
+                from .test_screen import run as run_test
 
-            run_test(store)
-        _render(status, _read_traffic(controller))
+                run_test(store)
+            _render(status, _read_traffic(controller))
+    except (EOFError, KeyboardInterrupt):
+        controller.disconnect()
 
 
 def _read_traffic(controller) -> dict | None:

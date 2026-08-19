@@ -13,32 +13,36 @@ from .test_screen import run as run_test
 
 def run(store) -> int:
     controller = ConnectionController(store)
-    while True:
-        action = widgets.menu(
-            "v2raycli",
-            [
-                ("connect", "Connect (select config)"),
-                ("manage", "Manage (add / update / remove)"),
-                ("test", "Test outbounds"),
-                ("routing", "Routing rules"),
-                ("settings", "Settings"),
-                ("quit", "Quit"),
-            ],
-        )
-        if action is None or action == "quit":
-            controller.disconnect()
-            return 0
-        if action == "connect":
-            _connect(store, controller)
-        elif action == "manage":
-            run_manage(store)
-        elif action == "test":
-            run_test(store)
-        elif action == "routing":
-            run_routing(store)
-        elif action == "settings":
-            run_settings(store)
-        store.save()
+    try:
+        while True:
+            action = widgets.menu(
+                "v2raycli",
+                [
+                    ("connect", "Connect (select config)"),
+                    ("manage", "Manage (add / update / remove)"),
+                    ("test", "Test outbounds"),
+                    ("routing", "Routing rules"),
+                    ("settings", "Settings"),
+                    ("quit", "Quit"),
+                ],
+            )
+            if action is None or action == "quit":
+                return 0
+            if action == "connect":
+                _connect(store, controller)
+            elif action == "manage":
+                run_manage(store)
+            elif action == "test":
+                run_test(store)
+            elif action == "routing":
+                run_routing(store)
+            elif action == "settings":
+                run_settings(store)
+            store.save()
+    except (EOFError, KeyboardInterrupt):
+        return 0
+    finally:
+        controller.disconnect()
 
 
 def _connect(store, controller) -> None:

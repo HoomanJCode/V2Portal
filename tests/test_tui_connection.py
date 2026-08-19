@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from v2raycli.models import Profile
 from v2raycli.storage import ConfigStore
-from v2raycli.tui import connection_screen
+from v2raycli.tui import app_screen, connection_screen
 
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -13,6 +13,57 @@ class _FakeSession:
 
     def prompt(self, _text):
         return next(self.answers)
+
+
+def test_connection_screen_disconnects_on_interrupt(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    profile = store.add_profile(Profile(name="first", kind="socks", outbound=SOCKS))
+
+    class FakeController:
+        def __init__(self):
+            self.disconnected = False
+
+        def connect(self, selection):
+            return SimpleNamespace(state="connected", target_name=selection.name)
+
+        def disconnect(self):
+            self.disconnected = True
+
+        def traffic(self):
+            return None
+
+    class InterruptSession:
+        def prompt(self, _text):
+            raise KeyboardInterrupt
+
+    controller = FakeController()
+    monkeypatch.setattr(connection_screen, "PromptSession", InterruptSession)
+    monkeypatch.setattr(connection_screen, "_render", lambda *args: None)
+
+    connection_screen.run(store, controller, profile)
+
+    assert controller.disconnected is True
+
+
+def test_main_screen_disconnects_on_interrupt(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    controllers = []
+
+    class FakeController:
+        def __init__(self, _store):
+            self.disconnected = False
+            controllers.append(self)
+
+        def disconnect(self):
+            self.disconnected = True
+
+    monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    assert app_screen.run(store) == 0
+    assert controllers[0].disconnected is True
 
 
 def test_connection_screen_switches_target(tmp_path, monkeypatch):

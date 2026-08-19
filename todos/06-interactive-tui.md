@@ -30,7 +30,9 @@ console and Termux.
 - [x] `tui/routing_screen.py`: toggle mode all/split; add/remove/move rules
       (action, domain/IP/geo matchers).
 - [x] `tui/connection_screen.py` — live status: target, engine, inbound URLs +
-      auth, LAN IP, pid; keys `s` switch, `d` disconnect, `t` test, `q` back.
+      auth, LAN IP, pid; keys `s` switch, `d` disconnect, `t` test, `q` back;
+      Ctrl+C/EOF cleanly disconnects while `q` returns to the main menu with
+      the connection preserved.
 - [x] `tui/test_screen.py`: placeholder (latency tester lands in Phase 07).
 - [x] `tui/settings_screen.py`: listen, mixed port, LAN sharing, inbound auth,
       DNS, log level, test URL, default engine.
