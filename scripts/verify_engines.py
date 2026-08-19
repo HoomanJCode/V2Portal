@@ -24,10 +24,10 @@ import tempfile
 import time
 from pathlib import Path
 
-from v2raycli.connection import ConnectionController
+from v2raycli.connection import ConnectionController, lan_ips
 from v2raycli.engines import get_adapter
 from v2raycli.engines.binary import download_binary, platform_name, arch_name
-from v2raycli.models import Profile
+from v2raycli.models import Profile, RoutingConfig, RoutingRule
 from v2raycli.outbounds.groups import create_balancer_group, create_chain_group, resolve_target
 from v2raycli.storage import ConfigStore
 
@@ -86,9 +86,11 @@ def run_config(binary: Path, args: list[str], config_path: Path) -> subprocess.C
     return subprocess.run([str(binary), *args, str(config_path)], capture_output=True, text=True, timeout=30)
 
 
-def socks_http_get(proxy_port: int, host: str, dst_port: int = 80, path: str = "/", timeout: float = 15.0) -> str:
+def socks_http_get(
+    proxy_port: int, host: str, dst_port: int = 80, path: str = "/", timeout: float = 15.0, proxy_host: str = "127.0.0.1"
+) -> str:
     """Do a SOCKS5 handshake then an HTTP GET over the tunnel; return status line."""
-    sock = socket.create_connection(("127.0.0.1", proxy_port), timeout=10)
+    sock = socket.create_connection((proxy_host, proxy_port), timeout=10)
     sock.settimeout(timeout)
     sock.sendall(b"\x05\x01\x00")
     if sock.recv(2) != b"\x05\x00":
@@ -237,6 +239,120 @@ def check_outbound_routing(checks: Checks, singbox: Path) -> None:
         stop(upstream)
 
 
+def _socks_profile(name: str, port: int) -> Profile:
+    return Profile(
+        name=name,
+        kind="socks",
+        outbound={"settings": {"servers": [{"address": "127.0.0.1", "port": port}]}},
+    )
+
+
+def check_chain(checks: Checks, singbox: Path) -> None:
+    hop1_port, hop2_port, inbound_port = free_port(), free_port(), free_port()
+    hop1 = start_socks_server(singbox, hop1_port)
+    hop2 = start_socks_server(singbox, hop2_port)
+    try:
+        if not (wait_port(hop1_port) and wait_port(hop2_port)):
+            checks.check("chain (upstreams)", False, "upstream ports never opened")
+            return
+        store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+        store.load()
+        store.config.settings.mixed_port = inbound_port
+        store.config.settings.listen = "127.0.0.1"
+        a = store.add_profile(_socks_profile("hop1", hop1_port))
+        b = store.add_profile(_socks_profile("hop2", hop2_port))
+        chain = store.add_group(create_chain_group("chain", [a.id, b.id], store))
+
+        controller = ConnectionController(store, bin_dir=singbox.parent, runtime_dir=Path(tempfile.mkdtemp()))
+        status = controller.connect(chain)
+        if status.state != "connected":
+            checks.check("chain (connect)", False, status.error or status.state)
+            return
+        try:
+            line = socks_http_get(inbound_port, "example.com")
+            checks.check("chain egress (2 hops)", line.startswith("HTTP/1."), line)
+        finally:
+            controller.disconnect()
+
+        # Negative control: a dead first hop must break egress (proves the chain
+        # actually routes through hop 1, not straight to hop 2).
+        dead = free_port()
+        a2 = store.add_profile(_socks_profile("dead", dead))
+        chain2 = store.add_group(create_chain_group("chain2", [a2.id, b.id], store))
+        status2 = controller.connect(chain2)
+        if status2.state != "connected":
+            checks.check("chain dead-hop (connect)", False, status2.error or status2.state)
+            return
+        try:
+            try:
+                line = socks_http_get(inbound_port, "example.com")
+                checks.check("chain dead first hop fails", False, f"unexpected success: {line}")
+            except Exception as exc:
+                checks.check("chain dead first hop fails", True, type(exc).__name__)
+        finally:
+            controller.disconnect()
+    finally:
+        stop(hop1)
+        stop(hop2)
+
+
+def check_split_routing(checks: Checks, singbox: Path) -> None:
+    dead, inbound_port = free_port(), free_port()  # dead port = the "proxy"
+    store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+    store.load()
+    store.config.settings.mixed_port = inbound_port
+    store.config.settings.listen = "127.0.0.1"
+    proxy = store.add_profile(_socks_profile("proxy", dead))
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="direct", match={"domains": ["example.com"]})],
+    )
+
+    controller = ConnectionController(store, bin_dir=singbox.parent, runtime_dir=Path(tempfile.mkdtemp()))
+    status = controller.connect(proxy)
+    if status.state != "connected":
+        checks.check("split routing (connect)", False, status.error or status.state)
+        return
+    try:
+        line = socks_http_get(inbound_port, "example.com")
+        checks.check("split routing direct rule", line.startswith("HTTP/1."), line)
+        try:
+            line2 = socks_http_get(inbound_port, "www.gstatic.com")
+            checks.check("split routing fallthrough to proxy", False, f"unexpected: {line2}")
+        except Exception as exc:
+            checks.check("split routing fallthrough to proxy", True, type(exc).__name__)
+    finally:
+        controller.disconnect()
+
+
+def check_lan_binding(checks: Checks, singbox: Path) -> None:
+    ips = lan_ips()
+    if not ips:
+        checks.check("LAN binding", False, "no LAN IP detected")
+        return
+    port = free_port()
+    store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+    store.load()
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS_OUTBOUND))
+    target = resolve_target(store, profile, default_engine="sing-box")
+    cfg = get_adapter("sing-box").generate(store.config.settings, store.config.routing, target)
+    cfg["route"]["final"] = "direct"
+    cfg["inbounds"][0]["listen"] = "0.0.0.0"
+    cfg["inbounds"][0]["listen_port"] = port
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(cfg, fh)
+        path = fh.name
+    proc = subprocess.Popen([str(singbox), "run", "-c", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        if not wait_port(port):
+            checks.check("LAN binding (engine start)", False, "port never opened")
+            return
+        line = socks_http_get(port, "example.com", proxy_host=ips[0])
+        checks.check(f"LAN binding (0.0.0.0 via {ips[0]})", line.startswith("HTTP/1."), line)
+    finally:
+        stop(proc)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
     parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
@@ -259,6 +375,9 @@ def main() -> int:
     check_configs(checks, bin_dir)
     check_mixed_inbound(checks, bin_dir / "sing-box")
     check_outbound_routing(checks, bin_dir / "sing-box")
+    check_chain(checks, bin_dir / "sing-box")
+    check_split_routing(checks, bin_dir / "sing-box")
+    check_lan_binding(checks, bin_dir / "sing-box")
 
     return 0 if checks.summary() else 1
 
