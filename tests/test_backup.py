@@ -97,6 +97,16 @@ def test_restore_rejects_unsupported_schema_before_safety_backup(tmp_path):
     assert backup.list_backups(bdir) == []
 
 
+def test_restore_rejects_invalid_path_before_safety_backup(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+
+    with pytest.raises(ValueError, match="invalid backup path"):
+        backup.restore_backup(None, store, backup_dir=bdir)
+
+    assert backup.list_backups(bdir) == []
+
+
 def test_restore_rejects_malformed_shape_before_safety_backup(tmp_path):
     bdir = tmp_path / "b"
     store = _store(tmp_path)
@@ -104,7 +114,7 @@ def test_restore_rejects_malformed_shape_before_safety_backup(tmp_path):
     store.save()
     path = bdir / "bad.json"
     path.parent.mkdir()
-    path.write_text(json.dumps({"schema_version": 2, "profiles": {}}))
+    path.write_text(json.dumps({"schema_version": 2, "profiles": [{"outbound": []}]}))
 
     with pytest.raises(ValueError, match="invalid backup"):
         backup.restore_backup(path, store, backup_dir=bdir)

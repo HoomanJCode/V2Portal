@@ -17,6 +17,7 @@ from pathlib import Path
 
 from . import config
 from .models import Config
+from .storage import _validate_persisted_shape
 
 _BACKUP_RE = re.compile(r"^backup-(\d{8}-\d{6}-\d{6})-(.+)\.json$")
 
@@ -109,15 +110,23 @@ def prune(keep: int, backup_dir=None) -> None:
 
 def restore_backup(path, store, backup_dir=None) -> Config:
     """Replace the current config with a backup, saving a safety backup first."""
-    source = Path(path)
-    if not source.exists():
+    try:
+        source = Path(path)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid backup path: {exc}") from exc
+    try:
+        exists = source.exists()
+    except OSError as exc:
+        raise ValueError(f"invalid backup path: {exc}") from exc
+    if not exists:
         raise FileNotFoundError(f"backup not found: {source}")
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
         if not isinstance(data, dict) or data.get("schema_version") != config.SCHEMA_VERSION:
             raise ValueError("not a valid v2raycli backup")
+        _validate_persisted_shape(data)
         restored = Config.from_dict(data)
-    except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
+    except (OSError, ValueError, TypeError, AttributeError, KeyError, UnicodeError) as exc:
         if isinstance(exc, ValueError) and str(exc) == "not a valid v2raycli backup":
             raise
         raise ValueError(f"invalid backup: {exc}") from exc
