@@ -134,7 +134,15 @@ class SingBoxAdapter(EngineAdapter):
             "route": {"rules": rules, "final": selected},
         }
         if settings.dns:
-            config["dns"] = {"servers": [{"address": d} for d in settings.dns]}
+            # sing-box >= 1.12 uses the typed DNS server format and requires a
+            # default domain resolver when DNS servers are configured.
+            config["dns"] = {
+                "servers": [
+                    {"type": "udp", "tag": f"dns-{index}", "server": server}
+                    for index, server in enumerate(settings.dns, start=1)
+                ]
+            }
+            config["route"]["default_domain_resolver"] = "dns-1"
         return config
 
     def _outbound_for(self, profile) -> dict:

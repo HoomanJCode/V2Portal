@@ -96,6 +96,18 @@ def test_singbox_balancer_urltest_and_chain_detour(tmp_path):
     assert cfg2["route"]["final"] == b.id
 
 
+def test_singbox_dns_typed_format(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_vmess())
+    cfg = _generate(store, p, default="sing-box")
+
+    servers = cfg["dns"]["servers"]
+    assert servers[0]["type"] == "udp"
+    assert servers[0]["tag"] == "dns-1"
+    assert servers[0]["server"] == "1.1.1.1"
+    assert cfg["route"]["default_domain_resolver"] == "dns-1"
+
+
 def test_split_routing_rules(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())
