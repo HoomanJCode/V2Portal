@@ -171,3 +171,20 @@ def test_test_many_returns_in_input_order(tmp_path, monkeypatch):
     results = latency.test_many([a, b], store.config.settings)
 
     assert [r.profile_id for r in results] == [a.id, b.id]
+
+
+def test_save_and_load_results(tmp_path):
+    path = tmp_path / "test_results.json"
+    expected = [
+        latency.TestResult(
+            profile_id="p1", name="node", kind="socks", engine="sing-box",
+            ok=True, latency_ms=25.0, connect_ms=10.0,
+        )
+    ]
+
+    latency.save_results(expected, path)
+
+    assert latency.load_results(path) == expected
+
+    path.write_text("not json", encoding="utf-8")
+    assert latency.load_results(path) == []

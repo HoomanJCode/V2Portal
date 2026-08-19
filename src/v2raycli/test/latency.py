@@ -258,3 +258,18 @@ def save_results(results: list[TestResult], path=None) -> None:
         json.dumps([asdict(r) for r in results], ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def load_results(path=None) -> list[TestResult]:
+    """Load the cached result table, returning an empty list if unavailable."""
+    target = path or (config.RUNTIME_DIR / "test_results.json")
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    try:
+        return [TestResult(**item) for item in payload if isinstance(item, dict)]
+    except (TypeError, ValueError):
+        return []

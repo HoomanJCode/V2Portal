@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from ..test.latency import render_table, save_results, select_profiles, test_many
+from ..test.latency import (
+    load_results,
+    render_table,
+    save_results,
+    select_profiles,
+    test_many,
+)
 from . import widgets
 
 
@@ -13,10 +19,18 @@ def run(store) -> None:
             ("all", "All outbounds"),
             ("sub", "One subscription"),
             ("profiles", "Selected profiles"),
+            ("last", "View last results"),
             ("back", "Back"),
         ],
     )
     if scope is None or scope == "back":
+        return
+    if scope == "last":
+        results = load_results()
+        if not results:
+            widgets.show_message("No cached results", "Run an outbound test first.")
+            return
+        render_table(results)
         return
 
     if scope == "all":

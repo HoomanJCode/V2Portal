@@ -27,3 +27,18 @@ def test_interactive_test_saves_results(tmp_path, monkeypatch):
 
     assert [result.profile_id for result in saved] == [profile.id]
     assert [result.profile_id for result in rendered] == [profile.id]
+
+
+def test_interactive_test_views_cached_results(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    cached = TestResult(profile_id="p1", name="cached", ok=True)
+    rendered = []
+
+    monkeypatch.setattr(test_screen.widgets, "menu", lambda *args, **kwargs: "last")
+    monkeypatch.setattr(test_screen, "load_results", lambda: [cached])
+    monkeypatch.setattr(test_screen, "render_table", lambda results: rendered.extend(results))
+
+    test_screen.run(store)
+
+    assert rendered == [cached]
