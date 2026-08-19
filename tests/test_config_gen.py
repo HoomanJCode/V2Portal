@@ -135,6 +135,38 @@ def test_singbox_traffic_api_disabled_by_default(tmp_path):
     assert "experimental" not in cfg
 
 
+def test_singbox_geo_rules_use_rule_sets(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_vmess())
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="direct", match={"geosite": ["category-ads"]}),
+            RoutingRule(action="proxy", match={"geoip": ["cn"]}),
+        ],
+    )
+    cfg = _generate(store, p, default="sing-box")
+
+    tags = {rs["tag"] for rs in cfg["route"]["rule_set"]}
+    assert tags == {"geosite-category-ads", "geoip-cn"}
+
+    geosite_rs = next(rs for rs in cfg["route"]["rule_set"] if rs["tag"] == "geosite-category-ads")
+    assert geosite_rs["type"] == "remote"
+    assert geosite_rs["url"].endswith("geosite-category-ads.srs")
+    assert geosite_rs["download_detour"] == "direct"
+
+    rule = cfg["route"]["rules"][0]
+    assert rule["rule_set"] == ["geosite-category-ads"]
+    assert "geosite" not in rule and "geoip" not in rule
+
+
+def test_singbox_no_rule_sets_without_geo_rules(tmp_path):
+    store = _store(tmp_path)
+    p = store.add_profile(_vmess())
+    cfg = _generate(store, p, default="sing-box")
+    assert "rule_set" not in cfg["route"]
+
+
 def test_split_routing_rules(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())

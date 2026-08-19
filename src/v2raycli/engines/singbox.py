@@ -52,6 +52,41 @@ def _tls(stream: dict) -> dict | None:
     return obj
 
 
+def _geo_tags(rule) -> list[str]:
+    """Return the rule-set tags referenced by a rule's geo matchers."""
+    tags: list[str] = []
+    for value in rule.match.get("geosite", []):
+        tags.append(f"geosite-{value}")
+    for value in rule.match.get("geoip", []):
+        tags.append(f"geoip-{value}")
+    for domain in rule.match.get("domains", []):
+        if domain.startswith("geosite:"):
+            tags.append(f"geosite-{domain[len('geosite:'):]}")
+    for ip in rule.match.get("ips", []):
+        if ip.startswith("geoip:"):
+            tags.append(f"geoip-{ip[len('geoip:'):]}")
+    return tags
+
+
+def _rule_set_entry(tag: str) -> dict:
+    """Build a remote (auto-download) rule-set entry for a geo tag."""
+    if tag.startswith("geosite-"):
+        value = tag[len("geosite-") :]
+        url = f"https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-{value}.srs"
+    else:
+        value = tag[len("geoip-") :]
+        url = f"https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-{value}.srs"
+    return {
+        "type": "remote",
+        "tag": tag,
+        "format": "binary",
+        "url": url,
+        # Route the download through sing-box's own DNS; the Go system
+        # resolver has no localhost nameserver on Termux/minimal systems.
+        "download_detour": "direct",
+    }
+
+
 def _transport(stream: dict) -> dict | None:
     net = stream.get("network", "tcp")
     if net == "ws":
@@ -123,9 +158,12 @@ class SingBoxAdapter(EngineAdapter):
             ]
 
         rules: list[dict] = []
+        rule_sets: dict[str, dict] = {}
         if routing.mode == "split":
             for rule in normalize_rules(routing, selected):
                 rules.append(self._rule(rule, selected))
+                for tag in _geo_tags(rule):
+                    rule_sets.setdefault(tag, _rule_set_entry(tag))
 
         config: dict = {
             "log": {"level": settings.log_level},
@@ -133,6 +171,8 @@ class SingBoxAdapter(EngineAdapter):
             "outbounds": outbounds,
             "route": {"rules": rules, "final": selected},
         }
+        if rule_sets:
+            config["route"]["rule_set"] = list(rule_sets.values())
         if settings.dns:
             # sing-box >= 1.12 uses the typed DNS server format and requires a
             # default domain resolver when DNS servers are configured.
@@ -250,24 +290,21 @@ class SingBoxAdapter(EngineAdapter):
         else:
             outbound = rule.target_id or selected
 
-        suffix, keyword, regex, geosite = [], [], [], []
+        suffix, keyword, regex = [], [], []
         for domain in rule.match.get("domains", []):
             if domain.startswith("keyword:"):
                 keyword.append(domain[len("keyword:") :])
             elif domain.startswith("regex:"):
                 regex.append(domain[len("regex:") :])
             elif domain.startswith("geosite:"):
-                geosite.append(domain[len("geosite:") :])
+                continue  # handled via rule_set
             else:
                 suffix.append(domain)
         cidr: list[str] = []
-        geoip = list(rule.match.get("geoip", []))
         for ip in rule.match.get("ips", []):
             if ip.startswith("geoip:"):
-                geoip.append(ip[len("geoip:") :])
-            else:
-                cidr.append(ip)
-        geosite += rule.match.get("geosite", [])
+                continue  # handled via rule_set
+            cidr.append(ip)
 
         field: dict = {}
         if suffix:
@@ -276,12 +313,11 @@ class SingBoxAdapter(EngineAdapter):
             field["domain_keyword"] = keyword
         if regex:
             field["domain_regex"] = regex
-        if geosite:
-            field["geosite"] = geosite
         if cidr:
             field["ip_cidr"] = cidr
-        if geoip:
-            field["geoip"] = geoip
+        rule_set_tags = _geo_tags(rule)
+        if rule_set_tags:
+            field["rule_set"] = rule_set_tags
         field["outbound"] = outbound
         return field
 

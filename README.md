@@ -151,7 +151,9 @@ Switch `routing.mode` to `split` (Routing screen) and add rules with:
 - domains (`example.com`, `keyword:ads`, `regex:...`, `geosite:category`)
 - IPs (`1.2.3.0/24`, `geoip:cn`)
 
-Each rule targets a profile, a group, `direct`, or `block`.
+Each rule targets a profile, a group, `direct`, or `block`. On sing-box,
+`geosite:`/`geoip:` entries are compiled to rule-sets that auto-download from
+SagerNet/sing-geosite and SagerNet/sing-geoip on first use.
 
 ## LAN sharing
 
@@ -199,8 +201,9 @@ Remove it with `v2raycli --uninstall-service`.
   `"system"` to use one on `PATH`.
 - **LAN unreachable** — check the firewall (Windows) and that devices share the
   network.
-- **Geo rules silent** — geoip/geosite files download to `geo/`; a manual
-  `geoip:`/`geosite:` entry needs the corresponding asset present.
+- **Geo rules silent** — sing-box auto-downloads rule-sets (needs network on
+  first use). xray needs `geoip.dat`/`geosite.dat` placed in the working
+  directory; the CLI does not fetch those yet.
 - **VPN client missing** — install `openvpn` / `openconnect` and ensure it's on
   `PATH`.
 
@@ -210,7 +213,8 @@ Config is JSON at `<config-dir>/config.json`. Derived dirs under the same base:
 
 - `runtime/` — generated engine configs and test results
 - `bin/` — downloaded engine binaries
-- `geo/` — geoip/geosite assets
+- `geo/` — reserved for xray geoip/geosite `.dat` assets (sing-box rule-sets
+  are cached by the engine)
 - `backup/` — automatic config backups
 
 ## Development
