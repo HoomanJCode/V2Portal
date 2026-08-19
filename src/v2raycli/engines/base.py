@@ -65,12 +65,13 @@ def write_runtime_config(engine: str, config_dict: dict, runtime_dir: Path | Non
     return path
 
 
-def validate_config(engine: str, path: Path) -> None:
+def validate_config(engine: str, path: Path, binary: Path | str | None = None) -> None:
     """Validate a generated config with the engine's own check command."""
     adapter = get_adapter(engine)
-    result = subprocess.run(
-        adapter.validate_args(str(path)), capture_output=True, text=True
-    )
+    cmd = adapter.validate_args(str(path))
+    if binary:
+        cmd = [str(binary), *cmd]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "validation failed").strip()
         raise RuntimeError(message)

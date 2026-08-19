@@ -89,12 +89,15 @@ def download_binary(
     url = f"https://github.com/{repo}/releases/download/{version}/{asset}"
     archive_path = bin_dir / asset
 
-    with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-        with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with open(archive_path, "wb") as fh:
-                for chunk in resp.iter_bytes():
-                    fh.write(chunk)
+    try:
+        with httpx.Client(follow_redirects=True, timeout=60.0) as client:
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                with open(archive_path, "wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        fh.write(chunk)
+    except httpx.HTTPError as exc:
+        raise BinaryError(f"download failed: {exc}") from exc
 
     binary_name = adapter.binary_filename(platform, arch)
     _extract(archive_path, bin_dir, kind, binary_name)
