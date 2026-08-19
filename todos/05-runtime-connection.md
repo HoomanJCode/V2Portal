@@ -28,8 +28,8 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
       into engine events is left to the TUI/status layer).
 - [x] Traffic stats (stretch): sing-box Clash API counters are polled by the
       controller, displayed in the live TUI status, and accumulated on
-      disconnect; xray/VPN connections and malformed API responses degrade
-      cleanly when unavailable.
+      disconnect; xray/VPN connections and malformed API or persisted counters
+      degrade cleanly when unavailable.
 - [x] Typed errors: binary missing, VPN client/target missing, stale targets,
       subprocess launch failures, port in use (engine immediate exit), invalid config.
 

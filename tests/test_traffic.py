@@ -122,6 +122,27 @@ def test_controller_ignores_malformed_traffic_on_disconnect(tmp_path, monkeypatc
     assert profile.traffic_down == 0
 
 
+def test_controller_ignores_malformed_persisted_traffic_on_disconnect(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    profile.traffic_up = "bad"
+    profile.traffic_down = None
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 19090
+    binary = _fake_binary(tmp_path)
+    store.config.engines["sing-box"] = {"binary_path": str(binary), "version": "x"}
+
+    ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
+    assert ctl.connect(profile).state == "connected"
+    monkeypatch.setattr(traffic, "read_traffic", lambda host, port, timeout=3.0: {"up": 111, "down": 222})
+
+    ctl.disconnect()
+
+    assert profile.traffic_up == "bad"
+    assert profile.traffic_down is None
+
+
 def test_controller_records_traffic_for_group(tmp_path, monkeypatch):
     store = ConfigStore(tmp_path / "c.json")
     store.load()
