@@ -149,6 +149,18 @@ def test_singbox_single_mixed_inbound(tmp_path):
     assert cfg["route"]["final"] == p.id
 
 
+def test_allow_lan_false_binds_both_engines_to_loopback(tmp_path):
+    store = _store(tmp_path)
+    store.config.settings.allow_lan = False
+    profile = store.add_profile(_vmess())
+
+    singbox = _generate(store, profile, default="sing-box")
+    assert singbox["inbounds"][0]["listen"] == "127.0.0.1"
+
+    xray = _generate(store, profile, default="xray")
+    assert xray["inbounds"][0]["listen"] == "127.0.0.1"
+
+
 def test_xray_balancer_observatory(tmp_path):
     store = _store(tmp_path)
     a = store.add_profile(_vmess("a"))

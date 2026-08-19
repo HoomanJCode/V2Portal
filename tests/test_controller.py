@@ -50,6 +50,17 @@ def test_missing_binary_maps_to_error(tmp_path):
     assert "binary" in status.error
 
 
+def test_inbound_status_honors_allow_lan(tmp_path):
+    store = _store(tmp_path)
+    store.config.settings.allow_lan = False
+
+    info = ConnectionController(store)._inbound_info(store.config.settings)
+
+    assert info["listen"] == "127.0.0.1"
+    assert info["urls"] == ["socks5://127.0.0.1:1080", "http://127.0.0.1:1080"]
+    assert "lan" not in info
+
+
 def test_engine_immediate_exit_maps_to_error(tmp_path):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))

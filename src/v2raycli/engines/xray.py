@@ -69,7 +69,7 @@ class XrayAdapter(EngineAdapter):
 
         inbound = {
             "tag": INBOUND_TAG,
-            "listen": settings.listen,
+            "listen": settings.listen if settings.allow_lan else "127.0.0.1",
             "port": settings.mixed_port,
             "protocol": "socks",
             "settings": {"auth": "noauth", "udp": True},

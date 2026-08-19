@@ -34,7 +34,7 @@ strategy details must be verified and locked in.
 ### sing-box generator (`engines/singbox.py`)
 
 - [x] `generate(...)`: `log`, `dns`, one `mixed` inbound (socks5+http single
-      port, `listen`, optional `users` when auth enabled), outbounds per profile
+      port, effective `listen`/`allow_lan` binding, optional `users` when auth enabled), outbounds per profile
       + `direct`/`block` fallbacks.
 - [x] Single → route to outbound; `urltest`/`selector` for balancer; `detour`
       for chains (route to last hop).

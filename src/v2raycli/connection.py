@@ -171,7 +171,7 @@ class ConnectionController:
 
     def _inbound_info(self, settings) -> dict:
         port = settings.mixed_port
-        listen = settings.listen
+        listen = settings.listen if settings.allow_lan else "127.0.0.1"
         host = listen if listen not in ("0.0.0.0", "", None) else "0.0.0.0"
         info: dict = {
             "listen": listen,
