@@ -24,6 +24,133 @@ class ConfigLoadError(ValueError):
     """Raised when the on-disk config cannot be decoded or validated."""
 
 
+def _require_dict(value, label: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be an object")
+    return value
+
+
+def _require_list(value, label: str) -> list:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be a list")
+    return value
+
+
+def _validate_text_list(value, label: str) -> None:
+    for index, item in enumerate(_require_list(value, label)):
+        if not isinstance(item, str):
+            raise ValueError(f"{label}[{index}] must be text")
+
+
+def _validate_persisted_shape(raw: dict) -> None:
+    """Reject wrong-shaped nested values before dataclass construction."""
+    settings = _require_dict(raw.get("settings", {}), "config settings")
+    for key in ("listen", "log_level", "test_url", "default_engine"):
+        if key in settings and not isinstance(settings[key], str):
+            raise ValueError(f"settings.{key} must be text")
+    for key in ("mixed_port", "backup_keep", "traffic_api_port"):
+        if key in settings and (
+            isinstance(settings[key], bool) or not isinstance(settings[key], int)
+        ):
+            raise ValueError(f"settings.{key} must be an integer")
+    for key in ("allow_lan", "traffic_api"):
+        if key in settings and not isinstance(settings[key], bool):
+            raise ValueError(f"settings.{key} must be boolean")
+    if "inbound_auth" in settings:
+        auth = _require_dict(settings["inbound_auth"], "settings.inbound_auth")
+        if "enabled" in auth and not isinstance(auth["enabled"], bool):
+            raise ValueError("settings.inbound_auth.enabled must be boolean")
+        for key in ("username", "password"):
+            if key in auth and not isinstance(auth[key], str):
+                raise ValueError(f"settings.inbound_auth.{key} must be text")
+    if "dns" in settings:
+        _validate_text_list(settings["dns"], "settings.dns")
+
+    routing = _require_dict(raw.get("routing", {}), "config routing")
+    if "mode" in routing and not isinstance(routing["mode"], str):
+        raise ValueError("routing.mode must be text")
+    rules = _require_list(routing.get("rules", []), "config routing rules")
+    for index, rule in enumerate(rules):
+        rule = _require_dict(rule, f"config routing rules[{index}]")
+        if "action" in rule and not isinstance(rule["action"], str):
+            raise ValueError(f"config routing rules[{index}].action must be text")
+        if "target_id" in rule and rule["target_id"] is not None and not isinstance(
+            rule["target_id"], str
+        ):
+            raise ValueError(f"config routing rules[{index}].target_id must be text or null")
+        if "match" in rule:
+            match = _require_dict(rule["match"], f"config routing rules[{index}].match")
+            for key, values in match.items():
+                _validate_text_list(values, f"config routing rules[{index}].match.{key}")
+
+    engines = _require_dict(raw.get("engines", {}), "config engines")
+    for name, options in engines.items():
+        if not isinstance(name, str):
+            raise ValueError("config engine names must be text")
+        options = _require_dict(options, f"config engines.{name}")
+        for key in ("binary_path", "version"):
+            if key in options and not isinstance(options[key], str):
+                raise ValueError(f"config engines.{name}.{key} must be text")
+
+    profiles = _require_list(raw.get("profiles", []), "config profiles")
+    for index, profile in enumerate(profiles):
+        profile = _require_dict(profile, f"config profiles[{index}]")
+        for key in ("id", "name", "kind", "engine", "source", "created_at", "updated_at"):
+            if key in profile and not isinstance(profile[key], str):
+                raise ValueError(f"config profiles[{index}].{key} must be text")
+        for key in ("subscription_id",):
+            if key in profile and profile[key] is not None and not isinstance(profile[key], str):
+                raise ValueError(f"config profiles[{index}].{key} must be text or null")
+        if "outbound" in profile:
+            _require_dict(profile["outbound"], f"config profiles[{index}].outbound")
+        if "vpn" in profile and profile["vpn"] is not None:
+            _require_dict(profile["vpn"], f"config profiles[{index}].vpn")
+        if "enabled" in profile and not isinstance(profile["enabled"], bool):
+            raise ValueError(f"config profiles[{index}].enabled must be boolean")
+        for key in ("traffic_up", "traffic_down"):
+            if key in profile and (
+                isinstance(profile[key], bool) or not isinstance(profile[key], int)
+            ):
+                raise ValueError(f"config profiles[{index}].{key} must be an integer")
+
+    subscriptions = _require_list(raw.get("subscriptions", []), "config subscriptions")
+    for index, subscription in enumerate(subscriptions):
+        subscription = _require_dict(subscription, f"config subscriptions[{index}]")
+        for key in ("id", "name", "url"):
+            if key in subscription and not isinstance(subscription[key], str):
+                raise ValueError(f"config subscriptions[{index}].{key} must be text")
+        for key in ("user_agent", "last_updated", "expires"):
+            if key in subscription and subscription[key] is not None and not isinstance(
+                subscription[key], str
+            ):
+                raise ValueError(f"config subscriptions[{index}].{key} must be text or null")
+        if "profile_ids" in subscription:
+            _validate_text_list(subscription["profile_ids"], f"config subscriptions[{index}].profile_ids")
+        for key in ("traffic_used", "auto_update_days"):
+            if key in subscription and (
+                isinstance(subscription[key], bool) or not isinstance(subscription[key], int)
+            ):
+                raise ValueError(f"config subscriptions[{index}].{key} must be an integer")
+        if "enabled" in subscription and not isinstance(subscription["enabled"], bool):
+            raise ValueError(f"config subscriptions[{index}].enabled must be boolean")
+
+    groups = _require_list(raw.get("groups", []), "config groups")
+    for index, group in enumerate(groups):
+        group = _require_dict(group, f"config groups[{index}]")
+        for key in ("id", "name", "type", "strategy", "engine"):
+            if key in group and not isinstance(group[key], str):
+                raise ValueError(f"config groups[{index}].{key} must be text")
+        if "profile_ids" in group:
+            _validate_text_list(group["profile_ids"], f"config groups[{index}].profile_ids")
+        if "enabled" in group and not isinstance(group["enabled"], bool):
+            raise ValueError(f"config groups[{index}].enabled must be boolean")
+        for key in ("traffic_up", "traffic_down"):
+            if key in group and (
+                isinstance(group[key], bool) or not isinstance(group[key], int)
+            ):
+                raise ValueError(f"config groups[{index}].{key} must be an integer")
+
+
 class ConfigStore:
     """Load/save the config file and expose CRUD helpers.
 
@@ -59,12 +186,14 @@ class ConfigStore:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 raise ValueError("config root must be a JSON object")
-            for key in ("settings", "routing", "engines"):
-                if key in raw and not isinstance(raw[key], dict):
-                    raise ValueError(f"config field {key!r} must be an object")
-            for key in ("profiles", "subscriptions", "groups"):
-                if key in raw and not isinstance(raw[key], list):
-                    raise ValueError(f"config field {key!r} must be a list")
+            schema_version = raw.get("schema_version", config.SCHEMA_VERSION)
+            if (
+                isinstance(schema_version, bool)
+                or not isinstance(schema_version, int)
+                or schema_version != config.SCHEMA_VERSION
+            ):
+                raise ValueError(f"unsupported schema_version: {schema_version}")
+            _validate_persisted_shape(raw)
             self.config = Config.from_dict(raw)
         except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
             raise ConfigLoadError(f"could not load config {self.path}: {exc}") from exc

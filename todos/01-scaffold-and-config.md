@@ -36,8 +36,8 @@ everything else builds on. No proxy logic yet.
   - uuid4 ids; ISO-8601 timestamps; explicit `to_dict()` / `from_dict()`
 - [x] `storage.py`:
   - `load()` (creates default on first run), `save()` (atomic temp + replace),
-    `schema_version` stored on read/write; malformed or wrong-shaped config
-    files produce a clear load error without being overwritten
+    `schema_version` stored on read/write; unsupported versions and malformed
+    nested config shapes produce a clear load error without being overwritten
   - `ConfigStore` CRUD: profiles, subscriptions (unlink `profile_ids` on remove),
     groups, routing rules, settings/engines update
   - note: the backup pre-write hook is added in Phase 09, not here
@@ -49,7 +49,7 @@ everything else builds on. No proxy logic yet.
 ## Tests
 
 - [x] `test_storage.py`: first-run default config; round-trip; atomic write;
-  CRUD helpers persist.
+  CRUD helpers persist; malformed schema and nested config shapes are rejected.
 - [x] `test_models.py`: dict round-trip for every kind/type, defaults, ids.
 - [x] `test_app.py`: `main()` runs and exits 0 in an isolated temp config dir.
 

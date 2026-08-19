@@ -1,3 +1,6 @@
+import json
+import re
+
 import pytest
 
 from v2raycli.models import Group, Profile, Subscription
@@ -27,6 +30,34 @@ def test_load_rejects_wrong_config_shape(tmp_path):
     path.write_text('{"profiles": {}}')
 
     with pytest.raises(ConfigLoadError, match="must be a list"):
+        ConfigStore(path).load()
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"settings": {"dns": {}}}, "settings.dns must be a list"),
+        ({"engines": {"xray": {"binary_path": []}}}, "config engines.xray.binary_path must be text"),
+        ({"profiles": [{"outbound": []}]}, "config profiles[0].outbound must be an object"),
+        ({"profiles": [{"vpn": []}]}, "config profiles[0].vpn must be an object"),
+        ({"subscriptions": [{"profile_ids": "profile-id"}]}, "subscriptions[0].profile_ids must be a list"),
+        ({"groups": [{"profile_ids": [123]}]}, "groups[0].profile_ids[0] must be text"),
+        ({"routing": {"rules": [{"match": {"ips": "10.0.0.0/8"}}]}}, "rules[0].match.ips must be a list"),
+    ],
+)
+def test_load_rejects_malformed_nested_shapes(tmp_path, payload, message):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(payload))
+
+    with pytest.raises(ConfigLoadError, match=re.escape(message)):
+        ConfigStore(path).load()
+
+
+def test_load_rejects_unsupported_schema_version(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"schema_version": 999}))
+
+    with pytest.raises(ConfigLoadError, match="unsupported schema_version"):
         ConfigStore(path).load()
 
 
