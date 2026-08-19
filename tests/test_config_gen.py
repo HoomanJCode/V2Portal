@@ -81,6 +81,27 @@ def test_singbox_wireguard_is_endpoint(tmp_path):
     assert cfg["route"]["final"] == p.id
 
 
+def test_singbox_rejects_malformed_stream_mappings(tmp_path):
+    store = _store(tmp_path)
+    malformed_stream = _vmess("bad-stream")
+    malformed_stream.outbound["streamSettings"] = "invalid"
+    malformed_stream = store.add_profile(malformed_stream)
+    with pytest.raises(ValueError, match="streamSettings must be an object"):
+        _generate(store, malformed_stream, default="sing-box")
+
+    malformed_tls = _vmess("bad-tls")
+    malformed_tls.outbound["streamSettings"] = {"security": "tls", "tlsSettings": []}
+    malformed_tls = store.add_profile(malformed_tls)
+    with pytest.raises(ValueError, match="tlsSettings must be an object"):
+        _generate(store, malformed_tls, default="sing-box")
+
+    malformed_ws = _vmess("bad-ws")
+    malformed_ws.outbound["streamSettings"] = {"network": "ws", "wsSettings": []}
+    malformed_ws = store.add_profile(malformed_ws)
+    with pytest.raises(ValueError, match="wsSettings must be an object"):
+        _generate(store, malformed_ws, default="sing-box")
+
+
 def test_singbox_rejects_malformed_native_outbounds(tmp_path):
     store = _store(tmp_path)
     malformed_hysteria = store.add_profile(

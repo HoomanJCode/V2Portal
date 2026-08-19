@@ -127,9 +127,13 @@ def _split_endpoint(endpoint: str) -> tuple[str, int]:
 
 
 def _tls(stream: dict) -> dict | None:
+    if not isinstance(stream, dict):
+        raise ValueError("streamSettings must be an object")
     if stream.get("security") != "tls":
         return None
     tls = stream.get("tlsSettings", {})
+    if not isinstance(tls, dict):
+        raise ValueError("tlsSettings must be an object")
     obj: dict = {"enabled": True}
     if tls.get("serverName"):
         obj["server_name"] = tls["serverName"]
@@ -178,24 +182,35 @@ def _rule_set_entry(tag: str) -> dict:
 
 
 def _transport(stream: dict) -> dict | None:
+    if not isinstance(stream, dict):
+        raise ValueError("streamSettings must be an object")
     net = stream.get("network", "tcp")
     if net == "ws":
         ws = stream.get("wsSettings", {})
+        if not isinstance(ws, dict):
+            raise ValueError("wsSettings must be an object")
         obj: dict = {"type": "ws"}
         if ws.get("path"):
             obj["path"] = ws["path"]
         headers = ws.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise ValueError("WebSocket headers must be an object")
         if headers.get("Host"):
             obj["headers"] = {"Host": headers["Host"]}
         return obj
     if net == "grpc":
+        grpc = stream.get("grpcSettings") or {}
+        if not isinstance(grpc, dict):
+            raise ValueError("grpcSettings must be an object")
         obj = {"type": "grpc"}
-        service_name = (stream.get("grpcSettings") or {}).get("serviceName")
+        service_name = grpc.get("serviceName")
         if service_name:
             obj["service_name"] = service_name
         return obj
     if net == "h2":
         http = stream.get("httpSettings", {})
+        if not isinstance(http, dict):
+            raise ValueError("httpSettings must be an object")
         obj = {"type": "http"}
         if http.get("path"):
             obj["path"] = http["path"]
@@ -420,6 +435,8 @@ class SingBoxAdapter(EngineAdapter):
 
     def _apply_stream(self, profile, outbound: dict) -> None:
         stream = profile.outbound.get("streamSettings", {})
+        if not isinstance(stream, dict):
+            raise ValueError("streamSettings must be an object")
         tls = _tls(stream)
         transport = _transport(stream)
         if tls:
