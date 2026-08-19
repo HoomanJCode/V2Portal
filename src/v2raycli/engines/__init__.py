@@ -45,3 +45,4 @@ def strategy_supported(engine: str, strategy: str) -> bool:
 
 
 from .base import EngineAdapter, get_adapter, register  # noqa: E402,F401
+from . import singbox, xray  # noqa: E402,F401  (registers adapters)
