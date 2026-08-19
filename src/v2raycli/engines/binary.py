@@ -74,35 +74,45 @@ def release_asset(engine: str, version: str, platform: str, arch: str) -> tuple[
 
 def _latest_tag(repo: str) -> str:
     url = f"https://api.github.com/repos/{repo}/releases/latest"
-    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
-        resp = client.get(
-            url,
-            headers={"Accept": "application/vnd.github+json", "User-Agent": "v2raycli"},
-        )
-        resp.raise_for_status()
-        return resp.json()["tag_name"]
+    try:
+        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+            resp = client.get(
+                url,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "v2raycli"},
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise BinaryError(f"could not resolve latest release: {exc}") from exc
+    tag = payload.get("tag_name") if isinstance(payload, dict) else None
+    if not isinstance(tag, str) or not tag.strip():
+        raise BinaryError("latest release response is missing tag_name")
+    return tag.strip()
 
 
 def _extract(archive: Path, dest: Path, kind: str, binary_name: str) -> None:
     def matches(name: str) -> bool:
         return name == binary_name or name.endswith("/" + binary_name)
 
-    if kind == "zip":
-        with zipfile.ZipFile(archive) as zf:
-            for member in zf.namelist():
-                if matches(member):
-                    with zf.open(member) as src, open(dest / binary_name, "wb") as dst:
-                        dst.write(src.read())
-                    return
-    else:
-        with tarfile.open(archive, "r:gz") as tf:
-            for member in tf.getmembers():
-                if matches(member.name):
-                    fh = tf.extractfile(member)
-                    if fh:
-                        with open(dest / binary_name, "wb") as dst:
-                            dst.write(fh.read())
+    try:
+        if kind == "zip":
+            with zipfile.ZipFile(archive) as zf:
+                for member in zf.namelist():
+                    if matches(member):
+                        with zf.open(member) as src, open(dest / binary_name, "wb") as dst:
+                            dst.write(src.read())
                         return
+        else:
+            with tarfile.open(archive, "r:gz") as tf:
+                for member in tf.getmembers():
+                    if matches(member.name):
+                        fh = tf.extractfile(member)
+                        if fh:
+                            with open(dest / binary_name, "wb") as dst:
+                                dst.write(fh.read())
+                            return
+    except (OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        raise BinaryError(f"invalid {kind} archive {archive}: {exc}") from exc
     raise BinaryError(f"binary {binary_name} not found in {archive}")
 
 
@@ -117,10 +127,14 @@ def download_binary(
     repo = "XTLS/Xray-core" if engine == "xray" else "SagerNet/sing-box"
     tag = version or "latest"
     if tag == "latest":
-        try:
-            tag = _latest_tag(repo)
-        except httpx.HTTPError as exc:
-            raise BinaryError(f"could not resolve latest release: {exc}") from exc
+        tag = _latest_tag(repo)
+    if not isinstance(tag, str) or not tag.strip() or any(char in tag for char in ("/", "\\")):
+        raise BinaryError("release version must be a safe text tag")
+    for label, value in (("platform", platform), ("architecture", arch)):
+        if not isinstance(value, str) or not value.strip() or any(
+            char in value for char in ("/", "\\")
+        ):
+            raise BinaryError(f"release {label} must be safe text")
     asset, kind = release_asset(engine, tag, platform, arch)
     url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
     archive_path = bin_dir / asset
@@ -132,11 +146,17 @@ def download_binary(
                 with open(archive_path, "wb") as fh:
                     for chunk in resp.iter_bytes():
                         fh.write(chunk)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, OSError) as exc:
+        archive_path.unlink(missing_ok=True)
         raise BinaryError(f"download failed: {exc}") from exc
 
     binary_name = adapter.binary_filename(platform, arch)
-    _extract(archive_path, bin_dir, kind, binary_name)
+    try:
+        _extract(archive_path, bin_dir, kind, binary_name)
+    except BinaryError:
+        archive_path.unlink(missing_ok=True)
+        (bin_dir / binary_name).unlink(missing_ok=True)
+        raise
     archive_path.unlink(missing_ok=True)
 
     binary = bin_dir / binary_name
@@ -157,7 +177,11 @@ def locate_binary(
     arch = arch or arch_name()
     binary_name = adapter.binary_filename(platform, arch)
 
+    if not isinstance(options, dict):
+        raise BinaryError("engine options must be an object")
     path = options.get("binary_path", "auto")
+    if path is not None and not isinstance(path, (str, os.PathLike)):
+        raise BinaryError("binary_path must be text")
     if path and path not in ("auto", "system"):
         candidate = Path(path)
         if not candidate.exists():
@@ -178,10 +202,14 @@ def locate_binary(
 
 def get_version(engine: str, path: Path) -> str:
     """Run ``<binary> version`` and extract the version string."""
+    if not isinstance(path, (str, os.PathLike)):
+        raise BinaryError("binary path must be text")
     try:
         result = subprocess.run([str(path), "version"], capture_output=True, text=True, timeout=15)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
         raise BinaryError(f"binary not runnable: {path}") from exc
-    output = result.stdout or result.stderr
+    output = result.stdout or result.stderr or ""
+    if result.returncode != 0:
+        raise BinaryError(f"binary version command failed: {output.strip() or result.returncode}")
     match = re.search(r"(\d+\.\d+\.\d+)", output)
     return match.group(1) if match else output.strip()

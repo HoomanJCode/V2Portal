@@ -25,9 +25,9 @@ strategy details must be verified and locked in.
 - [x] `locate_binary(engine, options) -> path`: absolute/system/`auto` (cache hit
       in `BIN_DIR`, else download).
 - [x] `download_binary(engine, version, platform, arch) -> path`: OS/arch →
-      release asset for `SagerNet/sing-box` and `XTLS/Xray-core`; extract
-      zip/tar.gz; chmod +x. (Asset naming is best-effort — verify against the
-      release listing.)
+      release asset for `SagerNet/sing-box` and `XTLS/Xray-core`; validate
+      release metadata, extract zip/tar.gz, clean failed archives, and chmod
+      +x. (Asset naming is best-effort — verify against the release listing.)
 - [x] `get_version(engine, path)` (runs `<binary> version`).
 - [x] Cache hit when version matches (locate returns cached binary).
 
@@ -84,7 +84,8 @@ strategy details must be verified and locked in.
       produce expected `outbounds`/`routing`/`inbounds`; tag stability; chain
       order; split-routing rule emission for both engines.
 - [x] `test_binary.py`: asset-name mapping for both engines; locate
-      (absolute/system/cached) and `get_version` (no network in CI).
+      (absolute/system/cached), malformed release metadata/options/archive/tag
+      rejection, and `get_version` (no network in CI).
 - [x] `test_engine.py`: `resolve_engine` matrix + registry.
 
 ## Definition of Done
