@@ -1,0 +1,66 @@
+"""Split-routing rule helpers: validation, ordering, normalization."""
+
+from __future__ import annotations
+
+import ipaddress
+
+from ..models import RoutingConfig, RoutingRule
+
+ACTIONS = {"proxy", "direct", "block"}
+MATCH_KEYS = {"domains", "ips", "geoip", "geosite"}
+
+
+def _validate_cidr(ip: str) -> None:
+    try:
+        ipaddress.ip_network(ip, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"invalid CIDR: {ip}") from exc
+
+
+def validate_rule(rule: RoutingRule) -> None:
+    if rule.action not in ACTIONS:
+        raise ValueError(f"invalid action: {rule.action}")
+    unknown = set(rule.match) - MATCH_KEYS
+    if unknown:
+        raise ValueError(f"unknown match keys: {sorted(unknown)}")
+    for key in MATCH_KEYS:
+        for item in rule.match.get(key, []):
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(f"invalid {key} entry: {item!r}")
+    for ip in rule.match.get("ips", []):
+        _validate_cidr(ip)
+    for domain in rule.match.get("domains", []):
+        if domain.startswith("regex:") and domain == "regex:":
+            raise ValueError("empty regex matcher")
+
+
+def add_rule(action: str, match: dict, target_id: str | None = None) -> RoutingRule:
+    rule = RoutingRule(action=action, target_id=target_id, match=match)
+    validate_rule(rule)
+    return rule
+
+
+def reorder_rules(rules: list[RoutingRule], ordered_ids: list[str]) -> list[RoutingRule]:
+    by_id = {r.id: r for r in rules}
+    if set(ordered_ids) != set(by_id):
+        raise ValueError("ordered_ids must match the rule set")
+    return [by_id[i] for i in ordered_ids]
+
+
+def normalize_rules(routing: RoutingConfig, selected_target_id: str | None) -> list[RoutingRule]:
+    """Return a copy of the rules with ``target_id=None`` resolved.
+
+    Rules with an explicit ``target_id`` are kept; null-target rules fall back
+    to the currently selected target.
+    """
+    normalized: list[RoutingRule] = []
+    for rule in routing.rules:
+        normalized.append(
+            RoutingRule(
+                id=rule.id,
+                action=rule.action,
+                target_id=rule.target_id or selected_target_id,
+                match={k: list(v) for k, v in rule.match.items()},
+            )
+        )
+    return normalized
