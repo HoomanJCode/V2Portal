@@ -80,6 +80,22 @@ def test_inline_openvpn_config_removed_after_launch_failure(tmp_path, monkeypatc
     assert not (tmp_path / f"{profile.id}.ovpn").exists()
 
 
+def test_malformed_vpn_settings_map_error(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(
+        Profile(
+            name="broken",
+            kind="openvpn",
+            vpn={"type": "openvpn", "inline": "client\n", "args": "--verb"},
+        )
+    )
+
+    status = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path).connect(profile)
+
+    assert status.state == "error"
+    assert "args must be a list" in status.error
+
+
 def test_vpn_missing_target_maps_error(tmp_path, monkeypatch):
     store = _store(tmp_path)
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/openconnect")

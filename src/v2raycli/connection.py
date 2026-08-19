@@ -15,7 +15,7 @@ from .engines.base import validate_config, write_runtime_config
 from .engines.binary import BinaryError, locate_binary
 from .geo import GeoError, ensure_geo_assets
 from .outbounds.groups import resolve_target
-from .outbounds.vpn import VPN_KINDS, client_install_hint, detect_clients
+from .outbounds.vpn import VPN_KINDS, client_install_hint, detect_clients, validate_vpn_profile
 from .routing.rules import uses_geo
 from .runner import Proc
 
@@ -215,20 +215,13 @@ class ConnectionController:
     # -- VPN connections ----------------------------------------------------
 
     def _connect_vpn(self, profile) -> ConnectionStatus:
+        vpn = validate_vpn_profile(profile)
+        vtype = vpn["type"]
         clients = detect_clients()
-        vpn = profile.vpn or {}
-        vtype = vpn.get("type") or profile.kind
         if vtype == "openvpn":
             config_path = vpn.get("config_path")
-            if config_path:
-                if not Path(config_path).is_file():
-                    raise ConnectionError(f"openvpn config not found: {config_path}")
-            elif not vpn.get("inline"):
-                raise ConnectionError("openvpn profile needs a config_path or inline config")
-        elif vtype == "openconnect" and not str(vpn.get("server", "")).strip():
-            raise ConnectionError("openconnect profile needs a server")
-        if vtype not in VPN_KINDS:
-            raise ConnectionError(f"unsupported VPN kind: {vtype}")
+            if config_path and not Path(config_path).is_file():
+                raise ConnectionError(f"openvpn config not found: {config_path}")
         client = clients.get(vtype)
         if not client:
             raise ConnectionError(client_install_hint(vtype))
@@ -252,6 +245,10 @@ class ConnectionController:
         return self.status
 
     def vpn_argv(self, vtype: str, client: str, vpn: dict, profile) -> list[str]:
+        validated_vpn = validate_vpn_profile(profile)
+        if vtype != validated_vpn["type"]:
+            raise ValueError(f"VPN type mismatch: {vtype}")
+        vpn = validated_vpn
         argv = [client, *vpn.get("args", [])]
         if vtype == "openvpn":
             if vpn.get("config_path"):

@@ -1,7 +1,13 @@
 import pytest
 
 from v2raycli.models import Profile
-from v2raycli.outbounds.vpn import add_openconnect, add_openvpn, detect_clients, is_vpn
+from v2raycli.outbounds.vpn import (
+    add_openconnect,
+    add_openvpn,
+    detect_clients,
+    is_vpn,
+    validate_vpn_profile,
+)
 
 
 def test_add_openvpn_path_and_inline():
@@ -40,3 +46,32 @@ def test_detect_clients_keys():
     d = detect_clients()
     assert set(d) == {"openvpn", "openconnect"}
     assert all(v is None or isinstance(v, str) for v in d.values())
+
+
+def test_validate_persisted_vpn_profile():
+    valid = add_openvpn("v", inline="client\n")
+    assert validate_vpn_profile(valid)["type"] == "openvpn"
+
+    with pytest.raises(ValueError, match="missing vpn settings"):
+        validate_vpn_profile(Profile(kind="openvpn", vpn=None))
+
+    malformed_args = Profile(
+        kind="openvpn",
+        vpn={"type": "openvpn", "inline": "client\n", "args": "--verb"},
+    )
+    with pytest.raises(ValueError, match="args must be a list"):
+        validate_vpn_profile(malformed_args)
+
+    mismatched_type = Profile(
+        kind="openvpn",
+        vpn={"type": "openconnect", "server": "vpn.example.com", "args": []},
+    )
+    with pytest.raises(ValueError, match="invalid VPN type"):
+        validate_vpn_profile(mismatched_type)
+
+    malformed_server = Profile(
+        kind="openconnect",
+        vpn={"type": "openconnect", "server": 443, "args": []},
+    )
+    with pytest.raises(ValueError, match="needs a server"):
+        validate_vpn_profile(malformed_server)

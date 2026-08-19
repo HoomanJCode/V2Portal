@@ -21,8 +21,9 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
 - [x] `connect_vpn(profile)` for `kind ∈ {openvpn, openconnect}`:
   - locate client (`shutil.which`), build argv from `vpn.config_path/server/args`
   - start in foreground-but-managed mode; no inbound server; status reflects the
-    VPN being up (OS routing is owned by the client, not the CLI); remove temporary
-    inline OpenVPN config files on disconnect or launch failure.
+    VPN being up (OS routing is owned by the client, not the CLI); validate persisted
+    VPN settings and remove temporary inline OpenVPN config files on disconnect or
+    launch failure.
 - [x] LAN helpers: detect local IPs; include `lan://<ip>:<port>` hint + auth in
       status.
 - [x] Log parsing: `Proc` captures lines for both engines (structured parsing
