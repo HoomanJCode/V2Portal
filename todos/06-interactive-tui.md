@@ -32,8 +32,8 @@ console and Termux.
 - [x] `tui/connection_screen.py` — live status: target, engine, inbound URLs +
       auth, LAN IP, pid; keys `s` switch, `d` disconnect, `t` test, `q` back.
 - [x] `tui/test_screen.py`: placeholder (latency tester lands in Phase 07).
-- [x] `tui/settings_screen.py`: listen, mixed port, inbound auth, DNS, log level,
-      test URL, default engine.
+- [x] `tui/settings_screen.py`: listen, mixed port, LAN sharing, inbound auth,
+      DNS, log level, test URL, default engine.
 - [x] Wire `app.py` — `main()` launches the TUI on a TTY when
       `prompt_toolkit`/`rich` are importable; otherwise prints a summary (keeps
       non-interactive use and tests working).

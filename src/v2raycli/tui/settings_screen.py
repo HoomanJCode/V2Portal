@@ -17,6 +17,7 @@ def run(store) -> None:
             [
                 ("listen", f"Listen address: {settings.listen}"),
                 ("port", f"Mixed port: {settings.mixed_port}"),
+                ("lan", f"Allow LAN sharing: {'on' if settings.allow_lan else 'off'}"),
                 ("auth", f"Inbound auth: {'on' if settings.inbound_auth.get('enabled') else 'off'}"),
                 ("dns", f"DNS: {', '.join(settings.dns)}"),
                 ("loglevel", f"Log level: {settings.log_level}"),
@@ -32,6 +33,8 @@ def run(store) -> None:
             settings.listen = widgets.input_text("Listen address", settings.listen)
         elif action == "port":
             settings.mixed_port = widgets.input_int("Mixed port", settings.mixed_port)
+        elif action == "lan":
+            settings.allow_lan = widgets.confirm("Allow LAN sharing?")
         elif action == "auth":
             settings.inbound_auth["enabled"] = widgets.confirm("Enable inbound auth?")
             if settings.inbound_auth["enabled"]:
