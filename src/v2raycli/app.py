@@ -33,6 +33,19 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SCOPE",
         help="latency-test outbounds and exit: 'all', a subscription id, or comma-separated profile ids",
     )
+    parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
+    parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
+    parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
+    parser.add_argument("--export", metavar="PATH", help="export the full config to a file")
+    parser.add_argument(
+        "--redact", action="store_true", help="mask credentials/keys when used with --export"
+    )
+    parser.add_argument(
+        "--import", dest="import_path", metavar="PATH", help="import a full config export"
+    )
+    parser.add_argument(
+        "--replace", action="store_true", help="replace (not merge) when used with --import"
+    )
     return parser
 
 
@@ -57,6 +70,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.test:
         return _test(store, args.test)
+
+    if args.backup:
+        return _backup(store)
+    if args.list_backups:
+        return _list_backups()
+    if args.restore:
+        return _restore(store, args.restore)
+    if args.export:
+        return _export(store, args.export, args.redact)
+    if args.import_path:
+        return _import(store, args.import_path, args.replace)
 
     if args.headless or not (_interactive() and _tui_available()):
         return _summary(store)
@@ -118,6 +142,66 @@ def _test(store: ConfigStore, scope: str) -> int:
     save_results(results)
     render_table(results)
     return 0 if all(r.ok or r.not_testable for r in results) else 1
+
+
+def _backup(store: ConfigStore) -> int:
+    from . import backup
+
+    path = backup.create_backup("manual", store=store, keep=store.config.settings.backup_keep)
+    if path is None:
+        print("no config to back up", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
+def _list_backups() -> int:
+    from . import backup
+
+    infos = backup.list_backups()
+    if not infos:
+        print("no backups found")
+        return 0
+    for info in infos:
+        print(f"{info.timestamp}  {info.reason:<24}  {info.size:>8}  {info.path}")
+    return 0
+
+
+def _restore(store: ConfigStore, path: str) -> int:
+    from . import backup
+
+    try:
+        backup.restore_backup(path, store)
+    except Exception as exc:
+        print(f"restore failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"restored from {path}")
+    return 0
+
+
+def _export(store: ConfigStore, path: str, redact: bool) -> int:
+    from . import exchange
+
+    try:
+        exchange.export_full(store, path, redact=redact)
+    except Exception as exc:
+        print(f"export failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"exported to {path}")
+    return 0
+
+
+def _import(store: ConfigStore, path: str, replace: bool) -> int:
+    from . import exchange
+
+    mode = "replace" if replace else "merge"
+    try:
+        exchange.import_full(store, path, mode=mode)
+    except Exception as exc:
+        print(f"import failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"imported {path} ({mode})")
+    return 0
 
 
 def _interactive() -> bool:

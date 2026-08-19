@@ -98,6 +98,103 @@ def test_test_flag_scope_resolution(tmp_path, monkeypatch, capsys):
     assert tested == [p2.id]
 
 
+def test_backup_flag(tmp_path, monkeypatch, capsys):
+    from v2raycli import backup
+
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+
+    assert app._backup(store) == 0
+    assert (tmp_path / "backup").is_dir()
+    assert len(backup.list_backups()) == 1
+    assert "backup-" in capsys.readouterr().out
+
+
+def test_list_backups_flag(tmp_path, monkeypatch, capsys):
+    from v2raycli import backup
+
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    backup.create_backup("one", store=store)
+    backup.create_backup("two", store=store)
+
+    assert app._list_backups() == 0
+    out = capsys.readouterr().out
+    assert "one" in out and "two" in out
+
+
+def test_restore_flag(tmp_path, monkeypatch, capsys):
+    from v2raycli import backup
+
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="original", kind="socks", outbound=SOCKS))
+    store.save()
+    snap = backup.create_backup("snap", store=store)
+
+    store.config.profiles[0].name = "changed"
+    store.save()
+
+    assert app._restore(store, str(snap)) == 0
+    assert store.config.profiles[0].name == "original"
+    assert "restored" in capsys.readouterr().out
+
+
+def test_export_flag(tmp_path, monkeypatch, capsys):
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    target = tmp_path / "export.json"
+
+    assert app._export(store, str(target), False) == 0
+    assert "schema_version" in target.read_text(encoding="utf-8")
+    assert "exported" in capsys.readouterr().out
+
+
+def test_export_redact_flag(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    auth = {
+        "settings": {
+            "servers": [
+                {"address": "1.2.3.4", "port": 1080, "username": "u", "password": "secret"}
+            ]
+        }
+    }
+    store.add_profile(Profile(name="s", kind="socks", outbound=auth))
+    target = tmp_path / "export.json"
+
+    assert app._export(store, str(target), True) == 0
+    content = target.read_text(encoding="utf-8")
+    assert "REDACTED" in content
+    assert "secret" not in content
+
+
+def test_import_flag_merge(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    source = _store(tmp_path)
+    source.add_profile(Profile(name="shared", kind="socks", outbound=SOCKS))
+    exported = tmp_path / "export.json"
+    app._export(source, str(exported), False)
+
+    dest = _store(tmp_path / "other")
+    assert app._import(dest, str(exported), False) == 0
+    assert [p.name for p in dest.config.profiles] == ["shared"]
+
+
+def test_import_flag_replace(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    source = _store(tmp_path)
+    source.add_profile(Profile(name="shared", kind="socks", outbound=SOCKS))
+    exported = tmp_path / "export.json"
+    app._export(source, str(exported), False)
+
+    dest = _store(tmp_path / "other")
+    dest.add_profile(Profile(name="local-only", kind="socks", outbound=SOCKS))
+    assert app._import(dest, str(exported), True) == 0
+    assert [p.name for p in dest.config.profiles] == ["shared"]
+
+
 def test_connect_runs_and_disconnects(tmp_path, monkeypatch, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="t", kind="socks", outbound=SOCKS))
