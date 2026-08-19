@@ -27,6 +27,22 @@ def test_exited_process_not_running(tmp_path):
     assert not proc.is_running()
 
 
+def test_stop_ignores_child_disappearing_during_terminate():
+    class VanishedProcess:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            raise ProcessLookupError("child already exited")
+
+    proc = Proc()
+    proc._process = VanishedProcess()
+
+    proc.stop()
+
+    assert proc._process is None
+
+
 def test_engine_runs_in_own_session(tmp_path):
     """The engine must not share the CLI's process group, so terminal Ctrl+C
     (SIGINT to the foreground group) can't kill it before traffic is read."""

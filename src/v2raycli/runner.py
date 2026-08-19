@@ -76,9 +76,23 @@ class Proc:
         if process is None:
             return
         if process.poll() is None:
-            process.terminate()
+            try:
+                process.terminate()
+            except OSError:
+                # The child may have exited between poll() and terminate().
+                return
             try:
                 process.wait(timeout=grace_seconds)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+                try:
+                    process.kill()
+                except OSError:
+                    return
+                try:
+                    process.wait()
+                except (OSError, ChildProcessError):
+                    pass
+            except (OSError, ChildProcessError):
+                # Shutdown is best-effort; never let a disappearing child
+                # break the caller's disconnect path.
+                pass

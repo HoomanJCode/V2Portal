@@ -10,7 +10,7 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
 
 - [x] `runner.py` — generic `Proc` helper:
   - `start(argv)` (no shell; `CREATE_NO_WINDOW` on Windows), `stop()`
-    (graceful then kill, no orphans), `is_running()`, `pid`, `wait()`.
+    (graceful then kill, race-safe and no orphans), `is_running()`, `pid`, `wait()`.
   - plus background log capture (`logs()`, `wait_for_log()`).
 - [x] `ConnectionController` (`connection.py`):
   - `connect(target)` → `resolve_engine` → `generate` → `write_runtime_config` →
