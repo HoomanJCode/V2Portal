@@ -92,6 +92,9 @@ v2raycli --version
 v2raycli --config-dir /path/to/dir          # alternate config location
 v2raycli --headless                          # print a summary, no TUI
 v2raycli --connect <profile-or-group-id>     # connect and stay running (Ctrl+C to stop)
+v2raycli --test all                          # latency-test every outbound
+v2raycli --test <subscription-id>            # test one subscription's nodes
+v2raycli --test <id1,id2>                    # test specific profiles
 ```
 
 ## Adding proxies

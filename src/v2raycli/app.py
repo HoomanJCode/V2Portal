@@ -28,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ID",
         help="connect to a profile/group id and keep running until Ctrl+C",
     )
+    parser.add_argument(
+        "--test",
+        metavar="SCOPE",
+        help="latency-test outbounds and exit: 'all', a subscription id, or comma-separated profile ids",
+    )
     return parser
 
 
@@ -49,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.connect:
         return _connect(store, args.connect)
+
+    if args.test:
+        return _test(store, args.test)
 
     if args.headless or not (_interactive() and _tui_available()):
         return _summary(store)
@@ -89,6 +97,27 @@ def _connect(store: ConfigStore, selection_id: str) -> int:
     finally:
         controller.disconnect()
     return 0
+
+
+def _test(store: ConfigStore, scope: str) -> int:
+    from .test.latency import render_table, save_results, select_profiles, test_many
+
+    ids = [part.strip() for part in scope.split(",") if part.strip()]
+    if scope.strip() == "all":
+        profiles = select_profiles(store, "all")
+    elif len(ids) == 1 and store.get_subscription(ids[0]) is not None:
+        profiles = select_profiles(store, ("subscription", ids[0]))
+    else:
+        profiles = select_profiles(store, ("profiles", ids))
+
+    if not profiles:
+        print(f"no matching profiles for scope: {scope}", file=sys.stderr)
+        return 1
+
+    results = test_many(profiles, store.config.settings, engines=store.config.engines)
+    save_results(results)
+    render_table(results)
+    return 0 if all(r.ok or r.not_testable for r in results) else 1
 
 
 def _interactive() -> bool:
