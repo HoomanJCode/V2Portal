@@ -52,6 +52,19 @@ def test_manual_proxy_factories_reject_invalid_endpoints():
         add_socks_proxy("s", "proxy.example.com", 1080.5)
 
 
+def test_manual_singbox_factories_reject_invalid_credentials_and_rates():
+    with pytest.raises(ValueError, match="hysteria2 password"):
+        add_hysteria2("h2", "proxy.example.com", 443, "")
+    with pytest.raises(ValueError, match="upload rate"):
+        add_hysteria2("h2", "proxy.example.com", 443, "pw", up_mbps=0)
+    with pytest.raises(ValueError, match="download rate"):
+        add_hysteria2("h2", "proxy.example.com", 443, "pw", down_mbps=1.5)
+    with pytest.raises(ValueError, match="UUID"):
+        add_tuic("tuic", "proxy.example.com", 443, "", "pw")
+    with pytest.raises(ValueError, match="tuic password"):
+        add_tuic("tuic", "proxy.example.com", 443, "uuid", "")
+
+
 def test_add_socks_http():
     p = add_socks_proxy("s", "1.2.3.4", 1080, "u", "p")
     srv = p.outbound["settings"]["servers"][0]
@@ -80,10 +93,14 @@ def test_add_wireguard_hysteria2_tuic():
     assert w.kind == "wireguard"
     assert w.outbound["settings"]["secretKey"] == "k"
 
-    h = add_hysteria2("h2", "1.2.3.4", 443, "pw", obfs="salamander", obfs_password="op")
+    h = add_hysteria2(
+        "h2", "1.2.3.4", 443, "pw", obfs="salamander", obfs_password="op", up_mbps=10, down_mbps=20
+    )
     assert h.kind == "hysteria2"
     assert h.engine == "sing-box"
     assert h.outbound["obfs"]["type"] == "salamander"
+    assert h.outbound["up_mbps"] == 10
+    assert h.outbound["down_mbps"] == 20
 
     t = add_tuic("tuic", "1.2.3.4", 443, "u", "pw", alpn="h3")
     assert t.kind == "tuic"

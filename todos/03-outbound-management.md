@@ -20,7 +20,7 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
       private key, local addresses, peer keys/endpoints, and allowed IPs.
 - [x] `add_hysteria2(...)` / `add_tuic(...)` → `kind=hysteria2/tuic`
       (`engine=sing-box`), prompting the protocol-specific fields and validating
-      endpoint host/port.
+      endpoint host/port, credentials, and positive bandwidth limits.
 - [x] `edit_profile(id, **fields)`, `remove_profile(id)` (prune from
       subscription `profile_ids` and all group `profile_ids`).
 

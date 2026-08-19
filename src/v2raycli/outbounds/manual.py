@@ -63,6 +63,18 @@ def _endpoint(host: str, port: int) -> tuple[str, int]:
     return host.strip(), normalized_port
 
 
+def _positive_int(value: int, label: str) -> int:
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError(f"{label} must be a positive integer")
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a positive integer") from exc
+    if normalized <= 0:
+        raise ValueError(f"{label} must be a positive integer")
+    return normalized
+
+
 def _wireguard_endpoint(endpoint: str) -> None:
     if not isinstance(endpoint, str) or not endpoint.strip():
         raise ValueError("wireguard peer endpoint is required")
@@ -158,7 +170,13 @@ def add_hysteria2(
     up_mbps: int | None = None,
     down_mbps: int | None = None,
 ) -> Profile:
+    if not isinstance(password, str) or not password.strip():
+        raise ValueError("hysteria2 password is required")
     server, server_port = _endpoint(server, server_port)
+    if up_mbps is not None:
+        up_mbps = _positive_int(up_mbps, "hysteria2 upload rate")
+    if down_mbps is not None:
+        down_mbps = _positive_int(down_mbps, "hysteria2 download rate")
     outbound: dict = {
         "server": server,
         "server_port": server_port,
@@ -170,10 +188,10 @@ def add_hysteria2(
         if obfs_password:
             obfs_obj["password"] = obfs_password
         outbound["obfs"] = obfs_obj
-    if up_mbps:
-        outbound["up_mbps"] = int(up_mbps)
-    if down_mbps:
-        outbound["down_mbps"] = int(down_mbps)
+    if up_mbps is not None:
+        outbound["up_mbps"] = up_mbps
+    if down_mbps is not None:
+        outbound["down_mbps"] = down_mbps
     return Profile(name=name, kind="hysteria2", engine="sing-box", outbound=outbound, source="manual")
 
 
@@ -189,6 +207,10 @@ def add_tuic(
     udp_relay_mode: str = "native",
     allow_insecure: bool = False,
 ) -> Profile:
+    if not isinstance(uuid, str) or not uuid.strip():
+        raise ValueError("tuic UUID is required")
+    if not isinstance(password, str) or not password.strip():
+        raise ValueError("tuic password is required")
     server, server_port = _endpoint(server, server_port)
     outbound: dict = {
         "server": server,
