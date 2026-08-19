@@ -502,6 +502,56 @@ def test_xray_rejects_malformed_typed_outbound(tmp_path):
         _generate(store, missing_user, default="xray")
 
 
+def test_xray_rejects_malformed_server_shape(tmp_path):
+    store = _store(tmp_path)
+    for kind in ("socks", "http", "trojan", "ss", "ssr"):
+        missing_server = store.add_profile(
+            Profile(name=f"missing-{kind}", kind=kind, outbound={"settings": {"servers": []}})
+        )
+        with pytest.raises(ValueError, match="missing a server"):
+            _generate(store, missing_server, default="xray")
+
+    malformed_server = store.add_profile(
+        Profile(
+            name="malformed-server",
+            kind="socks",
+            outbound={"settings": {"servers": ["not-an-object"]}},
+        )
+    )
+    with pytest.raises(ValueError, match="missing a server"):
+        _generate(store, malformed_server, default="xray")
+
+    missing_address = store.add_profile(
+        Profile(
+            name="missing-address",
+            kind="trojan",
+            outbound={"settings": {"servers": [{"port": 443}]}},
+        )
+    )
+    with pytest.raises(ValueError, match="missing a server address"):
+        _generate(store, missing_address, default="xray")
+
+    invalid_port = store.add_profile(
+        Profile(
+            name="invalid-port",
+            kind="ss",
+            outbound={"settings": {"servers": [{"address": "1.2.3.4", "port": 65536}]}},
+        )
+    )
+    with pytest.raises(ValueError, match="invalid server port"):
+        _generate(store, invalid_port, default="xray")
+
+    fractional_port = store.add_profile(
+        Profile(
+            name="fractional-port",
+            kind="http",
+            outbound={"settings": {"servers": [{"address": "1.2.3.4", "port": 443.5}]}},
+        )
+    )
+    with pytest.raises(ValueError, match="invalid server port"):
+        _generate(store, fractional_port, default="xray")
+
+
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(

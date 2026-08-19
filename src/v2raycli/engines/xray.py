@@ -54,6 +54,21 @@ def _validate_vnext(profile) -> None:
         raise ValueError(f"{profile.kind} outbound user is missing an id")
 
 
+def _validate_servers(profile) -> None:
+    settings = profile.outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings")
+    servers = settings.get("servers")
+    if not isinstance(servers, list) or not servers or not isinstance(servers[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing a server")
+    server = servers[0]
+    if not isinstance(server.get("address"), str) or not server["address"].strip():
+        raise ValueError(f"{profile.kind} outbound is missing a server address")
+    port = server.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError(f"{profile.kind} outbound has an invalid server port")
+
+
 @register
 class XrayAdapter(EngineAdapter):
     name = "xray"
@@ -170,6 +185,8 @@ class XrayAdapter(EngineAdapter):
             settings = profile.outbound.get("settings")
             if not isinstance(settings, dict):
                 raise ValueError(f"{profile.kind} outbound is missing settings")
+            if profile.kind in {"trojan", "ss", "ssr", "socks", "http"}:
+                _validate_servers(profile)
         outbound = dict(profile.outbound)
         outbound["tag"] = profile.id
         outbound["protocol"] = protocol
