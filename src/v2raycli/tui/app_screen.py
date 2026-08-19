@@ -14,6 +14,7 @@ from .test_screen import run as run_test
 def run(store) -> int:
     controller = ConnectionController(store)
     try:
+        _guide_first_run(store)
         while True:
             action = widgets.menu(
                 "v2raycli",
@@ -28,21 +29,35 @@ def run(store) -> int:
             )
             if action is None or action == "quit":
                 return 0
-            if action == "connect":
-                _connect(store, controller)
-            elif action == "manage":
-                run_manage(store)
-            elif action == "test":
-                run_test(store)
-            elif action == "routing":
-                run_routing(store)
-            elif action == "settings":
-                run_settings(store)
-            store.save()
+            try:
+                if action == "connect":
+                    _connect(store, controller)
+                elif action == "manage":
+                    run_manage(store)
+                elif action == "test":
+                    run_test(store)
+                elif action == "routing":
+                    run_routing(store)
+                elif action == "settings":
+                    run_settings(store)
+                store.save()
+            except Exception as exc:  # noqa: BLE001 - keep the interactive loop alive
+                widgets.show_message("Action failed", str(exc))
     except (EOFError, KeyboardInterrupt):
         return 0
     finally:
         controller.disconnect()
+
+
+def _guide_first_run(store) -> None:
+    """Open management immediately so a fresh TTY leads to adding a config."""
+    if store.list_profiles() or store.list_groups():
+        return
+    widgets.show_message("Welcome", "No configs yet. Add a subscription or proxy to get started.")
+    try:
+        run_manage(store)
+    except Exception as exc:  # noqa: BLE001 - onboarding must not block the main menu
+        widgets.show_message("Setup unavailable", str(exc))
 
 
 def _connect(store, controller) -> None:

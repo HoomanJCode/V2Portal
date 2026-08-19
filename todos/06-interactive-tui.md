@@ -42,7 +42,9 @@ console and Termux.
 
 ## Acceptance / manual checks (deferred — deps not installed)
 
-- [ ] Fresh install walks a new user into adding their first config.
+- [x] Fresh install walks a new user into adding their first config (the TUI
+      opens Manage automatically when no profiles or groups exist; automated
+      regression coverage is in `test_tui_connection.py`).
 - [ ] Add subscription → select a node → connect end-to-end from the TUI.
 - [ ] Create balancer over several nodes and connect; create chain and connect.
 - [ ] Add an OpenVPN profile and connect (mock client).

@@ -60,10 +60,63 @@ def test_main_screen_disconnects_on_interrupt(tmp_path, monkeypatch):
             self.disconnected = True
 
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
+    monkeypatch.setattr(app_screen, "run_manage", lambda _store: None)
+    monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: None)
     monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt))
 
     assert app_screen.run(store) == 0
     assert controllers[0].disconnected is True
+
+
+def test_fresh_tui_guides_user_to_manage(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    events = []
+
+    class FakeController:
+        def __init__(self, _store):
+            pass
+
+        def disconnect(self):
+            events.append("disconnect")
+
+    monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
+    monkeypatch.setattr(app_screen, "run_manage", lambda _store: events.append("manage"))
+    monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: events.append("welcome"))
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: "quit")
+
+    assert app_screen.run(store) == 0
+    assert events == ["welcome", "manage", "disconnect"]
+
+
+def test_tui_action_error_returns_to_main_menu(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    events = []
+    actions = iter(["manage", "quit"])
+
+    class FakeController:
+        def __init__(self, _store):
+            pass
+
+        def disconnect(self):
+            events.append("disconnect")
+
+    def fail_manage(_store):
+        raise ValueError("invalid user input")
+
+    monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
+    monkeypatch.setattr(app_screen, "run_manage", fail_manage)
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: next(actions))
+    monkeypatch.setattr(
+        app_screen.widgets,
+        "show_message",
+        lambda title, text: events.append((title, text)),
+    )
+
+    assert app_screen.run(store) == 0
+    assert ("Action failed", "invalid user input") in events
+    assert events[-1] == "disconnect"
 
 
 def test_connection_screen_switches_target(tmp_path, monkeypatch):
