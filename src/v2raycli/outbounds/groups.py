@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..engines import AUTO, SINGBOX, XRAY, engine_for_kind, strategy_supported
+from ..engines import AUTO, SINGBOX, XRAY, resolve_engine, strategy_supported
 from ..models import Group, Profile
 from .vpn import is_vpn
 
@@ -39,7 +39,10 @@ def _resolve_group_engine(
     if explicit and explicit != AUTO:
         engine = explicit
     else:
-        required = {engine_for_kind(p.kind) for p in profiles}
+        required = {
+            resolve_engine(p.kind, "", p.engine, AUTO)
+            for p in profiles
+        }
         required.discard(AUTO)
         if len(required) > 1:
             raise ValueError("a group cannot mix profiles that need different engines")
@@ -108,7 +111,7 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
         return Target(
             type="single",
             name=selection.name,
-            engine=engine_for_kind(selection.kind) if engine_for_kind(selection.kind) != AUTO else default_engine,
+            engine=resolve_engine(selection.kind, "", selection.engine, default_engine),
             profile_ids=[selection.id],
             profiles=[selection],
         )

@@ -64,3 +64,37 @@ def test_resolve_single_profile(tmp_path):
     t = resolve_target(store, a, default_engine="sing-box")
     assert t.type == "single"
     assert t.engine == "sing-box"
+
+
+def test_resolve_single_profile_honors_explicit_engine(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    manual = store.add_profile(
+        Profile(
+            name="raw",
+            kind="manual",
+            engine="xray",
+            outbound={"protocol": "vmess", "settings": {}},
+        )
+    )
+
+    target = resolve_target(store, manual, default_engine="sing-box")
+
+    assert target.engine == "xray"
+
+
+def test_auto_group_honors_explicit_member_engine(tmp_path):
+    store, a, b = _store(tmp_path)
+    a.engine = "xray"
+    group = create_chain_group("chain", [a.id, b.id], store)
+
+    assert resolve_target(store, group, default_engine="sing-box").engine == "xray"
+
+
+def test_auto_group_rejects_conflicting_member_engines(tmp_path):
+    store, a, b = _store(tmp_path)
+    a.engine = "xray"
+    b.engine = "sing-box"
+
+    with pytest.raises(ValueError, match="different engines"):
+        create_chain_group("chain", [a.id, b.id], store)
