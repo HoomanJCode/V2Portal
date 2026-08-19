@@ -7,7 +7,7 @@ import sys
 import time
 
 from . import __version__
-from . import config
+from . import backup, config
 from .storage import ConfigStore
 
 
@@ -42,8 +42,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     config.ensure_dirs()
+    backup.set_private_permissions()
     store = ConfigStore()
     store.load()
+    backup.install_backup_hook(store)
 
     if args.connect:
         return _connect(store, args.connect)
