@@ -31,7 +31,107 @@ def _b64decode(s: str) -> bytes:
     return base64.b64decode(s)
 
 
+def _validate_endpoint(kind: str, host, port) -> None:
+    if not isinstance(host, str) or not host.strip():
+        raise ShareLinkError(f"{kind} server address is required")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ShareLinkError(f"{kind} server port must be between 1 and 65535")
+
+
+def _parse_port(value, kind: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ShareLinkError(f"{kind} server port must be an integer")
+    if isinstance(value, str) and not value.strip().isdigit():
+        raise ShareLinkError(f"{kind} server port must be an integer")
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ShareLinkError(f"{kind} server port must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise ShareLinkError(f"{kind} server port must be between 1 and 65535")
+    return port
+
+
+def _require_text(value, label: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ShareLinkError(f"{label} is required")
+
+
+def _validate_wireguard_endpoint(endpoint) -> None:
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ShareLinkError("wireguard peer endpoint must be host:port")
+    value = endpoint.strip()
+    if value.startswith("["):
+        end = value.find("]")
+        host = value[1:end] if end > 1 else ""
+        port_text = value[end + 2 :] if end >= 0 and value[end + 1 :].startswith(":") else ""
+    else:
+        host, separator, port_text = value.rpartition(":")
+        if not separator:
+            host, port_text = "", ""
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError) as exc:
+        raise ShareLinkError("wireguard peer endpoint must be host:port") from exc
+    try:
+        _validate_endpoint("wireguard peer", host, port)
+    except ShareLinkError as exc:
+        raise ShareLinkError("wireguard peer endpoint must be host:port") from exc
+
+
+def _validate_decoded_profile(kind: str, outbound: dict) -> None:
+    if not isinstance(outbound, dict):
+        raise ShareLinkError(f"{kind} outbound must be an object")
+
+    if kind in ("hysteria2", "tuic"):
+        _validate_endpoint(kind, outbound.get("server"), outbound.get("server_port"))
+        if kind == "hysteria2":
+            _require_text(outbound.get("password"), "hysteria2 password")
+        else:
+            _require_text(outbound.get("uuid"), "tuic UUID")
+            _require_text(outbound.get("password"), "tuic password")
+        return
+
+    if kind == "wireguard":
+        settings = outbound.get("settings")
+        if not isinstance(settings, dict):
+            raise ShareLinkError("wireguard settings must be an object")
+        _require_text(settings.get("secretKey"), "wireguard private key")
+        peers = settings.get("peers")
+        if not isinstance(peers, list) or not peers:
+            raise ShareLinkError("wireguard requires at least one peer")
+        for peer in peers:
+            if not isinstance(peer, dict):
+                raise ShareLinkError("wireguard peer must be an object")
+            _validate_wireguard_endpoint(peer.get("endpoint"))
+        return
+
+    settings = outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ShareLinkError(f"{kind} settings must be an object")
+    key = "vnext" if kind in ("vmess", "vless") else "servers"
+    servers = settings.get(key)
+    if not isinstance(servers, list) or not servers or not isinstance(servers[0], dict):
+        raise ShareLinkError(f"{kind} requires a server")
+    server = servers[0]
+    _validate_endpoint(kind, server.get("address"), server.get("port"))
+    if kind in ("vmess", "vless"):
+        users = server.get("users")
+        if not isinstance(users, list) or not users or not isinstance(users[0], dict):
+            raise ShareLinkError(f"{kind} requires a user")
+        _require_text(users[0].get("id"), f"{kind} user id")
+    elif kind == "trojan":
+        _require_text(server.get("password"), "trojan password")
+    elif kind == "ss":
+        _require_text(server.get("method"), "shadowsocks method")
+        _require_text(server.get("password"), "shadowsocks password")
+    elif kind == "ssr":
+        _require_text(server.get("protocol"), "shadowsocksr protocol")
+        _require_text(server.get("method"), "shadowsocksr method")
+
+
 def _make_profile(raw: str, kind: str, name: str, outbound: dict) -> Profile:
+    _validate_decoded_profile(kind, outbound)
     return Profile(
         name=name,
         kind=kind,
@@ -80,7 +180,7 @@ def parse_vmess(raw: str) -> Profile:
     payload = unquote(raw[len("vmess://") :])
     data = json.loads(_b64decode(payload).decode("utf-8"))
     address = data.get("add", "")
-    port = int(data.get("port", 0))
+    port = _parse_port(data.get("port", 0), "vmess")
     uid = data.get("id", "")
     alter_id = int(data.get("aid", 0) or 0)
     security = data.get("scy", "auto")
@@ -136,7 +236,7 @@ def parse_vmess(raw: str) -> Profile:
 def parse_vless(raw: str) -> Profile:
     userinfo, host, port_s, query, name = _split_authority(raw[len("vless://") :])
     q = _query_dict(query)
-    port = int(port_s or 0)
+    port = _parse_port(port_s or 0, "vless")
     flow = q.get("flow", "")
     encryption = q.get("encryption", "none")
     security = q.get("security", "none")
@@ -204,7 +304,7 @@ def parse_vless(raw: str) -> Profile:
 def parse_trojan(raw: str) -> Profile:
     userinfo, host, port_s, query, name = _split_authority(raw[len("trojan://") :])
     q = _query_dict(query)
-    port = int(port_s or 0)
+    port = _parse_port(port_s or 0, "trojan")
     security = q.get("security", "")
     sni = q.get("sni", "")
     alpn = q.get("alpn", "")
@@ -258,7 +358,7 @@ def parse_ss(raw: str) -> Profile:
     else:  # legacy base64(method:password)
         method, password = _b64decode(userinfo).decode("utf-8").split(":", 1)
     host, port_s = hostport.rsplit(":", 1) if ":" in hostport else (hostport, "443")
-    port = int(port_s)
+    port = _parse_port(port_s, "ss")
 
     outbound: dict = {
         "settings": {
@@ -280,7 +380,7 @@ def parse_ssr(raw: str) -> Profile:
     if len(parts) < 6:
         raise ShareLinkError("invalid ssr link")
     host, port_s, protocol, method, obfs, password_b64 = parts
-    port = int(port_s)
+    port = _parse_port(port_s, "ssr")
     password = _b64decode(password_b64).decode("utf-8") if password_b64 else ""
 
     params: dict = {}
@@ -316,7 +416,7 @@ def parse_ssr(raw: str) -> Profile:
 def _parse_plain_proxy(raw: str, kind: str) -> Profile:
     scheme = raw.split("://", 1)[0].lower()
     userinfo, host, port_s, _query, name = _split_authority(raw[len(scheme) + 3 :])
-    port = int(port_s or 0)
+    port = _parse_port(port_s or 0, kind)
     server: dict = {"address": host, "port": port}
     if userinfo:
         u, _, p = userinfo.partition(":")
@@ -339,7 +439,7 @@ def parse_http(raw: str) -> Profile:
 def parse_hysteria2(raw: str) -> Profile:
     userinfo, host, port_s, query, name = _split_authority(raw[len("hysteria2://") :])
     q = _query_dict(query)
-    port = int(port_s or 0)
+    port = _parse_port(port_s or 0, "hysteria2")
     insecure = q.get("insecure", "") in ("1", "true", "True")
     sni = q.get("sni", "") or host
     obfs = q.get("obfs", "")
@@ -374,7 +474,7 @@ def parse_hysteria2(raw: str) -> Profile:
 def parse_tuic(raw: str) -> Profile:
     userinfo, host, port_s, query, name = _split_authority(raw[len("tuic://") :])
     q = _query_dict(query)
-    port = int(port_s or 0)
+    port = _parse_port(port_s or 0, "tuic")
     uuid, _, password = userinfo.partition(":")
     sni = q.get("sni", "") or host
     alpn = q.get("alpn", "")

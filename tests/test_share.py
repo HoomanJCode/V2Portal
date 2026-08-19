@@ -156,6 +156,35 @@ def test_malformed_links_raise_typed_error(link):
         decode_link(link)
 
 
+@pytest.mark.parametrize(
+    "link",
+    [
+        "vless://uuid@host:0",
+        "trojan://@host:443",
+        "ss://method:password@:443",
+        "socks://user:pass@:1080",
+        "hysteria2://@host:443",
+        "tuic://uuid:pw@host:65536",
+        "wireguard://eyJwcml2YXRlX2tleSI6ICJrIiwgInBlZXJzIjogW3siZW5kcG9pbnQiOiAiaG9zdDpub3QtcG9ydCJ9XX0",
+    ],
+)
+def test_decoded_links_reject_invalid_endpoints_or_credentials(link):
+    with pytest.raises(ShareLinkError):
+        decode_link(link)
+
+
+def test_vmess_rejects_fractional_json_port():
+    link = "vmess://" + _b64(
+        {
+            "add": "host.example",
+            "port": 443.5,
+            "id": "00000000-0000-0000-0000-000000000001",
+        }
+    )
+    with pytest.raises(ShareLinkError, match="port"):
+        decode_link(link)
+
+
 def test_non_text_link_raises_typed_error():
     with pytest.raises(ShareLinkError, match="must be text"):
         decode_link(None)

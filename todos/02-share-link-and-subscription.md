@@ -34,7 +34,8 @@ protocols, and support updating them. Parser-heavy phase.
       decode a plain `wg://` form. (`kind=wireguard`.)
 - [x] Unsupported scheme or malformed link → collect in `parse_errors`; never
       crash the import. (decode normalizes handler failures to `ShareLinkError`;
-      `parser._build` collects them.)
+      `parser._build` collects them.) Decoded endpoints and required credentials
+      are validated before profiles are returned.
 - [x] `encode_link(profile) -> str` reverse (for "export" action later).
       (vmess/ss/socks/http supported; exotic kinds raise a clear error.)
 
@@ -63,7 +64,8 @@ protocols, and support updating them. Parser-heavy phase.
 ## Tests
 
 - [x] `test_share.py`: fixture link per protocol (vmess/vless/trojan/ss/ssr/
-      socks/http/hysteria2/tuic/wireguard) asserts outbound fields + resolved engine.
+      socks/http/hysteria2/tuic/wireguard) asserts outbound fields + resolved engine;
+      malformed endpoints and credentials are rejected.
 - [x] `test_parser.py`: plain vs base64 payloads; malformed input doesn't raise;
       dedupe; delete-on-update behavior.
 - [x] `test_fetcher.py`: `file://` + `paste://` (no network); httpx mocked.
