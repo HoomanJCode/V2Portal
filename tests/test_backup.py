@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from v2raycli import backup, config
-from v2raycli.models import Profile
+from v2raycli.models import Profile, RoutingRule
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -91,6 +91,25 @@ def test_hook_fires_on_destructive_op(tmp_path):
     store.remove_profile(profile.id)
 
     assert any(b.reason == "remove-profile" for b in backup.list_backups(bdir))
+
+
+def test_rule_removal_fires_backup_hook(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+    rule = store.add_rule(RoutingRule(action="direct"))
+    backup.install_backup_hook(store, backup_dir=bdir)
+
+    assert store.remove_rule(rule.id) is True
+    assert any(b.reason == "remove-rule" for b in backup.list_backups(bdir))
+
+
+def test_missing_rule_does_not_fire_backup_hook(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+    backup.install_backup_hook(store, backup_dir=bdir)
+
+    assert store.remove_rule("missing") is False
+    assert backup.list_backups(bdir) == []
 
 
 def test_missing_group_does_not_fire_backup_hook(tmp_path):

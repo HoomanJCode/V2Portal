@@ -10,7 +10,7 @@ share-link export/import for migration, sharing, and disaster recovery.
 - [x] `create_backup(reason) -> path` — atomically copy `config.json` to
       `BACKUP_DIR/backup-<YYYYmmdd-HHMMSS>-<reason>.json`.
 - [x] Hook into destructive operations via the storage pre-write hook:
-      subscription update, profile/group removal, import, restore.
+      subscription update, profile/group/routing-rule removal, import, restore.
 - [x] Retention: keep the last `settings.backup_keep` backups, prune older.
 - [x] `list_backups() -> list[BackupInfo]` (timestamp, reason, size).
 - [x] `restore_backup(path)` — create a safety backup of the current config,

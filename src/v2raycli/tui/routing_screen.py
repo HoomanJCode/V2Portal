@@ -31,7 +31,7 @@ def run(store) -> None:
         elif action == "add":
             _add_rule(routing)
         elif action == "remove":
-            _remove_rule(routing)
+            _remove_rule(store)
         elif action == "move":
             _move_rule(routing)
         store.save()
@@ -52,14 +52,15 @@ def _add_rule(routing) -> None:
     routing.rules.append(rule)
 
 
-def _remove_rule(routing) -> None:
+def _remove_rule(store) -> None:
+    routing = store.config.routing
     if not routing.rules:
         widgets.show_message("No rules", "Nothing to remove.")
         return
     choice = widgets.menu("Remove rule", [(r.id, r.action) for r in routing.rules])
     if choice is None:
         return
-    routing.rules = [r for r in routing.rules if r.id != choice]
+    store.remove_rule(choice)
 
 
 def _move_rule(routing) -> None:

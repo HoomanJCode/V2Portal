@@ -155,9 +155,12 @@ class ConfigStore:
         return list(self.config.routing.rules)
 
     def remove_rule(self, rule_id: str) -> bool:
-        before = len(self.config.routing.rules)
-        self.config.routing.rules = [r for r in self.config.routing.rules if r.id != rule_id]
-        return len(self.config.routing.rules) < before
+        rule = next((r for r in self.config.routing.rules if r.id == rule_id), None)
+        if rule is None:
+            return False
+        self.notify_destructive("remove-rule")
+        self.config.routing.rules.remove(rule)
+        return True
 
     # -- settings & engines --------------------------------------------------
 
