@@ -24,6 +24,8 @@ console and Termux (avoid full-screen curses assumptions where possible).
   - **Profiles**: list / edit name / remove / export share link
   - **Groups**: create balancer (strategy + members), create chain (ordered
     hops), edit, remove
+  - **Transfer**: backup now, restore from backup, export full (with/without
+    secrets), import (full or share-link file), export share links
 - [ ] `tui/routing_screen.py`: toggle `mode` all/split; add/reorder/remove rules
       (action, domain/IP/geo matchers, optional target).
 - [ ] `tui/connection_screen.py` — live status:

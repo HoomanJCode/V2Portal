@@ -8,7 +8,7 @@
 
 A fully-interactive command-line client that wraps two proxy engines
 (**sing-box**, default, and **xray-core**, fallback) plus the system
-`openvpn`/`openconnect` clients to do four jobs:
+`openvpn`/`openconnect` clients to do five jobs:
 
 1. **Manage proxies** — subscribe to subscriptions, paste individual v2ray
    share links or raw configs, add plain SOCKS5 / HTTP / WireGuard / hysteria2 /
@@ -21,6 +21,8 @@ A fully-interactive command-line client that wraps two proxy engines
    split-routing rules (direct / bypass / block by domain, IP, or geo).
 4. **Test** — measure latency / reachability of all outbounds, or only the
    outbounds of one subscription.
+5. **Back up & transfer** — automatic rolling backups of the config plus
+   full-config and share-link export/import for migration and sharing.
 
 ## 2. Decisions (locked in with the user)
 
@@ -136,6 +138,8 @@ v2ray-cli/
 │   │   ├── xray.py
 │   │   └── binary.py              # locate/download both cores
 │   ├── runner.py                  # subprocess lifecycle (cores + vpn)
+│   ├── backup.py                  # rolling backups + restore
+│   ├── exchange.py                # full-config and share-link export/import
 │   ├── test/
 │   │   └── latency.py
 │   └── tui/
@@ -171,7 +175,8 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
     "dns": ["1.1.1.1", "8.8.8.8"],
     "log_level": "info",
     "test_url": "http://cp.cloudflare.com/generate_204",
-    "default_engine": "sing-box"
+    "default_engine": "sing-box",
+    "backup_keep": 10
   },
   "routing": {
     "mode": "all",                       // "all" | "split"
@@ -277,7 +282,23 @@ Common shape produced for **both** engines:
    — this is an explicit user choice, kept separate from proxy outbounds).
 6. TUI shows target, engine, inbound URL(s) + auth, and (stretch) live traffic.
 
-## 8. Testing outbounds
+## 8. Backup, Export & Import
+
+- **Automatic backups**: snapshot `config.json` to `BACKUP_DIR` before any
+  destructive operation (subscription update, profile/group removal, import,
+  restore); keep the last `settings.backup_keep` (default 10) and prune older.
+- **Restore**: list timestamped backups and restore one; the current config is
+  itself backed up first.
+- **Full export**: portable JSON (`schema_version`, settings, routing,
+  profiles, subscriptions, groups); optional `redact` mode masks credentials
+  (passwords/uuids/keys) for sharing.
+- **Share-link export**: dump selected profiles (or a subscription's nodes) as
+  a newline-separated share-link file.
+- **Import**: a full export (merge or replace, with dedupe + conflict
+  handling) or a share-link file (reuses the subscription parser).
+- Backups and exports live in the config dir; config dir permissions are `0700`.
+
+## 9. Testing outbounds
 
 - Engine-aware: same per-profile probe as before, but the temporary config and
   binary are chosen by the profile's resolved engine.
@@ -285,7 +306,7 @@ Common shape produced for **both** engines:
   simple "connect test" (client launches and establishes, then disconnects) —
   optional, deferred.
 
-## 9. Cross-platform notes
+## 10. Cross-platform notes
 
 - Two engine binaries to auto-download per OS/arch (sing-box + xray).
 - `openvpn`/`openconnect` are system dependencies — detected on `PATH`; a clear
@@ -293,7 +314,7 @@ Common shape produced for **both** engines:
 - Linux, Windows (`CREATE_NO_WINDOW`, `%APPDATA%`), Termux (arm64, `0.0.0.0`
   LAN binding) as before.
 
-## 10. Risks / open questions to verify during implementation
+## 11. Risks / open questions to verify during implementation
 
 1. **Mixed inbound** — confirm sing-box `mixed` works on the pinned build; for
    xray, confirm socks inbound answers HTTP CONNECT (else dual-port fallback).
@@ -308,7 +329,9 @@ Common shape produced for **both** engines:
    from proxy chaining/balancing.
 6. **Geo routing data** — sing-box and xray need geoip/geosite asset files;
    decide bundled vs downloaded on first use.
+7. **Secrets at rest** — backups/exports contain credentials; set config dir
+   permissions to `0700` and provide a redacted export for sharing.
 
-## 11. Phase order
+## 12. Phase order
 
 See `todos/README.md`.

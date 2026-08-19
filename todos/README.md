@@ -14,6 +14,7 @@ order**; each phase ends with "Definition of Done" and lists dependencies.
 | 06 | `06-interactive-tui.md` | Interactive menus, connect/switch screen, management + routing UI | 05 |
 | 07 | `07-outbound-testing.md` | Engine-aware latency/reachability test, all or per-subscription | 04 |
 | 08 | `08-cross-platform-packaging.md` | Windows/Termux polish, VPN client detection, README, release | 06, 07 |
+| 09 | `09-backup-export-import.md` | Rolling backups, restore, full-config & share-link export/import | 01, 02 |
 
 ## Conventions for the implementing agent
 
@@ -25,3 +26,4 @@ order**; each phase ends with "Definition of Done" and lists dependencies.
 - Validate engine config with the engine's own check command before launching.
 - Add a `pytest` test next to any parser/generator change.
 - Do not commit downloaded engine binaries, geo assets, or the runtime config.
+- Run a backup before any destructive operation (update/remove/import/restore).

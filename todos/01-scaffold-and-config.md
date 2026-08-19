@@ -14,12 +14,14 @@ everything else builds on. No proxy logic yet.
 - [ ] `config.py`:
   - config dir via `platformdirs.user_config_dir("v2raycli")`
     (Linux/Termux `~/.config/v2raycli`, Windows `%APPDATA%\v2raycli`)
-  - ensure dirs exist; expose `CONFIG_PATH`, `RUNTIME_DIR`, `BIN_DIR`, `GEO_DIR`
+  - ensure dirs exist; expose `CONFIG_PATH`, `RUNTIME_DIR`, `BIN_DIR`, `GEO_DIR`,
+    `BACKUP_DIR`
   - `DEFAULT_SETTINGS` per `PLAN.md §5`:
     listen `0.0.0.0`, mixed_port `1080`, allow_lan `true`,
     `inbound_auth {enabled:false, username:"", password:""}`,
     dns `["1.1.1.1","8.8.8.8"]`, log_level `info`,
-    test_url `http://cp.cloudflare.com/generate_204`, default_engine `sing-box`
+    test_url `http://cp.cloudflare.com/generate_204`, default_engine `sing-box`,
+    backup_keep `10`
 - [ ] `models.py` — dataclasses matching `PLAN.md §5`:
   - `Settings`, `EngineOptions` (per-engine binary/version), `Profile`,
     `Subscription`, `Group`, `RoutingConfig`, `RoutingRule`, `VpnConfig`
@@ -29,7 +31,8 @@ everything else builds on. No proxy logic yet.
   - uuid4 ids; ISO-8601 timestamps; explicit `to_dict()` / `from_dict()`
 - [ ] `storage.py`:
   - `load()` (creates default on first run), `save()` (atomic temp + replace),
-    `schema_version` check/warning
+    `schema_version` check/warning; `save()` exposes a pre-write hook used by
+    the backup layer in Phase 09
   - `ConfigStore` CRUD: profiles, subscriptions (unlink `profile_ids` on remove),
     groups, routing rules, settings/engines update
 - [ ] `app.py` — `main()` loads storage, prints banner + counts, exits cleanly
