@@ -56,8 +56,9 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] `add_rule(action, match, target_id=None)`, `remove_rule`, `reorder_rules`.
 - [x] `validate_rule` — matcher syntax check (domain keyword/regex, CIDR,
       geoip/geosite codes); action ∈ {proxy, direct, block}.
-- [x] `normalize_rules(routing, selected_target_id)` — resolve `target_id=null`
-      to the selected target, and produce the ordered rule list for the engine.
+- [x] `normalize_rules(routing, selected_target_id)` — validate persisted rule
+      shapes, resolve `target_id=null` to the selected target, and produce the
+      ordered rule list for the engine.
 
 ## Tests
 

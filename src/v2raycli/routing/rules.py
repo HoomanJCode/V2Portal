@@ -18,13 +18,24 @@ def _validate_cidr(ip: str) -> None:
 
 
 def validate_rule(rule: RoutingRule) -> None:
-    if rule.action not in ACTIONS:
+    if not isinstance(rule, RoutingRule):
+        raise ValueError("routing rule must be a RoutingRule")
+    if not isinstance(rule.action, str) or rule.action not in ACTIONS:
         raise ValueError(f"invalid action: {rule.action}")
+    if rule.target_id is not None and (
+        not isinstance(rule.target_id, str) or not rule.target_id.strip()
+    ):
+        raise ValueError("rule target_id must be non-empty text")
+    if not isinstance(rule.match, dict):
+        raise ValueError("rule match must be an object")
     unknown = set(rule.match) - MATCH_KEYS
     if unknown:
-        raise ValueError(f"unknown match keys: {sorted(unknown)}")
+        raise ValueError(f"unknown match keys: {sorted(unknown, key=str)}")
     for key in MATCH_KEYS:
-        for item in rule.match.get(key, []):
+        values = rule.match.get(key, [])
+        if not isinstance(values, list):
+            raise ValueError(f"rule {key} matcher must be a list")
+        for item in values:
             if not isinstance(item, str) or not item.strip():
                 raise ValueError(f"invalid {key} entry: {item!r}")
     for ip in rule.match.get("ips", []):
@@ -62,18 +73,27 @@ def uses_geo(routing: RoutingConfig) -> bool:
 
 
 def normalize_rules(routing: RoutingConfig, selected_target_id: str | None) -> list[RoutingRule]:
-    """Return a copy of the rules with ``target_id=None`` resolved.
+    """Return a validated copy of rules with null targets resolved."""
+    if not isinstance(routing, RoutingConfig):
+        raise ValueError("routing config must be a RoutingConfig")
+    if not isinstance(routing.rules, list):
+        raise ValueError("routing rules must be a list")
+    if selected_target_id is not None and (
+        not isinstance(selected_target_id, str) or not selected_target_id.strip()
+    ):
+        raise ValueError("selected target id must be non-empty text")
 
-    Rules with an explicit ``target_id`` are kept; null-target rules fall back
-    to the currently selected target.
-    """
     normalized: list[RoutingRule] = []
     for rule in routing.rules:
+        validate_rule(rule)
+        target_id = rule.target_id if rule.target_id is not None else selected_target_id
+        if rule.action == "proxy" and target_id is None:
+            raise ValueError("proxy rule requires a target")
         normalized.append(
             RoutingRule(
                 id=rule.id,
                 action=rule.action,
-                target_id=rule.target_id or selected_target_id,
+                target_id=target_id,
                 match={k: list(v) for k, v in rule.match.items()},
             )
         )
