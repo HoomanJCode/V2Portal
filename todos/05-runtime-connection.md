@@ -30,7 +30,7 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
       controller, displayed in the live TUI status, and accumulated on
       disconnect; xray/VPN connections degrade cleanly when unavailable.
 - [x] Typed errors: binary missing, VPN client/target missing, stale targets,
-      port in use (engine immediate exit), invalid config.
+      subprocess launch failures, port in use (engine immediate exit), invalid config.
 
 ## Tests
 

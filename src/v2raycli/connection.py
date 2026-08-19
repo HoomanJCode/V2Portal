@@ -87,7 +87,7 @@ class ConnectionController:
             if is_vpn:
                 return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
-        except (ConnectionError, BinaryError, TypeError, ValueError) as exc:
+        except (ConnectionError, BinaryError, OSError, TypeError, ValueError) as exc:
             self._selection = None
             self.status = ConnectionStatus(
                 state="error",

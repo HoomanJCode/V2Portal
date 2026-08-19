@@ -50,6 +50,29 @@ def test_missing_binary_maps_to_error(tmp_path):
     assert "binary" in status.error
 
 
+def test_process_launch_failure_maps_to_error(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    binary = _fake(tmp_path, CHECK_GUARD)
+    store.config.engines["sing-box"] = {"binary_path": str(binary), "version": "x"}
+
+    class FailingProc:
+        pid = None
+
+        def start(self, argv, env=None):
+            raise OSError("exec format error")
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(connection, "Proc", FailingProc)
+
+    status = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path).connect(profile)
+
+    assert status.state == "error"
+    assert "exec format error" in status.error
+
+
 def test_inbound_status_honors_allow_lan(tmp_path):
     store = _store(tmp_path)
     store.config.settings.allow_lan = False
