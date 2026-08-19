@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 from . import config
 from .models import (
@@ -29,6 +30,7 @@ class ConfigStore:
     def __init__(self, path: str | Path | None = None):
         self.path = Path(path) if path is not None else config.CONFIG_PATH
         self.config = self.default()
+        self.pre_write_hooks: list[Callable] = []
 
     @staticmethod
     def default() -> Config:
@@ -52,6 +54,15 @@ class ConfigStore:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         self.config = Config.from_dict(raw)
         return self.config
+
+    def register_pre_write_hook(self, hook: Callable) -> None:
+        """Register ``hook(store, reason)`` to run before destructive mutations."""
+        self.pre_write_hooks.append(hook)
+
+    def notify_destructive(self, reason: str) -> None:
+        """Fire pre-write hooks (e.g. an automatic config backup)."""
+        for hook in self.pre_write_hooks:
+            hook(self, reason)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +93,7 @@ class ConfigStore:
         profile = self.get_profile(profile_id)
         if profile is None:
             return False
+        self.notify_destructive("remove-profile")
         self.config.profiles.remove(profile)
         for sub in self.config.subscriptions:
             if profile_id in sub.profile_ids:
@@ -106,6 +118,7 @@ class ConfigStore:
     def remove_subscription(self, sub_id: str) -> bool:
         if self.get_subscription(sub_id) is None:
             return False
+        self.notify_destructive("remove-subscription")
         self.config.subscriptions = [s for s in self.config.subscriptions if s.id != sub_id]
         for profile in self.config.profiles:
             if profile.subscription_id == sub_id:
@@ -126,6 +139,7 @@ class ConfigStore:
 
     def remove_group(self, group_id: str) -> bool:
         before = len(self.config.groups)
+        self.notify_destructive("remove-group")
         self.config.groups = [g for g in self.config.groups if g.id != group_id]
         return len(self.config.groups) < before
 

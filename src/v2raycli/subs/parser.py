@@ -157,6 +157,7 @@ def update_subscription(store, sub_id: str) -> tuple[list[Profile], list[str]]:
         if p.subscription_id == sub_id and p.share_link not in new_links
     ]
 
+    store.notify_destructive("subscription-update")
     store.config.profiles = [
         p for p in store.config.profiles if p.subscription_id != sub_id
     ] + profiles
