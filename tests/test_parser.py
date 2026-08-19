@@ -1,6 +1,8 @@
 import base64
 from pathlib import Path
 
+import pytest
+
 from v2raycli.models import Group
 from v2raycli.storage import ConfigStore
 from v2raycli.subs.parser import import_subscription, parse_payload, update_subscription
@@ -55,6 +57,26 @@ def test_import_subscription_reports_bad_links(tmp_path):
     _sub, profiles, errors = import_subscription("S", f"file://{f}")
     assert len(profiles) == 1
     assert len(errors) == 1
+
+
+def test_update_rejects_all_invalid_payload_without_pruning(tmp_path):
+    f = tmp_path / "sub.txt"
+    f.write_text(FIXTURE_LINKS[0])
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+
+    sub, profiles, errors = import_subscription("S", f"file://{f}")
+    assert not errors
+    store.add_subscription(sub)
+    store.add_profile(profiles[0])
+    group = store.add_group(Group(name="G", type="single", profile_ids=[profiles[0].id]))
+
+    f.write_text("not-a-supported-share-link")
+    with pytest.raises(ValueError, match="no valid profiles"):
+        update_subscription(store, sub.id)
+
+    assert store.config.profiles == profiles
+    assert group.profile_ids == [profiles[0].id]
 
 
 def test_update_deletes_vanished_and_prunes_groups(tmp_path):

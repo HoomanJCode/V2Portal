@@ -55,7 +55,8 @@ protocols, and support updating them. Parser-heavy phase.
 - [x] `update_subscription(id)`: re-fetch, re-parse; preserve unchanged names;
       **delete** profiles that disappeared upstream (clean `profile_ids` and
       prune them from any group's `profile_ids`); update `last_updated`,
-      `expires`, `traffic_used`.
+      `expires`, `traffic_used`; reject an entirely invalid payload without
+      pruning existing nodes.
 
 ## Tests
 

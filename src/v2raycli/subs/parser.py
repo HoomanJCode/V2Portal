@@ -143,6 +143,10 @@ def update_subscription(store, sub_id: str) -> tuple[list[Profile], list[str]]:
 
     existing = {p.share_link: p for p in store.config.profiles if p.subscription_id == sub_id}
     profiles, errors, traffic, expires = _build(sub_id, sub.url, sub.user_agent)
+    if existing and errors and not profiles:
+        raise ValueError(
+            "subscription payload contained no valid profiles; keeping existing nodes"
+        )
 
     for profile in profiles:
         old = existing.get(profile.share_link)
