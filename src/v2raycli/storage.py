@@ -79,9 +79,17 @@ class ConfigStore:
         return list(self.config.profiles)
 
     def remove_profile(self, profile_id: str) -> bool:
-        before = len(self.config.profiles)
-        self.config.profiles = [p for p in self.config.profiles if p.id != profile_id]
-        return len(self.config.profiles) < before
+        profile = self.get_profile(profile_id)
+        if profile is None:
+            return False
+        self.config.profiles.remove(profile)
+        for sub in self.config.subscriptions:
+            if profile_id in sub.profile_ids:
+                sub.profile_ids.remove(profile_id)
+        for group in self.config.groups:
+            if profile_id in group.profile_ids:
+                group.profile_ids.remove(profile_id)
+        return True
 
     # -- subscriptions -------------------------------------------------------
 
