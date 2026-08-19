@@ -103,6 +103,8 @@ def _add(store) -> None:
     if kind in ("socks", "http"):
         host = widgets.input_text("Host")
         port = widgets.input_int("Port")
+        if port is None:
+            return
         user = widgets.input_text("Username (optional)")
         password = widgets.input_secret("Password (optional)") if user else None
         factory = manual.add_socks_proxy if kind == "socks" else manual.add_http_proxy
@@ -122,6 +124,8 @@ def _add(store) -> None:
     if kind == "hysteria2":
         server = widgets.input_text("Server")
         port = widgets.input_int("Port")
+        if port is None:
+            return
         password = widgets.input_secret("Password")
         store.add_profile(manual.add_hysteria2(name, server, port, password))
         return
@@ -129,6 +133,8 @@ def _add(store) -> None:
     if kind == "tuic":
         server = widgets.input_text("Server")
         port = widgets.input_int("Port")
+        if port is None:
+            return
         uuid = widgets.input_text("UUID")
         password = widgets.input_secret("Password")
         store.add_profile(manual.add_tuic(name, server, port, uuid, password))

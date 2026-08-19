@@ -28,6 +28,16 @@ def test_small_terminal_uses_numbered_prompts(monkeypatch, capsys):
     assert "Select (comma separated" in output
 
 
+def test_invalid_integer_returns_default(monkeypatch, capsys):
+    monkeypatch.setattr(widgets.shutil, "get_terminal_size", lambda fallback: terminal_size((40, 10)))
+    _FakeSession.answers = iter(["not-a-number"])
+    monkeypatch.setattr(widgets, "PromptSession", _FakeSession)
+
+    assert widgets.input_int("Port") is None
+    output = capsys.readouterr().out
+    assert "Invalid number" in output
+
+
 def test_small_terminal_text_and_message_fallback(monkeypatch, capsys):
     monkeypatch.setattr(widgets.shutil, "get_terminal_size", lambda fallback: terminal_size((50, 20)))
     _FakeSession.answers = iter(["", "hello"])

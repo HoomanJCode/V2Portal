@@ -111,7 +111,11 @@ def input_int(prompt: str, default=None):
             return default
     if raw.strip() == "":
         return default
-    return int(raw.strip())
+    try:
+        return int(raw.strip())
+    except ValueError:
+        show_message("Invalid number", f"{prompt} must be a whole number.")
+        return default
 
 
 def input_secret(prompt: str) -> str:
