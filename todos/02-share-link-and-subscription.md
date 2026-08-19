@@ -42,10 +42,12 @@ protocols, and support updating them. Parser-heavy phase.
 ### Subscription fetching (`subs/fetcher.py`)
 
 - [x] `fetch(url, user_agent) -> (body, headers)` via `httpx`; timeout, redirect,
-      typed errors (timeout/DNS/HTTP status).
+      typed errors (timeout/DNS/HTTP status); reject invalid URL and user-agent
+      shapes before I/O.
 - [x] Support `file://` and `paste://<payload>`.
 - [x] Parse `Subscription-Userinfo` → `expires` + `traffic_used`; malformed
-      traffic values remain safe for health reporting.
+      traffic values remain safe for health reporting, and non-text payloads or
+      metadata are rejected/normalized at the parser boundary.
 
 ### Subscription parsing (`subs/parser.py`)
 
@@ -66,9 +68,10 @@ protocols, and support updating them. Parser-heavy phase.
 - [x] `test_share.py`: fixture link per protocol (vmess/vless/trojan/ss/ssr/
       socks/http/hysteria2/tuic/wireguard) asserts outbound fields + resolved engine;
       malformed endpoints and credentials are rejected.
-- [x] `test_parser.py`: plain vs base64 payloads; malformed input doesn't raise;
-      dedupe; delete-on-update behavior.
-- [x] `test_fetcher.py`: `file://` + `paste://` (no network); httpx mocked.
+- [x] `test_parser.py`: plain vs base64 payloads; malformed links are collected;
+      dedupe; delete-on-update behavior; malformed payload metadata is safe.
+- [x] `test_fetcher.py`: `file://` + `paste://` (no network); httpx mocked;
+      invalid URL and user-agent shapes produce typed errors.
 
 ## Definition of Done
 

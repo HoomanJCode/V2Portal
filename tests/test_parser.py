@@ -5,7 +5,7 @@ import pytest
 
 from v2raycli.models import Group
 from v2raycli.storage import ConfigStore
-from v2raycli.subs.parser import import_subscription, parse_payload, update_subscription
+from v2raycli.subs.parser import _userinfo, import_subscription, parse_payload, update_subscription
 
 
 FIXTURE_LINKS = [
@@ -30,6 +30,25 @@ def test_parse_payload_base64():
 
 def test_parse_payload_plain_text_is_not_base64():
     assert parse_payload("hello world\nsecond line\n") == ["hello world", "second line"]
+
+
+@pytest.mark.parametrize("body", [None, b"vless://x", 123])
+def test_parse_payload_rejects_non_text(body):
+    with pytest.raises(ValueError, match="payload must be text"):
+        parse_payload(body)
+
+
+def test_userinfo_normalizes_malformed_counters_and_expiry():
+    traffic, expires = _userinfo(
+        {
+            "subscription-userinfo": (
+                "upload=-1; download=2; total=bad; "
+                "expire=999999999999999999999999"
+            )
+        }
+    )
+    assert traffic == 2
+    assert expires is None
 
 
 def test_sample_fixture_imports_all_protocols():

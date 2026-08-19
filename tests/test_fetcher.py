@@ -18,6 +18,17 @@ def test_paste_fetch():
     assert headers == {}
 
 
+@pytest.mark.parametrize("url", [None, "", "   ", "ftp://example.com/sub"])
+def test_invalid_subscription_urls_raise_typed_error(url):
+    with pytest.raises(FetchError):
+        fetch(url)
+
+
+def test_invalid_user_agent_raises_typed_error():
+    with pytest.raises(FetchError, match="user agent"):
+        fetch("paste://links", user_agent=123)
+
+
 def test_file_missing_raises(tmp_path):
     with pytest.raises(FetchError):
         fetch(f"file://{tmp_path}/nope.txt")

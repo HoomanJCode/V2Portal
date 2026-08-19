@@ -33,6 +33,8 @@ def parse_payload(body: str) -> list[str]:
     Handles a plain newline list or a base64-encoded blob (std/url-safe,
     padded/unpadded), tolerating a BOM, stray whitespace, and blank lines.
     """
+    if not isinstance(body, str):
+        raise ValueError("subscription payload must be text")
     text = body.lstrip("\ufeff").strip()
     if not text:
         return []
@@ -69,25 +71,33 @@ def _profile_key(p: Profile) -> tuple:
 
 def _userinfo(headers: dict) -> tuple[int, str | None]:
     """Parse the Subscription-Userinfo header into (traffic_used, expires)."""
+    if not isinstance(headers, dict):
+        return 0, None
     value = headers.get("subscription-userinfo")
-    if not value:
+    if not isinstance(value, str) or not value.strip():
         return 0, None
     fields: dict = {}
     for part in value.split(";"):
         if "=" in part:
             k, v = part.split("=", 1)
             fields[k.strip().lower()] = v.strip()
-    traffic = 0
-    try:
-        traffic = int(fields.get("upload", 0)) + int(fields.get("download", 0))
-    except (TypeError, ValueError):
-        traffic = 0
+
+    def counter(name: str) -> int:
+        value = fields.get(name, "0")
+        if not isinstance(value, str) or not value.isdigit():
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    traffic = counter("upload") + counter("download")
     expires = None
     expire = fields.get("expire")
-    if expire and expire.isdigit():
+    if isinstance(expire, str) and expire.isdigit():
         try:
             expires = datetime.fromtimestamp(int(expire), tz=timezone.utc).isoformat()
-        except (ValueError, OSError):
+        except (ValueError, OSError, OverflowError):
             expires = None
     return traffic, expires
 
