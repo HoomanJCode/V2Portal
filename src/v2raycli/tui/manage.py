@@ -37,7 +37,7 @@ def run(store) -> None:
         elif action == "groups":
             _groups(store)
         elif action == "transfer":
-            widgets.show_message("Transfer", "Backup/export/import lands in a later phase.")
+            _transfer(store)
         store.save()
 
 
@@ -143,6 +143,81 @@ def _add(store) -> None:
     if kind == "openconnect":
         server = widgets.input_text("Server")
         store.add_profile(vpn.add_openconnect(name, server))
+
+
+# -- transfer (backup / export / import) ----------------------------------
+
+
+def _transfer(store) -> None:
+    from .. import backup, config, exchange
+
+    action = widgets.menu(
+        "Transfer",
+        [
+            ("backup", "Backup now"),
+            ("restore", "Restore from backup"),
+            ("export_full", "Export full config"),
+            ("export_redacted", "Export full config (redacted)"),
+            ("import_full", "Import full config"),
+            ("import_links", "Import share-link file"),
+            ("export_links", "Export share links"),
+            ("back", "Back"),
+        ],
+    )
+    if action is None or action == "back":
+        return
+
+    if action == "backup":
+        path = backup.create_backup("manual", store=store, keep=store.config.settings.backup_keep)
+        widgets.show_message("Backed up", str(path) if path else "No config to back up.")
+    elif action == "restore":
+        backups = backup.list_backups()
+        if not backups:
+            widgets.show_message("No backups", "None found.")
+            return
+        choice = widgets.menu(
+            "Restore", [(b.path, f"{b.timestamp}  {b.reason}") for b in backups]
+        )
+        if choice and widgets.confirm("Restore this backup? Current config is backed up first."):
+            try:
+                backup.restore_backup(choice, store)
+            except Exception as exc:
+                widgets.show_message("Restore failed", str(exc))
+                return
+            widgets.show_message("Restored", "Config restored.")
+    elif action == "export_full":
+        path = widgets.input_text("Export path", str(config.RUNTIME_DIR / "export.json"))
+        exchange.export_full(store, path)
+        widgets.show_message("Exported", path)
+    elif action == "export_redacted":
+        path = widgets.input_text("Export path", str(config.RUNTIME_DIR / "export-redacted.json"))
+        exchange.export_full(store, path, redact=True)
+        widgets.show_message("Exported", path)
+    elif action == "import_full":
+        path = widgets.input_text("Import file path")
+        mode = widgets.menu("Mode", [("merge", "Merge"), ("replace", "Replace")])
+        if not mode:
+            return
+        try:
+            exchange.import_full(store, path, mode=mode)
+        except Exception as exc:
+            widgets.show_message("Import failed", str(exc))
+            return
+        widgets.show_message("Imported", "Config imported.")
+    elif action == "import_links":
+        path = widgets.input_text("Share-link file path")
+        added = exchange.import_share_links(store, path)
+        widgets.show_message("Imported", f"Added {len(added)} profiles.")
+    elif action == "export_links":
+        members = widgets.multi_select(
+            "Profiles", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
+        )
+        if not members:
+            return
+        profiles = [p for p in store.list_profiles() if p.id in members]
+        path = widgets.input_text("Export path", str(config.RUNTIME_DIR / "links.txt"))
+        links = exchange.export_share_links(profiles, path)
+        widgets.show_message("Exported", f"Wrote {len(links)} links.")
 
 
 # -- subscriptions ---------------------------------------------------------
