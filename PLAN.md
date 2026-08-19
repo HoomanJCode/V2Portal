@@ -101,7 +101,7 @@ A fully-interactive command-line client that wraps two proxy engines
         ┌───────────────────────┼───────────────────────────┐
         ▼                       ▼                           ▼
    sing-box core            xray-core                 openvpn/openconnect
-   mixed inbound :1080      socks+http :1080          (VPN profile, no inbound)
+   mixed inbound :1080      socks :1080 + HTTP :1081  (VPN profile, no inbound)
 ```
 
 ### Directory layout (to be created in Phase 01)
@@ -259,9 +259,9 @@ The engine adapter exposes:
 
 Common shape produced for **both** engines:
 
-- **Inbound**: sing-box → `mixed` inbound (socks5+http one port); xray → `socks`
-  inbound (verify it also answers HTTP CONNECT; else emit socks + http on two
-  ports). Apply `settings.inbound_auth` when enabled. Bind `settings.listen`.
+- **Inbound**: sing-box → `mixed` inbound (socks5+http one port); xray →
+  `socks` plus an adjacent `http` inbound (HTTP CONNECT support). Apply
+  `settings.inbound_auth` when enabled. Bind the effective `listen` address.
 - **Outbounds**: one per referenced profile + a `direct`/`block` fallback;
   tags = profile `id`.
 - **Target**:
@@ -316,8 +316,8 @@ Common shape produced for **both** engines:
 
 ## 11. Risks / open questions to verify during implementation
 
-1. **Mixed inbound** — confirm sing-box `mixed` works on the pinned build; for
-   xray, confirm socks inbound answers HTTP CONNECT (else dual-port fallback).
+1. **Mixed inbound** — sing-box uses `mixed` on one port; xray uses SOCKS on
+   `mixed_port` plus HTTP CONNECT on the adjacent port.
 2. **Selector/balancer strategies** — exact strategy strings for sing-box
    (`random`, `round_robin`, `url_test`) and xray (`random`, `roundRobin`,
    `leastPing`, `leastLoad`).

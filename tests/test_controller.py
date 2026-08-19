@@ -61,6 +61,14 @@ def test_inbound_status_honors_allow_lan(tmp_path):
     assert "lan" not in info
 
 
+def test_xray_inbound_status_exposes_adjacent_http_port(tmp_path):
+    store = _store(tmp_path)
+    info = ConnectionController(store)._inbound_info(store.config.settings, "xray")
+
+    assert info["http_port"] == 1081
+    assert info["urls"] == ["socks5://0.0.0.0:1080", "http://0.0.0.0:1081"]
+
+
 def test_stale_group_maps_to_error_status(tmp_path):
     store = _store(tmp_path)
     group = store.add_group(Group(name="stale", type="single", profile_ids=["missing"]))

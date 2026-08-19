@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from ..outbounds.groups import Target
 
 INBOUND_TAG = "mixed-in"
+HTTP_INBOUND_TAG = "http-in"
 BALANCER_TAG = "balancer"
 
 _KIND_PROTOCOL = {
@@ -67,34 +68,53 @@ class XrayAdapter(EngineAdapter):
             )
             selected = BALANCER_TAG
 
+        listen = settings.listen if settings.allow_lan else "127.0.0.1"
+        http_port = settings.mixed_port + 1
+        if http_port > 65535:
+            raise ValueError("xray HTTP inbound requires mixed_port below 65535")
         inbound = {
             "tag": INBOUND_TAG,
-            "listen": settings.listen if settings.allow_lan else "127.0.0.1",
+            "listen": listen,
             "port": settings.mixed_port,
             "protocol": "socks",
             "settings": {"auth": "noauth", "udp": True},
         }
+        http_inbound = {
+            "tag": HTTP_INBOUND_TAG,
+            "listen": listen,
+            "port": http_port,
+            "protocol": "http",
+            "settings": {},
+        }
         if settings.inbound_auth.get("enabled"):
+            accounts = [
+                {
+                    "user": settings.inbound_auth["username"],
+                    "pass": settings.inbound_auth["password"],
+                }
+            ]
             inbound["settings"] = {
                 "auth": "password",
                 "udp": True,
-                "accounts": [
-                    {
-                        "user": settings.inbound_auth["username"],
-                        "pass": settings.inbound_auth["password"],
-                    }
-                ],
+                "accounts": accounts,
             }
+            http_inbound["settings"] = {"accounts": accounts}
 
         rules: list[dict] = []
         if routing.mode == "split":
             for rule in normalize_rules(routing, selected):
                 rules.append(self._rule(rule))
-        rules.append({"type": "field", "inboundTag": [INBOUND_TAG], "outboundTag": selected})
+        rules.append(
+            {
+                "type": "field",
+                "inboundTag": [INBOUND_TAG, HTTP_INBOUND_TAG],
+                "outboundTag": selected,
+            }
+        )
 
         config: dict = {
             "log": {"loglevel": settings.log_level},
-            "inbounds": [inbound],
+            "inbounds": [inbound, http_inbound],
             "outbounds": outbounds,
             "routing": {"rules": rules, "balancers": balancers},
         }

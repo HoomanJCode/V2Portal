@@ -168,28 +168,31 @@ class ConnectionController:
             state="connected",
             target_name=target.name,
             engine=target.engine,
-            inbound=self._inbound_info(settings),
+            inbound=self._inbound_info(settings, target.engine),
             pid=self.proc.pid,
             started_at=_now(),
         )
         return self.status
 
-    def _inbound_info(self, settings) -> dict:
+    def _inbound_info(self, settings, engine: str = "sing-box") -> dict:
         port = settings.mixed_port
         listen = settings.listen if settings.allow_lan else "127.0.0.1"
         host = listen if listen not in ("0.0.0.0", "", None) else "0.0.0.0"
+        http_port = port + 1 if engine == "xray" else port
         info: dict = {
             "listen": listen,
             "mixed_port": port,
-            "urls": [f"socks5://{host}:{port}", f"http://{host}:{port}"],
+            "urls": [f"socks5://{host}:{port}", f"http://{host}:{http_port}"],
         }
+        if engine == "xray":
+            info["http_port"] = http_port
         if settings.inbound_auth.get("enabled"):
             info["auth"] = {
                 "username": settings.inbound_auth["username"],
                 "password": settings.inbound_auth["password"],
             }
         if settings.allow_lan and listen in ("0.0.0.0", ""):
-            info["lan"] = [f"http://{ip}:{port}" for ip in lan_ips()]
+            info["lan"] = [f"http://{ip}:{http_port}" for ip in lan_ips()]
         return info
 
     # -- VPN connections ----------------------------------------------------

@@ -114,6 +114,9 @@ def test_xray_single(tmp_path):
     outbound = next(o for o in cfg["outbounds"] if o.get("tag") == p.id)
     assert outbound["protocol"] == "vmess"
     assert cfg["inbounds"][0]["protocol"] == "socks"
+    assert cfg["inbounds"][1]["protocol"] == "http"
+    assert cfg["inbounds"][1]["port"] == 1081
+    assert cfg["routing"]["rules"][-1]["inboundTag"] == ["mixed-in", "http-in"]
     assert cfg["routing"]["rules"][-1]["outboundTag"] == p.id
 
 
@@ -159,6 +162,7 @@ def test_allow_lan_false_binds_both_engines_to_loopback(tmp_path):
 
     xray = _generate(store, profile, default="xray")
     assert xray["inbounds"][0]["listen"] == "127.0.0.1"
+    assert xray["inbounds"][1]["listen"] == "127.0.0.1"
 
 
 def test_xray_balancer_observatory(tmp_path):

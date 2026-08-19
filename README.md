@@ -20,8 +20,9 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **Groups** — `balancer` (latency / random / roundRobin / leastLoad), `chain`
   (proxy through proxy), and `single`.
 - **Split routing** — domain/keyword/regex rules, IP CIDR, and geoip/geosite.
-- **LAN mixed inbound** — one port serving SOCKS5 *and* HTTP on `0.0.0.0`, with
-  optional username/password auth.
+- **LAN proxy inbound** — sing-box serves SOCKS5 *and* HTTP on one port;
+  xray exposes SOCKS5 plus HTTP CONNECT on adjacent ports, with optional
+  username/password auth.
 - **Latency testing** — test all outbounds, one subscription, or a selection,
   with a sorted, color-coded table.
 - **Traffic stats** — cumulative per-profile/group up/down usage (sing-box),
@@ -158,9 +159,10 @@ SagerNet/sing-geosite and SagerNet/sing-geoip; on xray they download
 
 ## LAN sharing
 
-In Settings, enable `allow_lan` (default on) — the inbound listens on `0.0.0.0`
-so other devices on your network can use `socks5://<your-ip>:1080` /
-`http://<your-ip>:1080`. Optionally enable inbound auth (username/password).
+In Settings, enable `allow_lan` (default on) — the inbound listens on
+`0.0.0.0` so other devices on your network can use `socks5://<your-ip>:1080` /
+`http://<your-ip>:1080` (xray uses port `1081` for HTTP). Optionally enable
+inbound auth (username/password).
 
 ## Traffic stats
 

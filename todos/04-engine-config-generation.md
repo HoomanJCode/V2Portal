@@ -43,8 +43,8 @@ strategy details must be verified and locked in.
 
 ### xray generator (`engines/xray.py`)
 
-- [x] `generate(...)`: `log`, `inbounds` (`socks` with optional auth), outbounds,
-      `routing` (rules + `balancers`), `dns`.
+- [x] `generate(...)`: `log`, `inbounds` (`socks` + adjacent HTTP CONNECT
+      inbound with optional auth), outbounds, `routing` (rules + `balancers`), `dns`.
 - [x] Balancer → `routing.balancers` entry with `strategy.type`; chain →
       outbound base `proxySettings.tag` (route to last hop).
 
@@ -58,8 +58,8 @@ strategy details must be verified and locked in.
 - [x] sing-box `mixed` inbound: socks5 + HTTP (plain + CONNECT) on one port —
       live curl through both.
 - [x] sing-box `urltest` balancer (latency) + `detour` chain pass `check`.
-- [x] xray socks inbound; `proxySettings` chaining; balancer strategies pass
-      `run -test` (all four strategies).
+- [x] xray socks + adjacent HTTP CONNECT inbounds; `proxySettings` chaining;
+      balancer strategies pass `run -test` (all four strategies).
 - [x] Locked verified shapes into `config_gen` tests + code comments.
 
 ### Fixes the spike surfaced
