@@ -7,6 +7,7 @@ adapter translates those to sing-box outbounds. sing-box-only kinds
 
 from __future__ import annotations
 
+import ipaddress
 from typing import TYPE_CHECKING
 
 from ..routing.rules import normalize_rules
@@ -62,7 +63,21 @@ def _vnext_user(profile) -> tuple[dict, dict]:
     return server, user
 
 
+def _wireguard_network(value: str, label: str, *, interface: bool = False) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"wireguard {label} must be a CIDR")
+    try:
+        if interface:
+            ipaddress.ip_interface(value)
+        else:
+            ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"wireguard {label} must be a CIDR") from exc
+
+
 def _split_endpoint(endpoint: str) -> tuple[str, int]:
+    if not isinstance(endpoint, str):
+        raise ValueError("endpoint must be text")
     if not endpoint:
         return "", 0
     if endpoint.startswith("["):  # IPv6 [::1]:443
@@ -303,15 +318,46 @@ class SingBoxAdapter(EngineAdapter):
 
     def _endpoint_for(self, profile) -> dict:
         """Build a sing-box >= 1.13 WireGuard endpoint (top-level `endpoints`)."""
-        settings = profile.outbound["settings"]
+        if not isinstance(profile.outbound, dict):
+            raise ValueError("wireguard outbound must be an object")
+        settings = profile.outbound.get("settings")
+        if not isinstance(settings, dict):
+            raise ValueError("wireguard outbound is missing settings")
+        private_key = settings.get("secretKey")
+        if not isinstance(private_key, str) or not private_key.strip():
+            raise ValueError("wireguard private key is required")
+        address = settings.get("address")
+        if not isinstance(address, list) or not address:
+            raise ValueError("wireguard address list is required")
+        for item in address:
+            _wireguard_network(item, "address", interface=True)
+        peer_settings = settings.get("peers")
+        if not isinstance(peer_settings, list) or not peer_settings:
+            raise ValueError("wireguard requires at least one peer")
         peers = []
-        for peer in settings.get("peers", []):
-            host, port = _split_endpoint(peer.get("endpoint", ""))
+        for peer in peer_settings:
+            if not isinstance(peer, dict):
+                raise ValueError("wireguard peer must be an object")
+            public_key = peer.get("publicKey")
+            if not isinstance(public_key, str) or not public_key.strip():
+                raise ValueError("wireguard peer public key is required")
+            endpoint = peer.get("endpoint")
+            try:
+                host, port = _split_endpoint(endpoint)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("wireguard peer endpoint must be host:port") from exc
+            if not host or not 1 <= port <= 65535:
+                raise ValueError("wireguard peer endpoint must be host:port")
+            allowed = peer.get("allowedIps")
+            if not isinstance(allowed, list) or not allowed:
+                raise ValueError("wireguard peer allowed IPs are required")
+            for item in allowed:
+                _wireguard_network(item, "peer allowed IP")
             entry: dict = {
                 "address": host,
                 "port": port,
-                "public_key": peer.get("publicKey", ""),
-                "allowed_ips": peer.get("allowedIps", []),
+                "public_key": public_key,
+                "allowed_ips": allowed,
             }
             if peer.get("preSharedKey"):
                 entry["pre_shared_key"] = peer["preSharedKey"]
@@ -322,12 +368,15 @@ class SingBoxAdapter(EngineAdapter):
             peers.append(entry)
         endpoint: dict = {
             "type": "wireguard",
-            "address": settings.get("address", []),
-            "private_key": settings.get("secretKey", ""),
+            "address": address,
+            "private_key": private_key,
             "peers": peers,
         }
-        if settings.get("mtu"):
-            endpoint["mtu"] = settings["mtu"]
+        mtu = settings.get("mtu")
+        if mtu is not None:
+            if isinstance(mtu, bool) or not isinstance(mtu, int) or not 576 <= mtu <= 65535:
+                raise ValueError("wireguard MTU must be between 576 and 65535")
+            endpoint["mtu"] = mtu
         return endpoint
 
     def _apply_stream(self, profile, outbound: dict) -> None:

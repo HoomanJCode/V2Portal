@@ -81,6 +81,85 @@ def test_singbox_wireguard_is_endpoint(tmp_path):
     assert cfg["route"]["final"] == p.id
 
 
+def test_singbox_rejects_malformed_wireguard_endpoint(tmp_path):
+    store = _store(tmp_path)
+    missing_settings = store.add_profile(Profile(name="bad", kind="wireguard", outbound={}))
+    with pytest.raises(ValueError, match="missing settings"):
+        _generate(store, missing_settings, default="sing-box")
+
+    malformed_peer = store.add_profile(
+        Profile(
+            name="bad-peer",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [
+                        {
+                            "publicKey": "peer",
+                            "endpoint": "not-an-endpoint",
+                            "allowedIps": ["0.0.0.0/0"],
+                        }
+                    ],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="endpoint must be host:port"):
+        _generate(store, malformed_peer, default="sing-box")
+
+    non_text_peer = store.add_profile(
+        Profile(
+            name="non-text-peer",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [
+                        {
+                            "publicKey": "peer",
+                            "endpoint": 51820,
+                            "allowedIps": ["0.0.0.0/0"],
+                        }
+                    ],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="endpoint must be host:port"):
+        _generate(store, non_text_peer, default="sing-box")
+
+    malformed_cidr = store.add_profile(
+        Profile(
+            name="bad-cidr",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [
+                        {
+                            "publicKey": "peer",
+                            "endpoint": "1.2.3.4:51820",
+                            "allowedIps": ["not-a-cidr"],
+                        }
+                    ],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="peer allowed IP.*CIDR"):
+        _generate(store, malformed_cidr, default="sing-box")
+
+    invalid_mtu = _wireguard("bad-mtu")
+    invalid_mtu.outbound["settings"]["mtu"] = 1
+    invalid_mtu = store.add_profile(invalid_mtu)
+    with pytest.raises(ValueError, match="MTU"):
+        _generate(store, invalid_mtu, default="sing-box")
+
+
 def test_singbox_wireguard_in_chain_and_balancer(tmp_path):
     store = _store(tmp_path)
     a = store.add_profile(_vmess("a"))
