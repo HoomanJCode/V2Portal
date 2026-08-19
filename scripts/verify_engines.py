@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Live verification of v2raycli's engine integration.
+
+Downloads sing-box + xray, validates generated configs with each engine's own
+check command, and runs end-to-end proxy smoke tests. Requires network access.
+
+This is NOT part of the default test suite (it downloads binaries and reaches
+out to the internet). Run it on any platform to confirm the engine layer works:
+
+    pip install -e .          # or: PYTHONPATH=src python scripts/verify_engines.py
+    python scripts/verify_engines.py
+
+Exit code is non-zero if any check fails.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from v2raycli.connection import ConnectionController
+from v2raycli.engines import get_adapter
+from v2raycli.engines.binary import download_binary, platform_name, arch_name
+from v2raycli.models import Profile
+from v2raycli.outbounds.groups import create_balancer_group, create_chain_group, resolve_target
+from v2raycli.storage import ConfigStore
+
+TEST_URL = "http://example.com/"
+SOCKS_OUTBOUND = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
+VMESS_OUTBOUND = {
+    "settings": {
+        "vnext": [
+            {
+                "address": "vm.example.com",
+                "port": 443,
+                "users": [{"id": "00000000-0000-0000-0000-000000000000", "alterId": 0, "security": "auto"}],
+            }
+        ]
+    },
+    "streamSettings": {"network": "tcp"},
+}
+
+
+class Checks:
+    def __init__(self):
+        self.results: list[tuple[str, bool, str]] = []
+
+    def check(self, name: str, ok: bool, detail: str = "") -> bool:
+        self.results.append((name, ok, detail))
+        mark = "PASS" if ok else "FAIL"
+        print(f"[{mark}] {name}" + (f"  {detail}" if detail else ""))
+        return ok
+
+    def summary(self) -> bool:
+        failed = [r for r in self.results if not r[1]]
+        print("\n" + ("ALL CHECKS PASSED" if not failed else f"{len(failed)} CHECK(S) FAILED"))
+        return not failed
+
+
+def free_port() -> int:
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+def wait_port(port: int, timeout: float = 8.0) -> bool:
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+                return True
+        except OSError:
+            time.sleep(0.1)
+    return False
+
+
+def run_config(binary: Path, args: list[str], config_path: Path) -> subprocess.CompletedProcess:
+    return subprocess.run([str(binary), *args, str(config_path)], capture_output=True, text=True, timeout=30)
+
+
+def socks_http_get(proxy_port: int, host: str, dst_port: int = 80, path: str = "/", timeout: float = 15.0) -> str:
+    """Do a SOCKS5 handshake then an HTTP GET over the tunnel; return status line."""
+    sock = socket.create_connection(("127.0.0.1", proxy_port), timeout=10)
+    sock.settimeout(timeout)
+    sock.sendall(b"\x05\x01\x00")
+    if sock.recv(2) != b"\x05\x00":
+        raise RuntimeError("socks5 greeting rejected")
+    host_bytes = host.encode()
+    sock.sendall(b"\x05\x01\x00\x03" + bytes([len(host_bytes)]) + host_bytes + dst_port.to_bytes(2, "big"))
+    reply = sock.recv(4)
+    if reply[:2] != b"\x05\x00":
+        raise RuntimeError(f"socks5 connect failed: {reply.hex()}")
+    atyp = reply[3]
+    if atyp == 1:
+        sock.recv(6)
+    elif atyp == 3:
+        n = sock.recv(1)[0]
+        sock.recv(n + 2)
+    elif atyp == 4:
+        sock.recv(18)
+    sock.sendall(f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode())
+    data = b""
+    while True:
+        try:
+            chunk = sock.recv(4096)
+        except socket.timeout:
+            break
+        if not chunk:
+            break
+        data += chunk
+    sock.close()
+    return data.split(b"\r\n", 1)[0].decode(errors="replace")
+
+
+def start_socks_server(binary: Path, port: int) -> subprocess.Popen:
+    """Run a throwaway sing-box socks server (inbound -> direct) as an upstream."""
+    config = {
+        "inbounds": [{"type": "socks", "listen": "127.0.0.1", "listen_port": port}],
+        "outbounds": [{"type": "direct", "tag": "direct"}],
+        # Explicit DNS: Termux and minimal systems have no localhost resolver.
+        "dns": {"servers": [{"type": "udp", "tag": "dns-1", "server": "1.1.1.1"}]},
+        "route": {"final": "direct", "default_domain_resolver": "dns-1"},
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(config, fh)
+        path = fh.name
+    return subprocess.Popen([str(binary), "run", "-c", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def stop(proc: subprocess.Popen) -> None:
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def check_configs(checks: Checks, bin_dir: Path) -> None:
+    store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+    store.load()
+    a = store.add_profile(Profile(name="s1", kind="socks", outbound=SOCKS_OUTBOUND))
+    b = store.add_profile(Profile(name="s2", kind="socks", outbound=SOCKS_OUTBOUND))
+    vm = store.add_profile(Profile(name="vm", kind="vmess", outbound=VMESS_OUTBOUND))
+    bal = store.add_group(create_balancer_group("bal", "latency", [a.id, b.id], store))
+    chain = store.add_group(create_chain_group("chain", [a.id, b.id], store))
+
+    cases = [
+        ("sing-box", "single", a, ["check", "-c"]),
+        ("sing-box", "balancer", bal, ["check", "-c"]),
+        ("sing-box", "chain", chain, ["check", "-c"]),
+        ("sing-box", "vmess", vm, ["check", "-c"]),
+        ("xray", "single", a, ["run", "-test", "-config"]),
+        ("xray", "vmess", vm, ["run", "-test", "-config"]),
+        ("xray", "chain", chain, ["run", "-test", "-config"]),
+    ]
+    for engine, label, selection, check_args in cases:
+        target = resolve_target(store, selection, default_engine=engine)
+        cfg = get_adapter(engine).generate(store.config.settings, store.config.routing, target)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(cfg, fh)
+            path = fh.name
+        binary = bin_dir / ("sing-box" if engine == "sing-box" else "xray")
+        result = run_config(binary, check_args, Path(path))
+        checks.check(f"{engine} {label} config", result.returncode == 0, (result.stdout + result.stderr).strip().splitlines()[-1] if result.returncode else "")
+
+
+def check_mixed_inbound(checks: Checks, singbox: Path) -> None:
+    port = free_port()
+    store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+    store.load()
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS_OUTBOUND))
+    target = resolve_target(store, profile, default_engine="sing-box")
+    cfg = get_adapter("sing-box").generate(store.config.settings, store.config.routing, target)
+    cfg["route"]["final"] = "direct"
+    cfg["inbounds"][0]["listen"] = "127.0.0.1"
+    cfg["inbounds"][0]["listen_port"] = port
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump(cfg, fh)
+        path = fh.name
+    proc = subprocess.Popen([str(singbox), "run", "-c", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        if not wait_port(port):
+            checks.check("mixed inbound (engine start)", False, "port never opened")
+            return
+        import httpx
+        with httpx.Client(proxy=f"http://127.0.0.1:{port}", timeout=15, follow_redirects=False) as client:
+            r = client.get(TEST_URL)
+            checks.check("mixed inbound HTTP proxy", 200 <= r.status_code < 400, f"status={r.status_code}")
+        status = socks_http_get(port, "example.com")
+        checks.check("mixed inbound SOCKS5", status.startswith("HTTP/1."), status)
+    finally:
+        stop(proc)
+
+
+def check_outbound_routing(checks: Checks, singbox: Path) -> None:
+    upstream_port = free_port()
+    inbound_port = free_port()
+    upstream = start_socks_server(singbox, upstream_port)
+    try:
+        if not wait_port(upstream_port):
+            checks.check("outbound routing (upstream start)", False, "upstream port never opened")
+            return
+
+        store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
+        store.load()
+        store.config.settings.mixed_port = inbound_port
+        store.config.settings.listen = "127.0.0.1"
+        profile = store.add_profile(
+            Profile(
+                name="upstream",
+                kind="socks",
+                outbound={"settings": {"servers": [{"address": "127.0.0.1", "port": upstream_port}]}},
+            )
+        )
+
+        controller = ConnectionController(store, bin_dir=singbox.parent, runtime_dir=Path(tempfile.mkdtemp()))
+        status = controller.connect(profile)
+        if status.state != "connected":
+            checks.check("outbound routing (connect)", False, status.error or status.state)
+            return
+        try:
+            checks.check("outbound routing (connect)", True, f"engine={status.engine}")
+            line = socks_http_get(inbound_port, "example.com")
+            checks.check("outbound routing (egress via socks outbound)", line.startswith("HTTP/1."), line)
+        finally:
+            controller.disconnect()
+    finally:
+        stop(upstream)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
+    parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
+    parser.add_argument("--skip-download", action="store_true", help="reuse --bin-dir binaries, don't download")
+    args = parser.parse_args()
+
+    checks = Checks()
+    bin_dir = args.bin_dir or Path(tempfile.mkdtemp(prefix="v2raycli-verify-"))
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        for engine in ("sing-box", "xray"):
+            binary = bin_dir / engine if engine == "sing-box" else bin_dir / "xray"
+            if not args.skip_download or not binary.exists():
+                binary = download_binary(engine, "latest", platform_name(), arch_name(), bin_dir=bin_dir)
+            checks.check(f"{engine} binary", binary.exists(), str(binary))
+    except Exception as exc:  # pragma: no cover - network dependent
+        checks.check("download binaries", False, f"{type(exc).__name__}: {exc}")
+
+    check_configs(checks, bin_dir)
+    check_mixed_inbound(checks, bin_dir / "sing-box")
+    check_outbound_routing(checks, bin_dir / "sing-box")
+
+    return 0 if checks.summary() else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
