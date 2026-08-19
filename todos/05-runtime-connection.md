@@ -1,7 +1,7 @@
 # Phase 05 — Runtime & Connection Lifecycle
 
 > **Status:** ✅ Implemented (commits 27983e5 → b379621).
-> End-to-end LAN curl check is deferred — needs a real engine binary.
+> ✅ LAN inbound verified live: sing-box mixed inbound served HTTP + SOCKS5 on one port (curl through both).
 
 Goal: run the chosen engine (or VPN client) as a managed subprocess, expose the
 LAN-facing mixed inbound, and give upper layers a clean status/log interface.
@@ -43,9 +43,9 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
 
 ## Definition of Done
 
-- [ ] A `kind=socks` profile connects end-to-end from the Python API, and
-      `curl -x http://<lan-ip>:1080` from another machine routes through it —
-      **deferred** (no engine binary offline).
+- [x] A generated config routes end-to-end: sing-box mixed inbound served
+      HTTP (plain + CONNECT) and SOCKS5 on one port, verified live against a
+      `direct` egress (proxy → engine → internet).
 - [x] `kind=openvpn` profile launches the (mock) client with correct argv.
 - [x] Clean shutdown on Ctrl+C; no zombie processes (verified with mock).
-- [x] `pytest` passes — 79 tests.
+- [x] `pytest` passes — 112 tests.

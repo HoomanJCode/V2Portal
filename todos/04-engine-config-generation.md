@@ -1,8 +1,7 @@
 # Phase 04 — Engine Adapters, Binaries & Config Generation
 
 > **Status:** ✅ Implemented (commits 961a539 → 3b443d3).
-> The **verification spike** (running real sing-box/xray binaries) is deferred —
-> no engine binaries are available in the offline dev environment.
+> ✅ Verification spike run against sing-box 1.13.19 + xray 26.3.27 (see below).
 
 Goal: a working **engine adapter layer** (sing-box + xray), auto-download of
 both binaries, and valid config generation for any target with split routing.
@@ -54,13 +53,22 @@ strategy details must be verified and locked in.
 - [x] `write_runtime_config(engine, config_dict) -> path` into `RUNTIME_DIR`.
 - [x] `validate_config(engine, path)` — sing-box `check` / xray `run -test`.
 
-## Verification spike (needs real binaries — deferred)
+## Verification spike (run against sing-box 1.13.19 + xray 26.3.27)
 
-- [ ] sing-box `mixed` inbound: confirm socks5+http on one port (both clients).
-- [ ] sing-box selector `strategy` values (`random`, `round_robin`) + `urltest`.
-- [ ] xray socks inbound HTTP CONNECT; balancer strategy strings; `proxySettings`
-      chaining; sing-box `detour` chaining (confirm egress via last hop).
-- [ ] Lock verified shapes into `config_gen` tests + code comments.
+- [x] sing-box `mixed` inbound: socks5 + HTTP (plain + CONNECT) on one port —
+      live curl through both.
+- [x] sing-box `urltest` balancer (latency) + `detour` chain pass `check`.
+- [x] xray socks inbound; `proxySettings` chaining; balancer strategies pass
+      `run -test` (all four strategies).
+- [x] Locked verified shapes into `config_gen` tests + code comments.
+
+### Fixes the spike surfaced
+
+- sing-box >= 1.12 needs the typed DNS server format + `default_domain_resolver`.
+- xray `leastPing`/`leastLoad` balancers require the `observatory` section.
+- sing-box on Termux needs the `android` asset (linux builds are glibc/musl).
+- `download_binary` resolves `latest` via the GitHub API; sing-box asset names
+  drop the `v` prefix.
 
 ## Tests
 
@@ -73,8 +81,7 @@ strategy details must be verified and locked in.
 
 ## Definition of Done
 
-- [ ] Both engines' `check`/`-test` pass on generated configs — **deferred**
-      (no binaries offline); run the spike before Phase 05 manual testing.
-- [ ] SOCKS+HTTP single port and 2-hop chain confirmed on the pinned builds —
-      **deferred**; document + add fixtures when verified.
-- [x] `pytest` passes — 70 tests.
+- [x] Both engines' `check`/`-test` pass on generated configs (verified live).
+- [x] SOCKS+HTTP single port confirmed on sing-box 1.13.19 (live E2E); chain
+      config shapes validated by both engines.
+- [x] `pytest` passes — 112 tests.

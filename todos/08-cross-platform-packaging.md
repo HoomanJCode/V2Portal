@@ -14,13 +14,13 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
   - binary download + extraction for both engines on Windows
   - `openvpn`/`openconnect` detection on PATH
       *(deferred — no Windows host here)*
-- [ ] Verify on **Termux (Android)**:
-  - `pkg install python` + `pip install .` documented
-  - arm64 binaries for sing-box + xray auto-download
-  - `0.0.0.0` LAN binding works; show the phone's Wi-Fi IP
-  - terminal size quirks (fall back to non-fullscreen rendering if needed)
-  - note: `openvpn`/`openconnect` may need root — document limitations
-      *(docs added; live run deferred)*
+- [~] Verify on **Termux (Android)**:
+  - [x] `pkg install python` + `pip install .` documented
+  - [x] arm64 binaries for sing-box + xray auto-download (verified live:
+        sing-box android-arm64 + xray linux-arm64 both run on bionic)
+  - [ ] `0.0.0.0` LAN binding works; show the phone's Wi-Fi IP (not verified)
+  - [ ] terminal size quirks (fall back to non-fullscreen rendering if needed)
+  - [x] note: `openvpn`/`openconnect` may need root — documented
 - [x] README:
   - features, install (pip / PyInstaller / Termux), quickstart
   - how to add each profile type (subscription, link, socks/http, wireguard,
@@ -42,8 +42,9 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 - [x] README and install instructions complete and accurate.
 - [x] No platform-specific hacks left uncommented; `pytest` green (91 tests).
 
-## Deferred (needs networked env / real binaries / a Windows host)
+## Deferred (needs a Windows host / full walkthrough)
 
-- Linux/Windows/Termux end-to-end walkthroughs.
+- Linux + Windows end-to-end walkthroughs (Termux binaries + config gen + mixed
+  inbound verified; full TUI walkthrough still needs installed TUI deps).
 - Windows console + `CREATE_NO_WINDOW` + firewall verification.
-- Termux arm64 binary auto-download + terminal-size fallback.
+- Termux `0.0.0.0` LAN binding + terminal-size fallback.
