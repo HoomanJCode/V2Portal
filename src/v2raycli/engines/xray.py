@@ -169,6 +169,37 @@ def _validate_stream_settings(profile) -> None:
             raise ValueError("TLS alpn must be a list")
 
 
+def _validate_settings(settings) -> None:
+    listen = getattr(settings, "listen", None)
+    if not isinstance(listen, str) or not listen.strip():
+        raise ValueError("xray listen address is required")
+    if not isinstance(getattr(settings, "allow_lan", None), bool):
+        raise ValueError("xray allow_lan must be boolean")
+
+    mixed_port = getattr(settings, "mixed_port", None)
+    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int) or not 1 <= mixed_port <= 65534:
+        raise ValueError("xray mixed_port must be between 1 and 65534")
+
+    auth = getattr(settings, "inbound_auth", None)
+    if not isinstance(auth, dict):
+        raise ValueError("xray inbound_auth must be an object")
+    enabled = auth.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("xray inbound_auth.enabled must be boolean")
+    if enabled:
+        for field in ("username", "password"):
+            value = auth.get(field)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"xray inbound_auth.{field} is required")
+
+    dns = getattr(settings, "dns", None)
+    if not isinstance(dns, list):
+        raise ValueError("xray DNS servers must be a list")
+    for server in dns:
+        if not isinstance(server, str) or not server.strip():
+            raise ValueError("xray DNS servers must contain non-empty text")
+
+
 @register
 class XrayAdapter(EngineAdapter):
     name = "xray"
@@ -178,6 +209,7 @@ class XrayAdapter(EngineAdapter):
     supported_strategies = frozenset({"latency", "random", "roundRobin", "leastLoad"})
 
     def generate(self, settings: "Settings", routing: "RoutingConfig", target: "Target") -> dict:
+        _validate_settings(settings)
         outbounds = [
             {"tag": "direct", "protocol": "freedom", "settings": {}},
             {"tag": "block", "protocol": "blackhole", "settings": {}},

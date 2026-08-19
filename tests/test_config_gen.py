@@ -675,6 +675,51 @@ def test_xray_rejects_malformed_stream_mappings(tmp_path):
         _generate(store, malformed_http, default="xray")
 
 
+def test_xray_settings_shape_is_preserved(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess("auth"))
+    store.config.settings.inbound_auth = {
+        "enabled": True,
+        "username": "user",
+        "password": "pass",
+    }
+    cfg = _generate(store, profile, default="xray")
+    assert cfg["inbounds"][0]["settings"]["accounts"] == [{"user": "user", "pass": "pass"}]
+    assert cfg["inbounds"][1]["settings"]["accounts"] == [{"user": "user", "pass": "pass"}]
+
+
+def test_xray_rejects_malformed_settings(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess("settings"))
+
+    store.config.settings.inbound_auth = []
+    with pytest.raises(ValueError, match="inbound_auth must be an object"):
+        _generate(store, profile, default="xray")
+
+    store.config.settings.inbound_auth = {"enabled": True, "username": "user"}
+    with pytest.raises(ValueError, match="inbound_auth.password"):
+        _generate(store, profile, default="xray")
+
+    store.config.settings.inbound_auth = {"enabled": False, "username": "", "password": ""}
+    store.config.settings.dns = "1.1.1.1"
+    with pytest.raises(ValueError, match="DNS servers must be a list"):
+        _generate(store, profile, default="xray")
+
+    store.config.settings.dns = ["1.1.1.1", ""]
+    with pytest.raises(ValueError, match="DNS servers must contain"):
+        _generate(store, profile, default="xray")
+
+    store.config.settings.dns = ["1.1.1.1"]
+    store.config.settings.mixed_port = 0
+    with pytest.raises(ValueError, match="mixed_port must be between"):
+        _generate(store, profile, default="xray")
+
+    store.config.settings.mixed_port = 1080
+    store.config.settings.allow_lan = "yes"
+    with pytest.raises(ValueError, match="allow_lan must be boolean"):
+        _generate(store, profile, default="xray")
+
+
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(
