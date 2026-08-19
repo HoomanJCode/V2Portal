@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# App runtime
+runtime/
+
+# Downloaded engine binaries & geo assets (managed at runtime)
+bin/
+geo/
+backup/

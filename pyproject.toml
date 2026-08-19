@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v2raycli"
+version = "0.1.0"
+description = "Interactive v2ray CLI client (sing-box + xray-core) with subscriptions, groups, and split routing"
+requires-python = ">=3.10"
+dependencies = [
+    "prompt_toolkit>=3.0",
+    "rich>=13.0",
+    "httpx[socks]>=0.24",
+    "platformdirs>=3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+v2raycli = "v2raycli.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
