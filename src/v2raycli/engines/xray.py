@@ -134,6 +134,41 @@ def _validate_wireguard(profile) -> None:
         raise ValueError("wireguard MTU must be between 576 and 65535")
 
 
+def _validate_stream_settings(profile) -> None:
+    stream = profile.outbound.get("streamSettings")
+    if stream is None:
+        return
+    if not isinstance(stream, dict):
+        raise ValueError("streamSettings must be an object")
+    network = stream.get("network")
+    if network is not None and not isinstance(network, str):
+        raise ValueError("streamSettings network must be text")
+
+    for key in ("tlsSettings", "realitySettings", "wsSettings", "grpcSettings", "httpSettings"):
+        value = stream.get(key)
+        if value is not None and not isinstance(value, dict):
+            raise ValueError(f"{key} must be an object")
+
+    ws = stream.get("wsSettings")
+    if isinstance(ws, dict) and "headers" in ws and not isinstance(ws["headers"], dict):
+        raise ValueError("WebSocket headers must be an object")
+
+    grpc = stream.get("grpcSettings")
+    if isinstance(grpc, dict) and "serviceName" in grpc and not isinstance(grpc["serviceName"], str):
+        raise ValueError("gRPC serviceName must be text")
+
+    http = stream.get("httpSettings")
+    if isinstance(http, dict) and "host" in http and not isinstance(http["host"], list):
+        raise ValueError("HTTP/2 host must be a list")
+
+    tls = stream.get("tlsSettings")
+    if isinstance(tls, dict):
+        if "serverName" in tls and not isinstance(tls["serverName"], str):
+            raise ValueError("TLS serverName must be text")
+        if "alpn" in tls and not isinstance(tls["alpn"], list):
+            raise ValueError("TLS alpn must be a list")
+
+
 @register
 class XrayAdapter(EngineAdapter):
     name = "xray"
@@ -254,6 +289,7 @@ class XrayAdapter(EngineAdapter):
                 _validate_servers(profile)
             elif profile.kind == "wireguard":
                 _validate_wireguard(profile)
+        _validate_stream_settings(profile)
         outbound = dict(profile.outbound)
         outbound["tag"] = profile.id
         outbound["protocol"] = protocol

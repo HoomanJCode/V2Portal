@@ -627,6 +627,54 @@ def test_xray_rejects_malformed_wireguard_shape(tmp_path):
         _generate(store, malformed_allowed, default="xray")
 
 
+def test_xray_stream_shape_is_preserved(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess("stream"))
+    profile.outbound["streamSettings"] = {
+        "network": "ws",
+        "wsSettings": {"path": "/proxy", "headers": {"Host": "example.com"}},
+        "security": "tls",
+        "tlsSettings": {"serverName": "example.com", "alpn": ["h2"]},
+    }
+    cfg = _generate(store, profile, default="xray")
+    outbound = next(o for o in cfg["outbounds"] if o.get("tag") == profile.id)
+    assert outbound["streamSettings"]["wsSettings"]["path"] == "/proxy"
+    assert outbound["streamSettings"]["tlsSettings"]["serverName"] == "example.com"
+
+
+def test_xray_rejects_malformed_stream_mappings(tmp_path):
+    store = _store(tmp_path)
+    malformed_stream = _vmess("bad-stream")
+    malformed_stream.outbound["streamSettings"] = []
+    malformed_stream = store.add_profile(malformed_stream)
+    with pytest.raises(ValueError, match="streamSettings must be an object"):
+        _generate(store, malformed_stream, default="xray")
+
+    malformed_tls = _vmess("bad-tls")
+    malformed_tls.outbound["streamSettings"] = {"security": "tls", "tlsSettings": []}
+    malformed_tls = store.add_profile(malformed_tls)
+    with pytest.raises(ValueError, match="tlsSettings must be an object"):
+        _generate(store, malformed_tls, default="xray")
+
+    malformed_ws = _vmess("bad-ws")
+    malformed_ws.outbound["streamSettings"] = {"network": "ws", "wsSettings": []}
+    malformed_ws = store.add_profile(malformed_ws)
+    with pytest.raises(ValueError, match="wsSettings must be an object"):
+        _generate(store, malformed_ws, default="xray")
+
+    malformed_grpc = _vmess("bad-grpc")
+    malformed_grpc.outbound["streamSettings"] = {"network": "grpc", "grpcSettings": {"serviceName": 1}}
+    malformed_grpc = store.add_profile(malformed_grpc)
+    with pytest.raises(ValueError, match="gRPC serviceName"):
+        _generate(store, malformed_grpc, default="xray")
+
+    malformed_http = _vmess("bad-http2")
+    malformed_http.outbound["streamSettings"] = {"network": "h2", "httpSettings": {"host": "example.com"}}
+    malformed_http = store.add_profile(malformed_http)
+    with pytest.raises(ValueError, match="HTTP/2 host"):
+        _generate(store, malformed_http, default="xray")
+
+
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(
