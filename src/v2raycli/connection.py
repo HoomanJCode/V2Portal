@@ -208,6 +208,17 @@ class ConnectionController:
         clients = detect_clients()
         vpn = profile.vpn or {}
         vtype = vpn.get("type") or profile.kind
+        if vtype == "openvpn":
+            config_path = vpn.get("config_path")
+            if config_path:
+                if not Path(config_path).is_file():
+                    raise ConnectionError(f"openvpn config not found: {config_path}")
+            elif not vpn.get("inline"):
+                raise ConnectionError("openvpn profile needs a config_path or inline config")
+        elif vtype == "openconnect" and not str(vpn.get("server", "")).strip():
+            raise ConnectionError("openconnect profile needs a server")
+        if vtype not in VPN_KINDS:
+            raise ConnectionError(f"unsupported VPN kind: {vtype}")
         client = clients.get(vtype)
         if not client:
             raise ConnectionError(client_install_hint(vtype))

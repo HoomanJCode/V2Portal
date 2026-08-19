@@ -1,4 +1,5 @@
 from v2raycli.connection import ConnectionController
+from v2raycli.models import Profile
 from v2raycli.outbounds.vpn import add_openconnect, add_openvpn
 from v2raycli.storage import ConfigStore
 
@@ -37,12 +38,27 @@ def test_connect_openvpn_mocked(tmp_path, monkeypatch):
     fake.chmod(0o755)
     monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
 
-    profile = store.add_profile(add_openvpn("v", config_path="/tmp/x.ovpn"))
+    config_path = tmp_path / "client.ovpn"
+    config_path.write_text("client\n")
+    profile = store.add_profile(add_openvpn("v", config_path=str(config_path)))
     ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
     status = ctl.connect(profile)
     assert status.state == "connected"
     assert status.engine == "openvpn"
     ctl.disconnect()
+
+
+def test_vpn_missing_target_maps_error(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/openconnect")
+    profile = store.add_profile(
+        Profile(name="oc", kind="openconnect", vpn={"type": "openconnect", "server": ""})
+    )
+
+    status = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path).connect(profile)
+
+    assert status.state == "error"
+    assert "needs a server" in status.error
 
 
 def test_vpn_missing_client_maps_error(tmp_path, monkeypatch):

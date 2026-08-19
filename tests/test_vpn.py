@@ -26,6 +26,11 @@ def test_add_openconnect():
     assert p.vpn["auth_hint"] == "token"
 
 
+def test_add_openconnect_requires_server():
+    with pytest.raises(ValueError):
+        add_openconnect("oc", " ")
+
+
 def test_is_vpn():
     assert is_vpn(add_openvpn("x", config_path="/tmp/x.ovpn"))
     assert not is_vpn(Profile(kind="socks"))

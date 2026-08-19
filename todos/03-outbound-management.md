@@ -25,7 +25,8 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] `add_openvpn(name, ovpn_config_path|inline_text, args)` → `Profile(kind=openvpn)`
       with `vpn = {type:"openvpn", config_path|inline, args}`.
 - [x] `add_openconnect(name, server, args, auth)` → `Profile(kind=openconnect)`
-      with `vpn = {type:"openconnect", server, args, auth_hint}`.
+      with `vpn = {type:"openconnect", server, args, auth_hint}`; require a
+      non-empty server before connection.
 - [x] Detect `openvpn` / `openconnect` on `PATH` (`shutil.which`); annotate
       unavailable VPNs in the TUI and surface a clear install hint when
       connecting. (detection is `detect_clients()`, refreshed live.)

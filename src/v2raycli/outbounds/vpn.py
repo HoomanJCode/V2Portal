@@ -54,6 +54,8 @@ def add_openconnect(
     args: list[str] | None = None,
     auth_hint: str | None = None,
 ) -> Profile:
+    if not server or not server.strip():
+        raise ValueError("openconnect profile needs a server")
     vpn: dict = {
         "type": "openconnect",
         "server": server,
