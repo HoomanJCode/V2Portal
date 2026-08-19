@@ -47,10 +47,27 @@ def add_manual_config(json_text: str, name: str, engine: str = "xray") -> Profil
     return Profile(name=name, kind="manual", engine=engine, outbound=outbound, source="manual")
 
 
+def _endpoint(host: str, port: int) -> tuple[str, int]:
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("proxy host is required")
+    if isinstance(port, bool) or (
+        isinstance(port, float) and not port.is_integer()
+    ):
+        raise ValueError("proxy port must be an integer")
+    try:
+        normalized_port = int(port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("proxy port must be an integer") from exc
+    if not 1 <= normalized_port <= 65535:
+        raise ValueError("proxy port must be between 1 and 65535")
+    return host.strip(), normalized_port
+
+
 def _plain_proxy(
     kind: str, name: str, host: str, port: int, username: str | None = None, password: str | None = None
 ) -> Profile:
-    server: dict = {"address": host, "port": int(port)}
+    host, port = _endpoint(host, port)
+    server: dict = {"address": host, "port": port}
     if username or password:
         server["users"] = [{"user": username or "", "pass": password or ""}]
     outbound = {"settings": {"servers": [server]}}
@@ -95,9 +112,10 @@ def add_hysteria2(
     up_mbps: int | None = None,
     down_mbps: int | None = None,
 ) -> Profile:
+    server, server_port = _endpoint(server, server_port)
     outbound: dict = {
         "server": server,
-        "server_port": int(server_port),
+        "server_port": server_port,
         "password": password,
         "tls": {"enabled": True, "server_name": sni or server, "insecure": insecure},
     }
@@ -125,9 +143,10 @@ def add_tuic(
     udp_relay_mode: str = "native",
     allow_insecure: bool = False,
 ) -> Profile:
+    server, server_port = _endpoint(server, server_port)
     outbound: dict = {
         "server": server,
-        "server_port": int(server_port),
+        "server_port": server_port,
         "uuid": uuid,
         "password": password,
         "congestion_control": congestion_control,

@@ -12,11 +12,14 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] `add_manual_config(json_text, name, engine)` — accept a raw **xray
       outbound** object pasted by the user, normalize into `Profile(kind="manual")`,
       resolve it to xray, validate protocol, and reject inbounds.
-- [x] `add_socks_proxy(name, host, port, user, pass)` → `kind=socks`.
-- [x] `add_http_proxy(name, host, port, user, pass)` → `kind=http`.
+- [x] `add_socks_proxy(name, host, port, user, pass)` → `kind=socks`;
+      validate non-empty host and port range 1–65535.
+- [x] `add_http_proxy(name, host, port, user, pass)` → `kind=http`;
+      validate non-empty host and port range 1–65535.
 - [x] `add_wireguard(name, private_key, address, peers)` → `kind=wireguard`.
 - [x] `add_hysteria2(...)` / `add_tuic(...)` → `kind=hysteria2/tuic`
-      (`engine=sing-box`), prompting the protocol-specific fields.
+      (`engine=sing-box`), prompting the protocol-specific fields and validating
+      endpoint host/port.
 - [x] `edit_profile(id, **fields)`, `remove_profile(id)` (prune from
       subscription `profile_ids` and all group `profile_ids`).
 

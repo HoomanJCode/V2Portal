@@ -39,6 +39,19 @@ def test_add_manual_config_rejects_invalid():
         )
 
 
+def test_manual_proxy_factories_reject_invalid_endpoints():
+    with pytest.raises(ValueError, match="host"):
+        add_socks_proxy("s", "", 1080)
+    with pytest.raises(ValueError, match="between 1 and 65535"):
+        add_http_proxy("h", "proxy.example.com", 0)
+    with pytest.raises(ValueError, match="between 1 and 65535"):
+        add_hysteria2("h2", "proxy.example.com", 65536, "pw")
+    with pytest.raises(ValueError, match="integer"):
+        add_tuic("tuic", "proxy.example.com", "bad", "u", "pw")
+    with pytest.raises(ValueError, match="integer"):
+        add_socks_proxy("s", "proxy.example.com", 1080.5)
+
+
 def test_add_socks_http():
     p = add_socks_proxy("s", "1.2.3.4", 1080, "u", "p")
     srv = p.outbound["settings"]["servers"][0]
