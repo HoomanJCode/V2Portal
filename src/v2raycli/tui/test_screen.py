@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..test.latency import render_table, select_profiles, test_many
+from ..test.latency import render_table, save_results, select_profiles, test_many
 from . import widgets
 
 
@@ -36,5 +36,6 @@ def run(store) -> None:
         return
 
     results = test_many(profiles, store.config.settings, engines=store.config.engines)
+    save_results(results)
     render_table(results)
     widgets.show_message("Done", f"Tested {len(results)} outbounds.")
