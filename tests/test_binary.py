@@ -14,7 +14,7 @@ def test_release_asset_mapping():
     assert kind == "zip"
 
     name, kind = release_asset("sing-box", "v1.10.0", "linux", "arm64")
-    assert name == "sing-box-v1.10.0-linux-arm64.tar.gz"
+    assert name == "sing-box-1.10.0-linux-arm64.tar.gz"
     assert kind == "tar.gz"
 
 

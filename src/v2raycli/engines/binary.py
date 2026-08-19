@@ -45,13 +45,26 @@ def arch_name() -> str:
 def release_asset(engine: str, version: str, platform: str, arch: str) -> tuple[str, str]:
     """Return (asset filename, archive kind) for a GitHub release asset.
 
-    Best-effort naming; verify against the release listing for pinned versions.
+    ``version`` is a release tag (e.g. ``v1.13.19``). sing-box asset names use
+    the tag without the leading ``v``; xray assets are version-less.
     """
     if engine == "xray":
         plat = {"windows": "windows", "linux": "linux", "darwin": "macos"}.get(platform, platform)
         a = {"amd64": "64", "arm64": "arm64-v8a", "armv7": "armv7a"}.get(arch, arch)
         return f"Xray-{plat}-{a}.zip", "zip"
-    return f"sing-box-{version}-{platform}-{arch}.tar.gz", "tar.gz"
+    bare = (version or "").lstrip("v")
+    return f"sing-box-{bare}-{platform}-{arch}.tar.gz", "tar.gz"
+
+
+def _latest_tag(repo: str) -> str:
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+        resp = client.get(
+            url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "v2raycli"},
+        )
+        resp.raise_for_status()
+        return resp.json()["tag_name"]
 
 
 def _extract(archive: Path, dest: Path, kind: str, binary_name: str) -> None:
@@ -84,9 +97,15 @@ def download_binary(
     bin_dir = bin_dir or config.BIN_DIR
     bin_dir.mkdir(parents=True, exist_ok=True)
 
-    asset, kind = release_asset(engine, version, platform, arch)
     repo = "XTLS/Xray-core" if engine == "xray" else "SagerNet/sing-box"
-    url = f"https://github.com/{repo}/releases/download/{version}/{asset}"
+    tag = version or "latest"
+    if tag == "latest":
+        try:
+            tag = _latest_tag(repo)
+        except httpx.HTTPError as exc:
+            raise BinaryError(f"could not resolve latest release: {exc}") from exc
+    asset, kind = release_asset(engine, tag, platform, arch)
+    url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
     archive_path = bin_dir / asset
 
     try:
