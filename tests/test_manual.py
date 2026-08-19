@@ -1,0 +1,82 @@
+import json
+
+import pytest
+
+from v2raycli.models import Group, Profile, Subscription
+from v2raycli.storage import ConfigStore
+from v2raycli.outbounds.manual import (
+    add_hysteria2,
+    add_http_proxy,
+    add_manual_config,
+    add_socks_proxy,
+    add_tuic,
+    add_wireguard,
+    edit_profile,
+    remove_profile,
+)
+
+
+def test_add_manual_config():
+    raw = json.dumps({"protocol": "vmess", "tag": "x", "settings": {"vnext": []}})
+    p = add_manual_config(raw, "m")
+    assert p.kind == "manual"
+    assert "protocol" not in p.outbound and "tag" not in p.outbound
+    assert p.outbound["settings"]["vnext"] == []
+
+
+def test_add_manual_config_rejects_invalid():
+    with pytest.raises(ValueError):
+        add_manual_config("not json", "m")
+    with pytest.raises(ValueError):
+        add_manual_config(json.dumps({"protocol": "socks", "listen": "0.0.0.0"}), "m")
+    with pytest.raises(ValueError):
+        add_manual_config(json.dumps({"protocol": "bogus"}), "m")
+
+
+def test_add_socks_http():
+    p = add_socks_proxy("s", "1.2.3.4", 1080, "u", "p")
+    srv = p.outbound["settings"]["servers"][0]
+    assert p.kind == "socks"
+    assert srv["address"] == "1.2.3.4"
+    assert srv["users"] == [{"user": "u", "pass": "p"}]
+
+    h = add_http_proxy("h", "1.2.3.4", 8080)
+    assert h.kind == "http"
+    assert "users" not in h.outbound["settings"]["servers"][0]
+
+
+def test_add_wireguard_hysteria2_tuic():
+    w = add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "allowedIps": ["0.0.0.0/0"]}])
+    assert w.kind == "wireguard"
+    assert w.outbound["settings"]["secretKey"] == "k"
+
+    h = add_hysteria2("h2", "1.2.3.4", 443, "pw", obfs="salamander", obfs_password="op")
+    assert h.kind == "hysteria2"
+    assert h.engine == "sing-box"
+    assert h.outbound["obfs"]["type"] == "salamander"
+
+    t = add_tuic("tuic", "1.2.3.4", 443, "u", "pw", alpn="h3")
+    assert t.kind == "tuic"
+    assert t.outbound["tls"]["alpn"] == ["h3"]
+
+
+def test_edit_and_remove_profile(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p = store.add_profile(Profile(name="a"))
+    edit_profile(store, p.id, name="b")
+    assert store.get_profile(p.id).name == "b"
+    assert remove_profile(store, p.id) is True
+    assert store.get_profile(p.id) is None
+
+
+def test_remove_profile_prunes_refs(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p = store.add_profile(Profile(name="p"))
+    sub = store.add_subscription(Subscription(name="s", profile_ids=[p.id]))
+    group = store.add_group(Group(name="g", type="balancer", profile_ids=[p.id]))
+
+    assert remove_profile(store, p.id) is True
+    assert p.id not in sub.profile_ids
+    assert p.id not in group.profile_ids
