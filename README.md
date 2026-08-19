@@ -166,3 +166,10 @@ Config is JSON at `<config-dir>/config.json`. Derived dirs under the same base:
 pip install -e .[dev]
 pytest
 ```
+
+Live engine verification (downloads sing-box + xray, runs their own config
+checks, and exercises the proxy end-to-end):
+
+```bash
+python scripts/verify_engines.py
+```
