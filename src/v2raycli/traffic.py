@@ -21,9 +21,11 @@ def read_traffic(host: str, port: int, timeout: float = 3.0) -> dict | None:
         resp = httpx.get(f"http://{host}:{port}/connections", timeout=timeout)
         resp.raise_for_status()
         data = resp.json()
+        if not isinstance(data, dict):
+            return None
         return {
             "up": int(data.get("uploadTotal", 0)),
             "down": int(data.get("downloadTotal", 0)),
         }
-    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
         return None

@@ -123,8 +123,15 @@ class ConnectionController:
         current = self.traffic()
         if not current:
             return
-        selection.traffic_up += current["up"]
-        selection.traffic_down += current["down"]
+        try:
+            up = int(current.get("up", 0))
+            down = int(current.get("down", 0))
+        except (AttributeError, TypeError, ValueError):
+            return
+        if up < 0 or down < 0:
+            return
+        selection.traffic_up += up
+        selection.traffic_down += down
         try:
             self.store.save()
         except OSError:

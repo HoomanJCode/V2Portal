@@ -43,6 +43,18 @@ def test_read_traffic_returns_none_on_bad_json(monkeypatch):
     assert traffic.read_traffic("127.0.0.1", 9090) is None
 
 
+def test_read_traffic_returns_none_on_wrong_shape(monkeypatch):
+    class FakeResp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return []
+
+    monkeypatch.setattr(traffic.httpx, "get", lambda url, timeout=None: FakeResp())
+    assert traffic.read_traffic("127.0.0.1", 9090) is None
+
+
 def test_traffic_disabled_when_api_off(tmp_path):
     store = ConfigStore(tmp_path / "c.json")
     store.load()
@@ -89,6 +101,25 @@ def test_controller_records_traffic_on_disconnect(tmp_path, monkeypatch):
 
     assert profile.traffic_up == 111
     assert profile.traffic_down == 222
+
+
+def test_controller_ignores_malformed_traffic_on_disconnect(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 19090
+    binary = _fake_binary(tmp_path)
+    store.config.engines["sing-box"] = {"binary_path": str(binary), "version": "x"}
+
+    ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
+    assert ctl.connect(profile).state == "connected"
+    monkeypatch.setattr(traffic, "read_traffic", lambda host, port, timeout=3.0: {"up": "bad"})
+
+    ctl.disconnect()
+
+    assert profile.traffic_up == 0
+    assert profile.traffic_down == 0
 
 
 def test_controller_records_traffic_for_group(tmp_path, monkeypatch):
