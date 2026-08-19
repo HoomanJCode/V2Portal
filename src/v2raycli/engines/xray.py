@@ -34,6 +34,26 @@ _STRATEGY = {
 }
 
 
+def _validate_vnext(profile) -> None:
+    settings = profile.outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings")
+    vnext = settings.get("vnext")
+    if not isinstance(vnext, list) or not vnext or not isinstance(vnext[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing settings.vnext")
+    server = vnext[0]
+    if not isinstance(server.get("address"), str) or not server["address"].strip():
+        raise ValueError(f"{profile.kind} outbound is missing a server address")
+    port = server.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError(f"{profile.kind} outbound has an invalid server port")
+    users = server.get("users")
+    if not isinstance(users, list) or not users or not isinstance(users[0], dict):
+        raise ValueError(f"{profile.kind} outbound is missing a user")
+    if not isinstance(users[0].get("id"), str) or not users[0]["id"].strip():
+        raise ValueError(f"{profile.kind} outbound user is missing an id")
+
+
 @register
 class XrayAdapter(EngineAdapter):
     name = "xray"
@@ -144,9 +164,12 @@ class XrayAdapter(EngineAdapter):
         protocol = _KIND_PROTOCOL.get(profile.kind)
         if protocol is None:
             raise ValueError(f"xray does not support kind {profile.kind}")
-        settings = profile.outbound.get("settings")
-        if not isinstance(settings, dict):
-            raise ValueError(f"{profile.kind} outbound is missing settings")
+        if profile.kind in ("vmess", "vless"):
+            _validate_vnext(profile)
+        else:
+            settings = profile.outbound.get("settings")
+            if not isinstance(settings, dict):
+                raise ValueError(f"{profile.kind} outbound is missing settings")
         outbound = dict(profile.outbound)
         outbound["tag"] = profile.id
         outbound["protocol"] = protocol

@@ -481,6 +481,26 @@ def test_xray_rejects_malformed_typed_outbound(tmp_path):
     with pytest.raises(ValueError, match="missing settings"):
         _generate(store, missing_settings, default="xray")
 
+    missing_vnext = store.add_profile(
+        Profile(name="no-vnext", kind="vmess", outbound={"settings": {}})
+    )
+    with pytest.raises(ValueError, match="settings.vnext"):
+        _generate(store, missing_vnext, default="xray")
+
+    missing_user = store.add_profile(
+        Profile(
+            name="no-user",
+            kind="vless",
+            outbound={
+                "settings": {
+                    "vnext": [{"address": "1.2.3.4", "port": 443, "users": []}]
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="missing a user"):
+        _generate(store, missing_user, default="xray")
+
 
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
