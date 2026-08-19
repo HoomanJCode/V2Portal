@@ -100,6 +100,13 @@ class XrayAdapter(EngineAdapter):
         }
         if settings.dns:
             config["dns"] = {"servers": settings.dns}
+        if target.type == "balancer" and target.strategy in ("latency", "leastLoad"):
+            # xray's leastPing/leastLoad balancers require the observatory.
+            config["observatory"] = {
+                "subjectSelector": [p.id for p in target.profiles],
+                "probeURL": settings.test_url,
+                "probeInterval": "1m",
+            }
         return config
 
     def _outbound_for(self, profile) -> dict:

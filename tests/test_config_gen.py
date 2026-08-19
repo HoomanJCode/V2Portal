@@ -78,6 +78,17 @@ def test_singbox_single_mixed_inbound(tmp_path):
     assert cfg["route"]["final"] == p.id
 
 
+def test_xray_balancer_observatory(tmp_path):
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("a"))
+    b = store.add_profile(_vmess("b"))
+    bal = store.add_group(Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id, b.id]))
+    cfg = _generate(store, bal, default="xray")
+
+    assert cfg["observatory"]["subjectSelector"] == [a.id, b.id]
+    assert cfg["observatory"]["probeURL"] == store.config.settings.test_url
+
+
 def test_singbox_balancer_urltest_and_chain_detour(tmp_path):
     store = _store(tmp_path)
     a = store.add_profile(_vmess("a"))
