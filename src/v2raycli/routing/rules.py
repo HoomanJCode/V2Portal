@@ -47,6 +47,20 @@ def reorder_rules(rules: list[RoutingRule], ordered_ids: list[str]) -> list[Rout
     return [by_id[i] for i in ordered_ids]
 
 
+def uses_geo(routing: RoutingConfig) -> bool:
+    """True if split routing references any geoip/geosite assets."""
+    if routing.mode != "split":
+        return False
+    for rule in routing.rules:
+        if rule.match.get("geoip") or rule.match.get("geosite"):
+            return True
+        if any(d.startswith("geosite:") for d in rule.match.get("domains", [])):
+            return True
+        if any(i.startswith("geoip:") for i in rule.match.get("ips", [])):
+            return True
+    return False
+
+
 def normalize_rules(routing: RoutingConfig, selected_target_id: str | None) -> list[RoutingRule]:
     """Return a copy of the rules with ``target_id=None`` resolved.
 

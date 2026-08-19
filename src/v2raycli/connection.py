@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import socket
 import time
 from dataclasses import dataclass, field
@@ -12,8 +13,10 @@ from . import config
 from .engines import get_adapter
 from .engines.base import validate_config, write_runtime_config
 from .engines.binary import BinaryError, locate_binary
+from .geo import GeoError, ensure_geo_assets
 from .outbounds.groups import resolve_target
 from .outbounds.vpn import VPN_KINDS, detect_clients
+from .routing.rules import uses_geo
 from .runner import Proc
 
 
@@ -53,10 +56,17 @@ def lan_ips() -> list[str]:
 
 
 class ConnectionController:
-    def __init__(self, store, bin_dir: Path | None = None, runtime_dir: Path | None = None):
+    def __init__(
+        self,
+        store,
+        bin_dir: Path | None = None,
+        runtime_dir: Path | None = None,
+        geo_dir: Path | None = None,
+    ):
         self.store = store
         self.bin_dir = bin_dir
         self.runtime_dir = runtime_dir
+        self.geo_dir = geo_dir
         self.proc = Proc()
         self.status = ConnectionStatus()
         self._selection = None
@@ -129,12 +139,20 @@ class ConnectionController:
         except BinaryError as exc:
             raise ConnectionError(f"missing binary for {target.engine}: {exc}") from exc
 
+        env = None
+        if target.engine == "xray" and uses_geo(self.store.config.routing):
+            try:
+                geo_dir = ensure_geo_assets("xray", geo_dir=self.geo_dir)
+            except GeoError as exc:
+                raise ConnectionError(f"geo assets: {exc}") from exc
+            env = {**os.environ, "XRAY_LOCATION_ASSET": str(geo_dir)}
+
         try:
-            validate_config(target.engine, path, binary=binary)
+            validate_config(target.engine, path, binary=binary, env=env)
         except RuntimeError as exc:
             raise ConnectionError(f"invalid config: {exc}") from exc
 
-        self.proc.start([str(binary), *adapter.run_args(str(path))])
+        self.proc.start([str(binary), *adapter.run_args(str(path))], env=env)
         time.sleep(0.2)
         if not self.proc.is_running():
             tail = " ".join(self.proc.logs()[-3:])
