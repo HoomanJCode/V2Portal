@@ -48,7 +48,8 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] `create_single_group(name, profile_id)`.
 - [x] `remove_group`, `rename_group`, add/remove members.
 - [x] `resolve_target(profile_or_group) -> Target` (type, profile ids, strategy,
-      resolved engine) — single seam for config-gen / runner / tester.
+      resolved engine) — single seam for config-gen / runner / tester; reject
+      malformed persisted group types, memberships, and strategies.
 
 ### Split routing (`routing/rules.py`)
 

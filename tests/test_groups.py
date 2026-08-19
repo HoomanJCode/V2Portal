@@ -136,3 +136,34 @@ def test_persisted_group_engine_rejects_unsupported_member(tmp_path):
 
     with pytest.raises(ValueError, match="sing-box.*manual"):
         resolve_target(store, group)
+
+
+def test_persisted_group_shape_is_validated(tmp_path):
+    store, a, b = _store(tmp_path)
+
+    with pytest.raises(ValueError, match="at least one profile"):
+        resolve_target(store, Group(name="empty", type="single", profile_ids=[]))
+
+    with pytest.raises(ValueError, match="non-empty strings"):
+        resolve_target(store, Group(name="bad-ids", type="single", profile_ids=[None]))
+
+    with pytest.raises(ValueError, match="exactly 1 profile"):
+        resolve_target(store, Group(name="too-many", type="single", profile_ids=[a.id, b.id]))
+
+    with pytest.raises(ValueError, match="chain requires at least 2"):
+        resolve_target(store, Group(name="short-chain", type="chain", profile_ids=[a.id]))
+
+    with pytest.raises(ValueError, match="balancer requires at least 2"):
+        resolve_target(
+            store,
+            Group(name="short-balancer", type="balancer", strategy="latency", profile_ids=[a.id]),
+        )
+
+    with pytest.raises(ValueError, match="invalid strategy"):
+        resolve_target(
+            store,
+            Group(name="bad-strategy", type="balancer", strategy="weighted", profile_ids=[a.id, b.id]),
+        )
+
+    with pytest.raises(ValueError, match="unsupported group type"):
+        resolve_target(store, Group(name="bad-type", type="selector", profile_ids=[a.id]))

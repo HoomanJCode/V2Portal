@@ -24,8 +24,12 @@ class Target:
 
 
 def _resolve_members(store, profile_ids) -> list[Profile]:
+    if not isinstance(profile_ids, list) or not profile_ids:
+        raise ValueError("group requires at least one profile")
     profiles: list[Profile] = []
     for pid in profile_ids:
+        if not isinstance(pid, str) or not pid:
+            raise ValueError("group profile ids must be non-empty strings")
         profile = store.get_profile(pid)
         if profile is None:
             raise ValueError(f"unknown profile id: {pid}")
@@ -125,18 +129,26 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             profiles=[selection],
         )
     if isinstance(selection, Group):
+        if selection.type not in ("single", "balancer", "chain"):
+            raise ValueError(f"unsupported group type: {selection.type}")
         profiles = _resolve_members(store, selection.profile_ids)
-        if selection.type == "chain":
-            engine = _resolve_group_engine(profiles, "", selection.engine, default_engine)
-            return Target(
-                type="chain",
-                name=selection.name,
-                engine=engine,
-                profile_ids=[p.id for p in profiles],
-                profiles=profiles,
-            )
-        target_type = "single" if selection.type == "single" else "balancer"
-        strategy = selection.strategy if target_type == "balancer" else ""
+        if selection.type == "single":
+            if len(profiles) != 1:
+                raise ValueError("a single group requires exactly 1 profile")
+            strategy = ""
+            target_type = "single"
+        elif selection.type == "chain":
+            if len(profiles) < 2:
+                raise ValueError("a chain requires at least 2 profiles")
+            strategy = ""
+            target_type = "chain"
+        else:
+            if len(profiles) < 2:
+                raise ValueError("a balancer requires at least 2 profiles")
+            if not isinstance(selection.strategy, str) or selection.strategy not in VALID_STRATEGIES:
+                raise ValueError(f"invalid strategy: {selection.strategy}")
+            strategy = selection.strategy
+            target_type = "balancer"
         engine = _resolve_group_engine(profiles, strategy, selection.engine, default_engine)
         return Target(
             type=target_type,
