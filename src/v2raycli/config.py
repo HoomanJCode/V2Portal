@@ -39,16 +39,33 @@ def config_dir() -> Path:
     return Path(_user_config_dir(APP_NAME))
 
 
-CONFIG_PATH = config_dir() / "config.json"
-RUNTIME_DIR = config_dir() / "runtime"
-BIN_DIR = config_dir() / "bin"
-GEO_DIR = config_dir() / "geo"
-BACKUP_DIR = config_dir() / "backup"
+_BASE_DIR = config_dir()
+
+CONFIG_PATH = _BASE_DIR / "config.json"
+RUNTIME_DIR = _BASE_DIR / "runtime"
+BIN_DIR = _BASE_DIR / "bin"
+GEO_DIR = _BASE_DIR / "geo"
+BACKUP_DIR = _BASE_DIR / "backup"
+
+
+def set_config_dir(base: str | Path) -> None:
+    """Re-point all derived paths at an alternate base directory.
+
+    Used by the ``--config-dir`` CLI flag and by tests. Must be called before
+    ``ensure_dirs()`` / ``ConfigStore()`` to take effect.
+    """
+    global CONFIG_PATH, RUNTIME_DIR, BIN_DIR, GEO_DIR, BACKUP_DIR
+    base = Path(base)
+    CONFIG_PATH = base / "config.json"
+    RUNTIME_DIR = base / "runtime"
+    BIN_DIR = base / "bin"
+    GEO_DIR = base / "geo"
+    BACKUP_DIR = base / "backup"
 
 
 def ensure_dirs() -> None:
     """Create all directories the app needs."""
-    config_dir().mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     for directory in (RUNTIME_DIR, BIN_DIR, GEO_DIR, BACKUP_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
