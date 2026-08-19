@@ -26,8 +26,9 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
       status.
 - [x] Log parsing: `Proc` captures lines for both engines (structured parsing
       into engine events is left to the TUI/status layer).
-- [x] Traffic stats (stretch, seam now): **not implemented** — status exposes
-      `pid`/`started_at`; the stats API is deferred (TUI will degrade cleanly).
+- [x] Traffic stats (stretch): sing-box Clash API counters are polled by the
+      controller, displayed in the live TUI status, and accumulated on
+      disconnect; xray/VPN connections degrade cleanly when unavailable.
 - [x] Typed errors: binary missing, VPN client missing, port in use (engine
       immediate exit), invalid config.
 

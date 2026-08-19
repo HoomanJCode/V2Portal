@@ -30,6 +30,7 @@ def test_connection_screen_switches_target(tmp_path, monkeypatch):
             self.connected = []
             self.switched = []
             self.disconnected = False
+            self.traffic_calls = 0
 
         def connect(self, selection):
             self.connected.append(selection)
@@ -42,6 +43,10 @@ def test_connection_screen_switches_target(tmp_path, monkeypatch):
         def disconnect(self):
             self.disconnected = True
 
+        def traffic(self):
+            self.traffic_calls += 1
+            return {"up": 1024, "down": 2048}
+
     controller = FakeController()
     _FakeSession.answers = iter(["s", "d"])
     monkeypatch.setattr(connection_screen, "PromptSession", _FakeSession)
@@ -50,10 +55,17 @@ def test_connection_screen_switches_target(tmp_path, monkeypatch):
         "pick_profile",
         lambda profiles, groups: ("profile", second.id),
     )
-    monkeypatch.setattr(connection_screen, "_render", lambda status: None)
+    rendered = []
+    monkeypatch.setattr(
+        connection_screen,
+        "_render",
+        lambda status, traffic=None: rendered.append((status.target_name, traffic)),
+    )
 
     connection_screen.run(store, controller, first)
 
     assert controller.connected == [first]
     assert controller.switched == [second]
     assert controller.disconnected is True
+    assert controller.traffic_calls == 2
+    assert rendered == [("first", {"up": 1024, "down": 2048}), ("second", {"up": 1024, "down": 2048})]
