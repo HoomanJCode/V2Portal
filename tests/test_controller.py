@@ -1,6 +1,6 @@
 from v2raycli import connection
 from v2raycli.connection import ConnectionController
-from v2raycli.models import Profile, RoutingConfig, RoutingRule
+from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -59,6 +59,17 @@ def test_inbound_status_honors_allow_lan(tmp_path):
     assert info["listen"] == "127.0.0.1"
     assert info["urls"] == ["socks5://127.0.0.1:1080", "http://127.0.0.1:1080"]
     assert "lan" not in info
+
+
+def test_stale_group_maps_to_error_status(tmp_path):
+    store = _store(tmp_path)
+    group = store.add_group(Group(name="stale", type="single", profile_ids=["missing"]))
+
+    status = ConnectionController(store).connect(group)
+
+    assert status.state == "error"
+    assert status.target_name == "stale"
+    assert "unknown profile id" in status.error
 
 
 def test_engine_immediate_exit_maps_to_error(tmp_path):

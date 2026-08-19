@@ -76,19 +76,24 @@ class ConnectionController:
     def connect(self, selection) -> ConnectionStatus:
         self.disconnect()
         self._selection = selection
-        target = resolve_target(
-            self.store, selection, default_engine=self.store.config.settings.default_engine
-        )
-        is_vpn = target.type == "single" and target.profiles and target.profiles[0].kind in VPN_KINDS
-        engine_label = target.profiles[0].kind if is_vpn else target.engine
+        target = None
+        engine_label = ""
         try:
+            target = resolve_target(
+                self.store, selection, default_engine=self.store.config.settings.default_engine
+            )
+            is_vpn = target.type == "single" and target.profiles and target.profiles[0].kind in VPN_KINDS
+            engine_label = target.profiles[0].kind if is_vpn else target.engine
             if is_vpn:
                 return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
-        except (ConnectionError, BinaryError) as exc:
+        except (ConnectionError, BinaryError, TypeError, ValueError) as exc:
             self._selection = None
             self.status = ConnectionStatus(
-                state="error", target_name=target.name, engine=engine_label, error=str(exc)
+                state="error",
+                target_name=target.name if target is not None else getattr(selection, "name", ""),
+                engine=engine_label if target is not None else "",
+                error=str(exc),
             )
             return self.status
 
