@@ -23,8 +23,21 @@ def run(store, controller, selection) -> None:
             controller.disconnect()
             break
         if command == "s":
-            controller.disconnect()
-            break
+            selection = widgets.pick_profile(
+                store.list_profiles(), store.list_groups()
+            )
+            if selection is None:
+                continue
+            kind, key = selection
+            chosen = store.get_profile(key) if kind == "profile" else store.get_group(key)
+            if chosen is None:
+                continue
+            status = controller.switch(chosen)
+            if status.state != "connected":
+                widgets.show_message("Switch failed", status.error or "unknown error")
+                break
+            _render(status)
+            continue
         if command == "t":
             from .test_screen import run as run_test
 
