@@ -18,19 +18,19 @@ from pathlib import Path
 from . import config
 from .models import Config
 
-_BACKUP_RE = re.compile(r"^backup-(\d{8}-\d{6})-(.+)\.json$")
+_BACKUP_RE = re.compile(r"^backup-(\d{8}-\d{6}-\d{6})-(.+)\.json$")
 
 
 @dataclass
 class BackupInfo:
     path: str
-    timestamp: str  # YYYYmmdd-HHMMSS
+    timestamp: str  # YYYYmmdd-HHMMSS-ffffff
     reason: str
     size: int
 
 
 def _timestamp() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+    return datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
 
 def _safe_reason(reason: str) -> str:
