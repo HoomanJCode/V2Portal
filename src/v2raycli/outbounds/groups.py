@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..engines import AUTO, SINGBOX, XRAY, resolve_engine, strategy_supported
+from ..engines import AUTO, SINGBOX, XRAY, get_adapter, resolve_engine, strategy_supported
 from ..models import Group, Profile
 from .vpn import is_vpn
 
@@ -49,6 +49,7 @@ def _resolve_group_engine(
         engine = required.pop() if required else default
         if strategy == "leastLoad":
             engine = XRAY
+    _assert_engine_compatible(profiles, engine)
     if strategy and not strategy_supported(engine, strategy):
         raise ValueError(f"engine {engine} does not support strategy {strategy}")
     return engine
@@ -58,6 +59,14 @@ def _assert_non_vpn(profiles: list[Profile]) -> None:
     for profile in profiles:
         if is_vpn(profile):
             raise ValueError(f"VPN profile {profile.name!r} cannot join a balancer/chain")
+
+
+def _assert_engine_compatible(profiles: list[Profile], engine: str) -> None:
+    """Reject members that the selected engine cannot translate."""
+    supported = get_adapter(engine).supported_kinds
+    for profile in profiles:
+        if profile.kind not in supported:
+            raise ValueError(f"engine {engine} does not support profile kind {profile.kind}")
 
 
 def create_balancer_group(

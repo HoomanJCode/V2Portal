@@ -36,9 +36,11 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 
 - [x] `create_balancer_group(name, strategy, profile_ids, engine)` —
       strategy ∈ {latency, random, roundRobin, leastLoad}; ≥2 non-VPN profiles;
-      validate engine supports the strategy (leastLoad → xray only).
+      validate engine supports the strategy (leastLoad → xray only) and every
+      member kind.
 - [x] `create_chain_group(name, ordered_profile_ids, engine)` — ≥2 non-VPN
-      profiles, all resolvable by one engine.
+      profiles, all resolvable by one engine; explicit engines reject unsupported
+      member kinds before config generation.
 - [x] `create_single_group(name, profile_id)`.
 - [x] `remove_group`, `rename_group`, add/remove members.
 - [x] `resolve_target(profile_or_group) -> Target` (type, profile ids, strategy,

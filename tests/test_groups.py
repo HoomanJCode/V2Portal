@@ -1,6 +1,6 @@
 import pytest
 
-from v2raycli.models import Profile
+from v2raycli.models import Group, Profile
 from v2raycli.storage import ConfigStore
 from v2raycli.outbounds.groups import (
     create_balancer_group,
@@ -98,3 +98,41 @@ def test_auto_group_rejects_conflicting_member_engines(tmp_path):
 
     with pytest.raises(ValueError, match="different engines"):
         create_chain_group("chain", [a.id, b.id], store)
+
+
+def test_explicit_group_engine_rejects_unsupported_member(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    manual = store.add_profile(
+        Profile(
+            name="raw",
+            kind="manual",
+            engine="xray",
+            outbound={"protocol": "vmess", "settings": {}},
+        )
+    )
+
+    with pytest.raises(ValueError, match="sing-box.*manual"):
+        create_chain_group("chain", [manual.id, manual.id], store, engine="sing-box")
+
+
+def test_persisted_group_engine_rejects_unsupported_member(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    manual = store.add_profile(
+        Profile(
+            name="raw",
+            kind="manual",
+            engine="xray",
+            outbound={"protocol": "vmess", "settings": {}},
+        )
+    )
+    group = Group(
+        name="broken",
+        type="chain",
+        profile_ids=[manual.id, manual.id],
+        engine="sing-box",
+    )
+
+    with pytest.raises(ValueError, match="sing-box.*manual"):
+        resolve_target(store, group)
