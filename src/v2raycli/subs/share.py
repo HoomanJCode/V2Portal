@@ -16,6 +16,7 @@ import base64
 import json
 from urllib.parse import parse_qs, quote, unquote
 
+from ..engines import engine_for_kind
 from ..models import Profile
 
 
@@ -28,15 +29,6 @@ def _b64decode(s: str) -> bytes:
     s = "".join(s.split()).replace("-", "+").replace("_", "/")
     s += "=" * (-len(s) % 4)
     return base64.b64decode(s)
-
-
-def engine_for_kind(kind: str) -> str:
-    """Preferred engine for a protocol kind ('auto' where both engines work)."""
-    if kind == "ssr":
-        return "xray"
-    if kind in ("hysteria2", "tuic"):
-        return "sing-box"
-    return "auto"
 
 
 def _make_profile(raw: str, kind: str, name: str, outbound: dict) -> Profile:
