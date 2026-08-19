@@ -59,6 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--uninstall-service", action="store_true", help="remove the installed service"
     )
+    parser.add_argument(
+        "--health", action="store_true", help="print subscription expiry/traffic and exit"
+    )
     return parser
 
 
@@ -82,9 +85,12 @@ def main(argv: list[str] | None = None) -> int:
         return _install_service(store, args.install_service, args.config_dir)
     if args.uninstall_service:
         return _uninstall_service()
+    if args.health:
+        return _health(store)
 
     if not args.no_auto_update:
         _auto_update(store)
+        _health_check(store)
 
     if args.connect:
         return _connect(store, args.connect)
@@ -128,6 +134,41 @@ def _auto_update(store: ConfigStore) -> None:
             print(f"auto-updated subscription: {r['name']}", file=sys.stderr)
     for r in failed:
         print(f"auto-update failed for {r['name']}: {r['error']}", file=sys.stderr)
+
+
+def _health_check(store: ConfigStore) -> None:
+    """Warn on stderr about expired/expiring subscriptions; never raises."""
+    from .subs.health import check_subscriptions
+
+    try:
+        statuses = check_subscriptions(store)
+    except Exception as exc:  # noqa: BLE001 - never block startup
+        print(f"health check failed: {exc}", file=sys.stderr)
+        return
+    for status in statuses:
+        if status["expired"]:
+            print(f"subscription EXPIRED: {status['name']}", file=sys.stderr)
+        elif status["expiring"]:
+            print(
+                f"subscription expiring in {status['days_left']}d: {status['name']}",
+                file=sys.stderr,
+            )
+
+
+def _health(store: ConfigStore) -> int:
+    from .subs.health import check_subscriptions, human_bytes
+
+    statuses = check_subscriptions(store)
+    if not statuses:
+        print("no subscriptions")
+        return 0
+    for status in statuses:
+        state = "EXPIRED" if status["expired"] else ("expiring" if status["expiring"] else "ok")
+        expiry = status["expires"].strftime("%Y-%m-%d") if status["expires"] else "-"
+        print(
+            f"{status['name']:<24} {state:<9} {expiry:<12} {human_bytes(status['traffic_used'])}"
+        )
+    return 0
 
 
 def _install_service(store: ConfigStore, selection_id: str, config_dir: str | None) -> int:

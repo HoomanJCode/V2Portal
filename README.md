@@ -103,6 +103,7 @@ v2raycli --export <out.json> [--redact]      # export the full config (mask cred
 v2raycli --import <out.json> [--replace]     # import (merge by default, or replace)
 v2raycli --install-service <id>              # install a boot service (systemd/Termux)
 v2raycli --uninstall-service                 # remove the installed service
+v2raycli --health                            # show subscription expiry/traffic status
 ```
 
 ### Auto-update
@@ -111,6 +112,12 @@ Set `auto_update_days` on a subscription to have it re-fetched automatically
 on startup when stale (never updated, or older than N days). Fetch failures are
 logged and skipped — they never block startup. Disable per-run with
 `--no-auto-update`.
+
+### Subscription health
+
+On startup the CLI warns (to stderr) about expired subscriptions and those
+expiring within 7 days. `v2raycli --health` prints a table of expiry status and
+traffic used for every enabled subscription.
 
 
 ## Adding proxies
