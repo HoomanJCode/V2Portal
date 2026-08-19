@@ -42,3 +42,6 @@ def resolve_engine(
 
 def strategy_supported(engine: str, strategy: str) -> bool:
     return strategy in ENGINE_STRATEGIES.get(engine, set())
+
+
+from .base import EngineAdapter, get_adapter, register  # noqa: E402,F401
