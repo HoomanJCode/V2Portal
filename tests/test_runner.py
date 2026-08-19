@@ -25,3 +25,27 @@ def test_exited_process_not_running(tmp_path):
     proc.start([script])
     proc.wait()
     assert not proc.is_running()
+
+
+def test_engine_runs_in_own_session(tmp_path):
+    """The engine must not share the CLI's process group, so terminal Ctrl+C
+    (SIGINT to the foreground group) can't kill it before traffic is read."""
+    import os
+    import signal
+    import time
+
+    script = _script(tmp_path, "exec sleep 30")
+    proc = Proc()
+    proc.start([script])
+    assert proc.pid is not None
+    try:
+        # Same PID as the shell would mean no new session was created.
+        if os.name == "nt":
+            assert proc._process is not None
+            assert proc._process.creationflags & 0x00000200  # CREATE_NEW_PROCESS_GROUP
+        else:
+            with open(f"/proc/{proc.pid}/stat") as fh:
+                fields = fh.read().split()
+            assert fields[4] == str(proc.pid), "child must be its own session leader"
+    finally:
+        proc.stop()

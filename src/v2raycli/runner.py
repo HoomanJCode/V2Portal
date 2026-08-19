@@ -19,7 +19,15 @@ class Proc:
     def start(self, argv: list[str], env=None) -> None:
         kwargs: dict = {}
         if os.name == "nt":
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            # No console window for the engine, and keep it out of the
+            # console's Ctrl+C group so a Ctrl+C on the CLI doesn't kill the
+            # engine before traffic can be recorded.
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            # Own session: terminal Ctrl+C (SIGINT to the foreground group)
+            # reaches only the CLI, which then records traffic and stops the
+            # engine gracefully instead of the engine dying mid-read.
+            kwargs["start_new_session"] = True
         self._process = subprocess.Popen(
             argv,
             stdout=subprocess.PIPE,
