@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import TYPE_CHECKING
 
 from ..routing.rules import normalize_rules
@@ -67,6 +68,70 @@ def _validate_servers(profile) -> None:
     port = server.get("port")
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError(f"{profile.kind} outbound has an invalid server port")
+
+
+def _validate_wireguard_network(value, label: str, *, interface: bool = False) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"wireguard {label} must be a CIDR")
+    try:
+        if interface:
+            ipaddress.ip_interface(value)
+        else:
+            ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"wireguard {label} must be a CIDR") from exc
+
+
+def _validate_wireguard_endpoint(endpoint) -> None:
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("wireguard peer endpoint must be host:port")
+    value = endpoint.strip()
+    if value.startswith("["):
+        end = value.find("]")
+        host = value[1:end] if end > 1 else ""
+        port_text = value[end + 2 :] if end >= 0 and value[end + 1 :].startswith(":") else ""
+    else:
+        host, separator, port_text = value.rpartition(":")
+        if not separator:
+            host, port_text = "", ""
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("wireguard peer endpoint must be host:port") from exc
+    if not host.strip() or not 1 <= port <= 65535:
+        raise ValueError("wireguard peer endpoint must be host:port")
+
+
+def _validate_wireguard(profile) -> None:
+    settings = profile.outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError("wireguard outbound is missing settings")
+    private_key = settings.get("secretKey")
+    if not isinstance(private_key, str) or not private_key.strip():
+        raise ValueError("wireguard private key is required")
+    address = settings.get("address")
+    if not isinstance(address, list) or not address:
+        raise ValueError("wireguard address list is required")
+    for item in address:
+        _validate_wireguard_network(item, "address", interface=True)
+    peers = settings.get("peers")
+    if not isinstance(peers, list) or not peers:
+        raise ValueError("wireguard requires at least one peer")
+    for peer in peers:
+        if not isinstance(peer, dict):
+            raise ValueError("wireguard peer must be an object")
+        public_key = peer.get("publicKey")
+        if not isinstance(public_key, str) or not public_key.strip():
+            raise ValueError("wireguard peer public key is required")
+        _validate_wireguard_endpoint(peer.get("endpoint"))
+        allowed = peer.get("allowedIps")
+        if not isinstance(allowed, list) or not allowed:
+            raise ValueError("wireguard peer allowed IPs are required")
+        for item in allowed:
+            _validate_wireguard_network(item, "peer allowed IP")
+    mtu = settings.get("mtu")
+    if mtu is not None and (isinstance(mtu, bool) or not isinstance(mtu, int) or not 576 <= mtu <= 65535):
+        raise ValueError("wireguard MTU must be between 576 and 65535")
 
 
 @register
@@ -187,6 +252,8 @@ class XrayAdapter(EngineAdapter):
                 raise ValueError(f"{profile.kind} outbound is missing settings")
             if profile.kind in {"trojan", "ss", "ssr", "socks", "http"}:
                 _validate_servers(profile)
+            elif profile.kind == "wireguard":
+                _validate_wireguard(profile)
         outbound = dict(profile.outbound)
         outbound["tag"] = profile.id
         outbound["protocol"] = protocol

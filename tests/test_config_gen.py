@@ -552,6 +552,81 @@ def test_xray_rejects_malformed_server_shape(tmp_path):
         _generate(store, fractional_port, default="xray")
 
 
+def test_xray_wireguard_shape_is_preserved(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_wireguard())
+    cfg = _generate(store, profile, default="xray")
+    outbound = next(o for o in cfg["outbounds"] if o.get("tag") == profile.id)
+    assert outbound["protocol"] == "wireguard"
+    assert outbound["settings"]["secretKey"] == "k1"
+    assert outbound["settings"]["peers"][0]["endpoint"] == "1.2.3.4:51820"
+
+
+def test_xray_rejects_malformed_wireguard_shape(tmp_path):
+    store = _store(tmp_path)
+    missing_settings = store.add_profile(Profile(name="missing-settings", kind="wireguard", outbound={}))
+    with pytest.raises(ValueError, match="missing settings"):
+        _generate(store, missing_settings, default="xray")
+
+    missing_key = store.add_profile(
+        Profile(
+            name="missing-key",
+            kind="wireguard",
+            outbound={"settings": {"address": ["10.0.0.2/32"], "peers": []}},
+        )
+    )
+    with pytest.raises(ValueError, match="private key"):
+        _generate(store, missing_key, default="xray")
+
+    malformed_address = store.add_profile(
+        Profile(
+            name="malformed-address",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["not-a-cidr"],
+                    "peers": [{"publicKey": "peer", "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="address.*CIDR"):
+        _generate(store, malformed_address, default="xray")
+
+    malformed_peer = store.add_profile(
+        Profile(
+            name="malformed-peer",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [{"publicKey": "peer", "endpoint": "not-an-endpoint", "allowedIps": ["0.0.0.0/0"]}],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="endpoint must be host:port"):
+        _generate(store, malformed_peer, default="xray")
+
+    malformed_allowed = store.add_profile(
+        Profile(
+            name="malformed-allowed",
+            kind="wireguard",
+            outbound={
+                "settings": {
+                    "secretKey": "key",
+                    "address": ["10.0.0.2/32"],
+                    "peers": [{"publicKey": "peer", "endpoint": "1.2.3.4:51820", "allowedIps": ["bad-cidr"]}],
+                }
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="peer allowed IP.*CIDR"):
+        _generate(store, malformed_allowed, default="xray")
+
+
 def test_manual_xray_outbound(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(
