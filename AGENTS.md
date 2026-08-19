@@ -20,11 +20,6 @@ Project: `v2raycli` — an interactive v2ray CLI client (sing-box + xray-core).
 ## Commit conventions
 
 - Concise, imperative subject describing intent; one topic per commit.
-- End every commit message with:
-  ```
-  🤖 Generated with Codebuff
-  Co-Authored-By: Codebuff <noreply@codebuff.com>
-  ```
 - Git identity may be unset locally. If `git commit` rejects for a missing
   identity, use:
   `git -c user.name="HoomanJ" -c user.email="Hooman.Jalalpoor@gmail.com" commit ...`
