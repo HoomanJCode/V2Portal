@@ -63,6 +63,18 @@ def _vnext_user(profile) -> tuple[dict, dict]:
     return server, user
 
 
+def _positive_int(value: int, label: str) -> int:
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        raise ValueError(f"{label} must be a positive integer")
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a positive integer") from exc
+    if normalized <= 0:
+        raise ValueError(f"{label} must be a positive integer")
+    return normalized
+
+
 def _wireguard_network(value: str, label: str, *, interface: bool = False) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"wireguard {label} must be a CIDR")
@@ -73,6 +85,33 @@ def _wireguard_network(value: str, label: str, *, interface: bool = False) -> No
             ipaddress.ip_network(value, strict=False)
     except ValueError as exc:
         raise ValueError(f"wireguard {label} must be a CIDR") from exc
+
+
+def _native_outbound(profile) -> dict:
+    if not isinstance(profile.outbound, dict):
+        raise ValueError(f"{profile.kind} outbound must be an object")
+    outbound = dict(profile.outbound)
+    server = outbound.get("server")
+    if not isinstance(server, str) or not server.strip():
+        raise ValueError(f"{profile.kind} outbound is missing a server")
+    port = outbound.get("server_port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError(f"{profile.kind} outbound has an invalid server port")
+    if profile.kind == "hysteria2":
+        password = outbound.get("password")
+        if not isinstance(password, str) or not password.strip():
+            raise ValueError("hysteria2 password is required")
+        for field, label in (("up_mbps", "hysteria2 upload rate"), ("down_mbps", "hysteria2 download rate")):
+            if field in outbound and outbound[field] is not None:
+                outbound[field] = _positive_int(outbound[field], label)
+    else:
+        uuid = outbound.get("uuid")
+        if not isinstance(uuid, str) or not uuid.strip():
+            raise ValueError("tuic UUID is required")
+        password = outbound.get("password")
+        if not isinstance(password, str) or not password.strip():
+            raise ValueError("tuic password is required")
+    return outbound
 
 
 def _split_endpoint(endpoint: str) -> tuple[str, int]:
@@ -261,7 +300,7 @@ class SingBoxAdapter(EngineAdapter):
     def _outbound_for(self, profile) -> dict:
         kind = profile.kind
         if kind in ("hysteria2", "tuic"):
-            outbound = dict(profile.outbound)
+            outbound = _native_outbound(profile)
             outbound["type"] = kind
             return outbound
         if kind in ("socks", "http"):

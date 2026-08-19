@@ -81,6 +81,55 @@ def test_singbox_wireguard_is_endpoint(tmp_path):
     assert cfg["route"]["final"] == p.id
 
 
+def test_singbox_rejects_malformed_native_outbounds(tmp_path):
+    store = _store(tmp_path)
+    malformed_hysteria = store.add_profile(
+        Profile(name="bad-h2", kind="hysteria2", outbound=[])
+    )
+    with pytest.raises(ValueError, match="must be an object"):
+        _generate(store, malformed_hysteria, default="sing-box")
+
+    missing_tuic_credentials = store.add_profile(
+        Profile(
+            name="bad-tuic",
+            kind="tuic",
+            outbound={"server": "1.2.3.4", "server_port": 443, "uuid": "", "password": "pw"},
+        )
+    )
+    with pytest.raises(ValueError, match="tuic UUID"):
+        _generate(store, missing_tuic_credentials, default="sing-box")
+
+    invalid_rate = store.add_profile(
+        Profile(
+            name="bad-rate",
+            kind="hysteria2",
+            outbound={
+                "server": "1.2.3.4",
+                "server_port": 443,
+                "password": "pw",
+                "up_mbps": 0,
+            },
+        )
+    )
+    with pytest.raises(ValueError, match="upload rate"):
+        _generate(store, invalid_rate, default="sing-box")
+
+
+def test_singbox_native_outbound_shape_is_preserved(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(
+        Profile(
+            name="h2",
+            kind="hysteria2",
+            outbound={"server": "1.2.3.4", "server_port": 443, "password": "pw", "up_mbps": "10"},
+        )
+    )
+    cfg = _generate(store, profile, default="sing-box")
+    outbound = next(o for o in cfg["outbounds"] if o.get("tag") == profile.id)
+    assert outbound["type"] == "hysteria2"
+    assert outbound["up_mbps"] == 10
+
+
 def test_singbox_rejects_malformed_wireguard_endpoint(tmp_path):
     store = _store(tmp_path)
     missing_settings = store.add_profile(Profile(name="bad", kind="wireguard", outbound={}))
