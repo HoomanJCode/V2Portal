@@ -46,7 +46,7 @@ def _resolve_group_engine(
         engine = required.pop() if required else default
         if strategy == "leastLoad":
             engine = XRAY
-    if not strategy_supported(engine, strategy):
+    if strategy and not strategy_supported(engine, strategy):
         raise ValueError(f"engine {engine} does not support strategy {strategy}")
     return engine
 
