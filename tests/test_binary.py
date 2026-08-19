@@ -2,6 +2,7 @@ import pytest
 
 from v2raycli.engines.binary import (
     BinaryError,
+    effective_platform,
     get_version,
     locate_binary,
     release_asset,
@@ -16,6 +17,17 @@ def test_release_asset_mapping():
     name, kind = release_asset("sing-box", "v1.10.0", "linux", "arm64")
     assert name == "sing-box-1.10.0-linux-arm64.tar.gz"
     assert kind == "tar.gz"
+
+
+def test_effective_platform_android(monkeypatch):
+    monkeypatch.setattr("v2raycli.engines.binary.is_android", lambda: True)
+    assert effective_platform("sing-box", "linux") == "android"
+    assert effective_platform("xray", "linux") == "linux"
+
+
+def test_effective_platform_not_android(monkeypatch):
+    monkeypatch.setattr("v2raycli.engines.binary.is_android", lambda: False)
+    assert effective_platform("sing-box", "linux") == "linux"
 
 
 def test_locate_absolute_path(tmp_path):

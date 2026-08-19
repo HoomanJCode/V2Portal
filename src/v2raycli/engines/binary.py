@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -26,6 +27,21 @@ def platform_name() -> str:
     if sys.platform == "darwin":
         return "darwin"
     return "linux"
+
+
+def is_android() -> bool:
+    """Detect Termux/Android (bionic libc) where sing-box needs android builds."""
+    return os.path.exists("/system/build.prop") or bool(os.environ.get("TERMUX_VERSION"))
+
+
+def effective_platform(engine: str, platform: str) -> str:
+    """Map linux->android for sing-box on Termux/Android.
+
+    xray's linux-arm64 build runs on bionic, so it stays on ``linux``.
+    """
+    if engine == "sing-box" and platform == "linux" and is_android():
+        return "android"
+    return platform
 
 
 def arch_name() -> str:
@@ -96,6 +112,7 @@ def download_binary(
     adapter = get_adapter(engine)
     bin_dir = bin_dir or config.BIN_DIR
     bin_dir.mkdir(parents=True, exist_ok=True)
+    platform = effective_platform(engine, platform)
 
     repo = "XTLS/Xray-core" if engine == "xray" else "SagerNet/sing-box"
     tag = version or "latest"
