@@ -220,6 +220,45 @@ def _transport(stream: dict) -> dict | None:
     return None
 
 
+def _validate_settings(settings) -> None:
+    listen = getattr(settings, "listen", None)
+    if not isinstance(listen, str) or not listen.strip():
+        raise ValueError("sing-box listen address is required")
+    if not isinstance(getattr(settings, "allow_lan", None), bool):
+        raise ValueError("sing-box allow_lan must be boolean")
+
+    mixed_port = getattr(settings, "mixed_port", None)
+    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int) or not 1 <= mixed_port <= 65535:
+        raise ValueError("sing-box mixed_port must be between 1 and 65535")
+
+    auth = getattr(settings, "inbound_auth", None)
+    if not isinstance(auth, dict):
+        raise ValueError("sing-box inbound_auth must be an object")
+    enabled = auth.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("sing-box inbound_auth.enabled must be boolean")
+    if enabled:
+        for field in ("username", "password"):
+            value = auth.get(field)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"sing-box inbound_auth.{field} is required")
+
+    dns = getattr(settings, "dns", None)
+    if not isinstance(dns, list):
+        raise ValueError("sing-box DNS servers must be a list")
+    for server in dns:
+        if not isinstance(server, str) or not server.strip():
+            raise ValueError("sing-box DNS servers must contain non-empty text")
+
+    traffic_api = getattr(settings, "traffic_api", None)
+    if not isinstance(traffic_api, bool):
+        raise ValueError("sing-box traffic_api must be boolean")
+    if traffic_api:
+        api_port = getattr(settings, "traffic_api_port", None)
+        if isinstance(api_port, bool) or not isinstance(api_port, int) or not 1 <= api_port <= 65535:
+            raise ValueError("sing-box traffic_api_port must be between 1 and 65535")
+
+
 @register
 class SingBoxAdapter(EngineAdapter):
     name = "sing-box"
@@ -229,6 +268,7 @@ class SingBoxAdapter(EngineAdapter):
     supported_strategies = frozenset({"latency", "random", "roundRobin"})
 
     def generate(self, settings: "Settings", routing: "RoutingConfig", target: "Target") -> dict:
+        _validate_settings(settings)
         outbounds = [
             {"type": "direct", "tag": "direct"},
             {"type": "block", "tag": "block"},

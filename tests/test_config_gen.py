@@ -397,6 +397,55 @@ def test_singbox_dns_typed_format(tmp_path):
     assert cfg["route"]["default_domain_resolver"] == "dns-1"
 
 
+def test_singbox_settings_shape_is_preserved(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess("auth"))
+    store.config.settings.inbound_auth = {
+        "enabled": True,
+        "username": "user",
+        "password": "pass",
+    }
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 1234
+    cfg = _generate(store, profile, default="sing-box")
+    assert cfg["inbounds"][0]["users"] == [{"username": "user", "password": "pass"}]
+    assert cfg["experimental"]["clash_api"]["external_controller"] == "127.0.0.1:1234"
+
+
+def test_singbox_rejects_malformed_settings(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess("settings"))
+
+    store.config.settings.inbound_auth = []
+    with pytest.raises(ValueError, match="inbound_auth must be an object"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.inbound_auth = {"enabled": True, "username": "user"}
+    with pytest.raises(ValueError, match="inbound_auth.password"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.inbound_auth = {"enabled": False, "username": "", "password": ""}
+    store.config.settings.dns = "1.1.1.1"
+    with pytest.raises(ValueError, match="DNS servers must be a list"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.dns = ["1.1.1.1"]
+    store.config.settings.mixed_port = 0
+    with pytest.raises(ValueError, match="mixed_port must be between"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.mixed_port = 1080
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 65536
+    with pytest.raises(ValueError, match="traffic_api_port must be between"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.traffic_api_port = 1234
+    store.config.settings.allow_lan = "yes"
+    with pytest.raises(ValueError, match="allow_lan must be boolean"):
+        _generate(store, profile, default="sing-box")
+
+
 def test_singbox_traffic_api_enabled(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(_vmess())

@@ -53,7 +53,7 @@ strategy details must be verified and locked in.
 - [x] `write_runtime_config(engine, config_dict) -> path` into `RUNTIME_DIR`.
 - [x] `validate_config(engine, path)` — sing-box `check` / xray `run -test`.
 - [x] Reject malformed persisted manual and typed outbounds, including VMess/VLESS, server-based, WireGuard, stream-mapping, and inbound-settings shapes, before xray config generation.
-- [x] Reject malformed persisted VMess/VLESS, server-based, WireGuard, native Hysteria2/TUIC, and stream-mapping shapes before sing-box generation.
+- [x] Reject malformed persisted VMess/VLESS, server-based, WireGuard, native Hysteria2/TUIC, stream-mapping, and inbound-settings shapes before sing-box generation.
 
 ## Verification spike (run against sing-box 1.13.19 + xray 26.3.27)
 
