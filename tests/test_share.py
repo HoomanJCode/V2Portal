@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from v2raycli.models import Profile
 from v2raycli.subs.share import ShareLinkError, decode_link, encode_link
 
 
@@ -158,6 +159,18 @@ def test_malformed_links_raise_typed_error(link):
 def test_non_text_link_raises_typed_error():
     with pytest.raises(ShareLinkError, match="must be text"):
         decode_link(None)
+
+
+def test_encode_malformed_profile_raises_typed_error():
+    profile = Profile(kind="vmess", outbound={})
+
+    with pytest.raises(ShareLinkError, match="cannot encode kind vmess"):
+        encode_link(profile)
+
+
+def test_encode_non_profile_raises_typed_error():
+    with pytest.raises(ShareLinkError, match="must be a Profile"):
+        encode_link(None)
 
 
 def test_encode_ss_round_trip():

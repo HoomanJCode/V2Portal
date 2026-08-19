@@ -535,12 +535,19 @@ def _encode_proxy(p: Profile, scheme: str) -> str:
 
 def encode_link(profile: Profile) -> str:
     """Reverse a Profile into a share link (for export)."""
-    if profile.kind == "vmess":
-        return _encode_vmess(profile)
-    if profile.kind == "ss":
-        return _encode_ss(profile)
-    if profile.kind == "socks":
-        return _encode_proxy(profile, "socks")
-    if profile.kind == "http":
-        return _encode_proxy(profile, "http")
-    raise ShareLinkError(f"cannot encode kind: {profile.kind}")
+    if not isinstance(profile, Profile):
+        raise ShareLinkError("profile must be a Profile")
+    try:
+        if profile.kind == "vmess":
+            return _encode_vmess(profile)
+        if profile.kind == "ss":
+            return _encode_ss(profile)
+        if profile.kind == "socks":
+            return _encode_proxy(profile, "socks")
+        if profile.kind == "http":
+            return _encode_proxy(profile, "http")
+        raise ShareLinkError(f"cannot encode kind: {profile.kind}")
+    except ShareLinkError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize malformed profiles at the public boundary
+        raise ShareLinkError(f"cannot encode kind {profile.kind}: {exc}") from exc
