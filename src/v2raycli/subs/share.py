@@ -341,6 +341,103 @@ def parse_http(raw: str) -> Profile:
     return _parse_plain_proxy(raw, "http")
 
 
+# -- hysteria2 -----------------------------------------------------------
+
+
+def parse_hysteria2(raw: str) -> Profile:
+    userinfo, host, port_s, query, name = _split_authority(raw[len("hysteria2://") :])
+    q = _query_dict(query)
+    port = int(port_s or 0)
+    insecure = q.get("insecure", "") in ("1", "true", "True")
+    sni = q.get("sni", "") or host
+    obfs = q.get("obfs", "")
+    obfs_password = q.get("obfs-password", "")
+    pin = q.get("pinSHA256", "")
+
+    outbound: dict = {
+        "server": host,
+        "server_port": port,
+        "password": userinfo,
+        "tls": {"enabled": True, "server_name": sni, "insecure": insecure},
+    }
+    if pin:
+        outbound["tls"]["pinSHA256"] = pin
+    if obfs:
+        obfs_obj: dict = {"type": obfs}
+        if obfs_password:
+            obfs_obj["password"] = obfs_password
+        outbound["obfs"] = obfs_obj
+    up = q.get("up", "")
+    down = q.get("down", "")
+    if up:
+        outbound["up_mbps"] = int(up)
+    if down:
+        outbound["down_mbps"] = int(down)
+    return _make_profile(raw, "hysteria2", name or f"{host}:{port}", outbound)
+
+
+# -- tuic -----------------------------------------------------------------
+
+
+def parse_tuic(raw: str) -> Profile:
+    userinfo, host, port_s, query, name = _split_authority(raw[len("tuic://") :])
+    q = _query_dict(query)
+    port = int(port_s or 0)
+    uuid, _, password = userinfo.partition(":")
+    sni = q.get("sni", "") or host
+    alpn = q.get("alpn", "")
+    allow_insecure = q.get("allow_insecure", "") in ("1", "true", "True")
+
+    outbound: dict = {
+        "server": host,
+        "server_port": port,
+        "uuid": uuid,
+        "password": password,
+        "congestion_control": q.get("congestion_control", "cubic"),
+        "udp_relay_mode": q.get("udp_relay_mode", "native"),
+        "tls": {"enabled": True, "server_name": sni, "insecure": allow_insecure},
+    }
+    if alpn:
+        outbound["tls"]["alpn"] = [a for a in alpn.split(",") if a]
+    return _make_profile(raw, "tuic", name or f"{host}:{port}", outbound)
+
+
+# -- wireguard ------------------------------------------------------------
+
+
+def parse_wireguard(raw: str) -> Profile:
+    payload = unquote(raw[len("wireguard://") :])
+    if "#" in payload:
+        payload, _ = payload.split("#", 1)
+    if payload.startswith("{"):
+        data = json.loads(payload)
+    else:
+        data = json.loads(_b64decode(payload).decode("utf-8"))
+
+    peers = []
+    for peer in data.get("peers", []):
+        entry = {
+            "publicKey": peer.get("public_key", ""),
+            "endpoint": peer.get("endpoint", ""),
+            "allowedIps": peer.get("allowed_ips", []),
+        }
+        if peer.get("preshared_key"):
+            entry["preSharedKey"] = peer["preshared_key"]
+        peers.append(entry)
+
+    outbound: dict = {
+        "settings": {
+            "secretKey": data.get("private_key", ""),
+            "address": data.get("address", []),
+            "peers": peers,
+        }
+    }
+    if data.get("mtu"):
+        outbound["settings"]["mtu"] = int(data["mtu"])
+    name = data.get("name", "") or "wireguard"
+    return _make_profile(raw, "wireguard", name, outbound)
+
+
 # -- dispatch -------------------------------------------------------------
 
 
@@ -354,6 +451,9 @@ _HANDLERS = {
     "socks5": parse_socks,
     "http": parse_http,
     "https": parse_http,
+    "hysteria2": parse_hysteria2,
+    "tuic": parse_tuic,
+    "wireguard": parse_wireguard,
 }
 
 
