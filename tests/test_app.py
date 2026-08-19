@@ -1,12 +1,79 @@
-from v2raycli import config
-from v2raycli.app import main
+from v2raycli import app, config
+from v2raycli.models import Profile
+from v2raycli.storage import ConfigStore
+
+SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
+
+
+def _store(tmp_path):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    return store
 
 
 def test_main_runs_and_exits_zero(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.json")
     monkeypatch.setattr(config, "ensure_dirs", lambda: None)
 
-    assert main() == 0
+    assert app.main([]) == 0
     out = capsys.readouterr().out
     assert "v2raycli v" in out
     assert "profiles: 0" in out
+
+
+def test_version_flag(capsys):
+    assert app.main(["--version"]) == 0
+    assert "v2raycli v" in capsys.readouterr().out
+
+
+def test_config_dir_flag(tmp_path):
+    rc = app.main(["--config-dir", str(tmp_path)])
+    assert rc == 0
+    assert (tmp_path / "config.json").exists()
+
+
+def test_headless_summary(tmp_path, capsys):
+    assert app.main(["--headless", "--config-dir", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "profiles: 0" in out
+
+
+def test_connect_unknown_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    assert app._connect(store, "nope") == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_connect_runs_and_disconnects(tmp_path, monkeypatch, capsys):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="t", kind="socks", outbound=SOCKS))
+
+    class FakeProc:
+        def is_running(self):
+            return False
+
+    class FakeStatus:
+        state = "connected"
+        target_name = "t"
+        engine = "sing-box"
+        inbound = {"urls": ["socks5://0.0.0.0:1080"], "lan": []}
+
+    class FakeController:
+        proc = FakeProc()
+
+        def __init__(self, store):
+            self.store = store
+            self.disconnected = False
+
+        def connect(self, selection):
+            return FakeStatus()
+
+        def disconnect(self):
+            self.disconnected = True
+
+    monkeypatch.setattr("v2raycli.connection.ConnectionController", FakeController)
+
+    assert app._connect(store, profile.id) == 0
+    out = capsys.readouterr().out
+    assert "connected to t" in out
+    assert "socks5://" in out
