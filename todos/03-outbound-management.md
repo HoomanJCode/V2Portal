@@ -17,7 +17,7 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] `add_http_proxy(name, host, port, user, pass)` → `kind=http`;
       validate non-empty host and port range 1–65535.
 - [x] `add_wireguard(name, private_key, address, peers)` → `kind=wireguard`; validate
-      private key, local addresses, peer keys/endpoints, and allowed IPs.
+      private key, local/peer CIDRs, peer keys/endpoints, and allowed IPs.
 - [x] `add_hysteria2(...)` / `add_tuic(...)` → `kind=hysteria2/tuic`
       (`engine=sing-box`), prompting the protocol-specific fields and validating
       endpoint host/port, credentials, and positive bandwidth limits.

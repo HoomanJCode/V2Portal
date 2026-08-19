@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 
 from ..models import Profile, now_iso
@@ -75,6 +76,18 @@ def _positive_int(value: int, label: str) -> int:
     return normalized
 
 
+def _wireguard_network(value: str, label: str, *, interface: bool = False) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"wireguard {label} must be a CIDR")
+    try:
+        if interface:
+            ipaddress.ip_interface(value)
+        else:
+            ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"wireguard {label} must be a CIDR") from exc
+
+
 def _wireguard_endpoint(endpoint: str) -> None:
     if not isinstance(endpoint, str) or not endpoint.strip():
         raise ValueError("wireguard peer endpoint is required")
@@ -125,23 +138,24 @@ def add_wireguard(
 ) -> Profile:
     if not isinstance(private_key, str) or not private_key.strip():
         raise ValueError("wireguard private key is required")
-    if (
-        not isinstance(address, list)
-        or not address
-        or any(not isinstance(item, str) or not item.strip() for item in address)
-    ):
+    if not isinstance(address, list) or not address:
         raise ValueError("wireguard address list is required")
+    for item in address:
+        _wireguard_network(item, "address", interface=True)
     if not isinstance(peers, list) or not peers:
         raise ValueError("wireguard requires at least one peer")
     for peer in peers:
         if not isinstance(peer, dict):
             raise ValueError("wireguard peer must be an object")
-        if not str(peer.get("publicKey", "")).strip():
+        public_key = peer.get("publicKey")
+        if not isinstance(public_key, str) or not public_key.strip():
             raise ValueError("wireguard peer public key is required")
         _wireguard_endpoint(peer.get("endpoint"))
         allowed = peer.get("allowedIps")
         if not isinstance(allowed, list) or not allowed:
             raise ValueError("wireguard peer allowed IPs are required")
+        for item in allowed:
+            _wireguard_network(item, "peer allowed IP", interface=False)
     if mtu is not None:
         if isinstance(mtu, bool):
             raise ValueError("wireguard MTU must be an integer")

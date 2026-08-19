@@ -80,12 +80,18 @@ def test_add_socks_http():
 def test_wireguard_factory_rejects_incomplete_profile():
     with pytest.raises(ValueError, match="private key"):
         add_wireguard("wg", "", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}])
+    with pytest.raises(ValueError, match="address.*CIDR"):
+        add_wireguard("wg", "k", ["not-an-address"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}])
     with pytest.raises(ValueError, match="endpoint"):
         add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "allowedIps": ["0.0.0.0/0"]}])
     with pytest.raises(ValueError, match="host:port"):
         add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "not-an-endpoint", "allowedIps": ["0.0.0.0/0"]}])
     with pytest.raises(ValueError, match="allowed IPs"):
         add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": []}])
+    with pytest.raises(ValueError, match="peer allowed IP.*CIDR"):
+        add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": "pk", "endpoint": "1.2.3.4:51820", "allowedIps": ["not-a-cidr"]}])
+    with pytest.raises(ValueError, match="public key"):
+        add_wireguard("wg", "k", ["10.0.0.2/32"], [{"publicKey": 123, "endpoint": "1.2.3.4:51820", "allowedIps": ["0.0.0.0/0"]}])
 
 
 def test_add_wireguard_hysteria2_tuic():
