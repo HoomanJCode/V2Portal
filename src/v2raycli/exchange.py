@@ -30,6 +30,8 @@ _SECRET_KEYS = {
     "pre_shared_key",
     "preshared_key",
     "share_link",
+    "inline",
+    "auth_hint",
 }
 
 

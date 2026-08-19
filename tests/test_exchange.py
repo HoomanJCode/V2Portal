@@ -77,11 +77,29 @@ def test_redacted_export_has_no_secrets(tmp_path):
             outbound={"settings": {"servers": [{"address": "h", "port": 443, "password": "SECRET-PASS"}]}},
         )
     )
+    store.add_profile(
+        Profile(
+            name="vpn",
+            kind="openvpn",
+            vpn={
+                "type": "openvpn",
+                "inline": "client\nauth-user-pass\nVPN-SECRET\n",
+                "auth_hint": "VPN-AUTH-HINT",
+            },
+        )
+    )
 
     data = exchange.export_full(store, redact=True)
     text = json.dumps(data)
 
-    for secret in ("SECRET-UUID", "SECRET-PRIVATE", "SECRET-PSK", "SECRET-PASS"):
+    for secret in (
+        "SECRET-UUID",
+        "SECRET-PRIVATE",
+        "SECRET-PSK",
+        "SECRET-PASS",
+        "VPN-SECRET",
+        "VPN-AUTH-HINT",
+    ):
         assert secret not in text
     assert "REDACTED" in text
 

@@ -22,7 +22,8 @@ share-link export/import for migration, sharing, and disaster recovery.
 
 - [x] `export_full(path, redact=False) -> dict` — portable JSON with
       `schema_version`, settings, routing, profiles, subscriptions, groups;
-      when `redact=True`, mask passwords/uuid/private keys (share-safe).
+      when `redact=True`, mask passwords/uuid/private keys and inline VPN
+      configuration content (share-safe).
 - [x] `export_share_links(profile_ids, path)` — newline-separated share-link
       file via `subs.share.encode_link` (skip profiles that can't encode).
 - [x] `import_full(path, mode="merge")`:
