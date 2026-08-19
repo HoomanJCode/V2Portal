@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "prompt_toolkit>=3.0",
     "rich>=13.0",
-    "httpx[socks]>=0.24",
+    "httpx[socks]>=0.26",
     "platformdirs>=3.0",
 ]
 

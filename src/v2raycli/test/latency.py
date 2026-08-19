@@ -60,11 +60,7 @@ def _http_latency(url: str, port: int, timeout: float = 10.0) -> tuple[bool, flo
     proxy = f"socks5://127.0.0.1:{port}"
     start = time.monotonic()
     try:
-        with httpx.Client(
-            proxies={"http://": proxy, "https://": proxy},
-            timeout=timeout,
-            follow_redirects=True,
-        ) as client:
+        with httpx.Client(proxy=proxy, timeout=timeout, follow_redirects=True) as client:
             response = client.get(url)
             elapsed = (time.monotonic() - start) * 1000.0
             ok = response.status_code < 400
