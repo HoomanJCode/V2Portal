@@ -88,8 +88,8 @@ def _index_of_id(items, item_id: str) -> int | None:
     return None
 
 
-def _merge(store, incoming: Config) -> None:
-    profiles = list(store.config.profiles)
+def _merge_config(current: Config, incoming: Config) -> None:
+    profiles = list(current.profiles)
     keys = {_profile_key(p) for p in profiles}
 
     for profile in incoming.profiles:
@@ -103,34 +103,42 @@ def _merge(store, incoming: Config) -> None:
         profiles.append(profile)
         keys.add(key)
 
-    store.config.profiles = profiles
+    current.profiles = profiles
 
     for sub in incoming.subscriptions:
-        index = _index_of_id(store.config.subscriptions, sub.id)
+        index = _index_of_id(current.subscriptions, sub.id)
         if index is not None:
-            store.config.subscriptions[index] = sub
+            current.subscriptions[index] = sub
         else:
-            store.config.subscriptions.append(sub)
+            current.subscriptions.append(sub)
 
     for group in incoming.groups:
-        index = _index_of_id(store.config.groups, group.id)
+        index = _index_of_id(current.groups, group.id)
         if index is not None:
-            store.config.groups[index] = group
+            current.groups[index] = group
         else:
-            store.config.groups.append(group)
+            current.groups.append(group)
 
     for name, options in incoming.engines.items():
-        store.config.engines.setdefault(name, {}).update(options)
+        current.engines.setdefault(name, {}).update(options)
 
-    _relink(store)
+    _relink_config(current)
+
+
+def _merge(store, incoming: Config) -> None:
+    _merge_config(store.config, incoming)
+
+
+def _relink_config(current: Config) -> None:
+    profile_ids = {p.id for p in current.profiles}
+    for sub in current.subscriptions:
+        sub.profile_ids = [pid for pid in sub.profile_ids if pid in profile_ids]
+    for group in current.groups:
+        group.profile_ids = [pid for pid in group.profile_ids if pid in profile_ids]
 
 
 def _relink(store) -> None:
-    profile_ids = {p.id for p in store.config.profiles}
-    for sub in store.config.subscriptions:
-        sub.profile_ids = [pid for pid in sub.profile_ids if pid in profile_ids]
-    for group in store.config.groups:
-        group.profile_ids = [pid for pid in group.profile_ids if pid in profile_ids]
+    _relink_config(store.config)
 
 
 def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
@@ -161,8 +169,15 @@ def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
     if mode != "merge":
         raise ValueError(f"unknown import mode: {mode}")
 
-    _merge(store, incoming)
-    store.save()
+    candidate = Config.from_dict(store.config.to_dict())
+    _merge_config(candidate, incoming)
+    if candidate.to_dict() != store.config.to_dict():
+        store.notify_destructive("import-merge")
+        store.config = candidate
+        store.save()
+    else:
+        # Avoid rewriting the file or creating a backup for a true no-op.
+        return store.config
     return store.config
 
 
@@ -185,9 +200,12 @@ def import_share_links(store, path_or_text: str) -> list[Profile]:
         if key in existing:
             continue
         profile.source = "manual"
-        store.add_profile(profile)
         existing.add(key)
         added.append(profile)
 
-    store.save()
+    if added:
+        store.notify_destructive("import-share-links")
+        for profile in added:
+            store.add_profile(profile)
+        store.save()
     return added

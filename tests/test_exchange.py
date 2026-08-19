@@ -114,6 +114,32 @@ def test_import_merge_updates_by_id(tmp_path):
     assert store.config.profiles[0].name == "renamed"
 
 
+def test_import_merge_triggers_backup_hook(tmp_path):
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="old", kind="socks", outbound=SOCKS))
+    incoming = _store(tmp_path, "incoming.json")
+    incoming.add_profile(Profile(name="new", kind="socks", outbound=SOCKS))
+    path = _export(tmp_path, incoming)
+    backup_dir = tmp_path / "backups"
+    backup.install_backup_hook(store, backup_dir=backup_dir)
+
+    exchange.import_full(store, path, mode="merge")
+
+    assert any(b.reason == "import-merge" for b in backup.list_backups(backup_dir))
+
+
+def test_import_merge_noop_does_not_trigger_backup_hook(tmp_path):
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="existing", kind="socks", outbound=SOCKS))
+    path = _export(tmp_path, store, "same.json")
+    backup_dir = tmp_path / "backups"
+    backup.install_backup_hook(store, backup_dir=backup_dir)
+
+    exchange.import_full(store, path, mode="merge")
+
+    assert backup.list_backups(backup_dir) == []
+
+
 def test_import_replace_backs_up_first(tmp_path):
     bdir = tmp_path / "backups"
     store = _store(tmp_path)
@@ -176,3 +202,13 @@ def test_import_share_links_from_text(tmp_path):
     added = exchange.import_share_links(store, "http://1.2.3.4:8080#proxy")
     assert len(added) == 1
     assert added[0].kind == "http"
+
+
+def test_import_share_links_triggers_backup_hook(tmp_path):
+    store = _store(tmp_path)
+    backup_dir = tmp_path / "backups"
+    backup.install_backup_hook(store, backup_dir=backup_dir)
+
+    exchange.import_share_links(store, "http://1.2.3.4:8080#proxy")
+
+    assert any(b.reason == "import-share-links" for b in backup.list_backups(backup_dir))
