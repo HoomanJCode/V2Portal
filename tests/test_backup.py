@@ -93,6 +93,15 @@ def test_hook_fires_on_destructive_op(tmp_path):
     assert any(b.reason == "remove-profile" for b in backup.list_backups(bdir))
 
 
+def test_missing_group_does_not_fire_backup_hook(tmp_path):
+    bdir = tmp_path / "b"
+    store = _store(tmp_path)
+    backup.install_backup_hook(store, backup_dir=bdir)
+
+    assert store.remove_group("missing") is False
+    assert backup.list_backups(bdir) == []
+
+
 def test_hook_honors_backup_keep(tmp_path):
     bdir = tmp_path / "b"
     store = _store(tmp_path)

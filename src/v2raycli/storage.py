@@ -138,10 +138,12 @@ class ConfigStore:
         return list(self.config.groups)
 
     def remove_group(self, group_id: str) -> bool:
-        before = len(self.config.groups)
+        group = self.get_group(group_id)
+        if group is None:
+            return False
         self.notify_destructive("remove-group")
-        self.config.groups = [g for g in self.config.groups if g.id != group_id]
-        return len(self.config.groups) < before
+        self.config.groups.remove(group)
+        return True
 
     # -- routing -------------------------------------------------------------
 
