@@ -51,6 +51,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip auto-updating stale subscriptions on startup",
     )
+    parser.add_argument(
+        "--install-service",
+        metavar="ID",
+        help="install a service that connects to ID on boot (systemd/Termux)",
+    )
+    parser.add_argument(
+        "--uninstall-service", action="store_true", help="remove the installed service"
+    )
     return parser
 
 
@@ -69,6 +77,11 @@ def main(argv: list[str] | None = None) -> int:
     store = ConfigStore()
     store.load()
     backup.install_backup_hook(store)
+
+    if args.install_service:
+        return _install_service(store, args.install_service, args.config_dir)
+    if args.uninstall_service:
+        return _uninstall_service()
 
     if not args.no_auto_update:
         _auto_update(store)
@@ -115,6 +128,33 @@ def _auto_update(store: ConfigStore) -> None:
             print(f"auto-updated subscription: {r['name']}", file=sys.stderr)
     for r in failed:
         print(f"auto-update failed for {r['name']}: {r['error']}", file=sys.stderr)
+
+
+def _install_service(store: ConfigStore, selection_id: str, config_dir: str | None) -> int:
+    from . import service
+
+    try:
+        path = service.install_service(store, selection_id, config_dir)
+    except (ValueError, RuntimeError) as exc:
+        print(f"install failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"installed service -> {path}")
+    if service.platform() == "linux":
+        print("enable with: systemctl --user enable --now v2raycli")
+    elif service.platform() == "termux":
+        print("enable with: sv-enable v2raycli")
+    return 0
+
+
+def _uninstall_service() -> int:
+    from . import service
+
+    removed = service.uninstall_service()
+    if removed is None:
+        print("no service installed")
+        return 0
+    print(f"removed service -> {removed}")
+    return 0
 
 
 def _connect(store: ConfigStore, selection_id: str) -> int:

@@ -101,6 +101,8 @@ v2raycli --list-backups                      # list snapshots (newest first)
 v2raycli --restore <backup.json>             # restore a snapshot (safety backup first)
 v2raycli --export <out.json> [--redact]      # export the full config (mask credentials)
 v2raycli --import <out.json> [--replace]     # import (merge by default, or replace)
+v2raycli --install-service <id>              # install a boot service (systemd/Termux)
+v2raycli --uninstall-service                 # remove the installed service
 ```
 
 ### Auto-update
@@ -147,6 +149,22 @@ Each rule targets a profile, a group, `direct`, or `block`.
 In Settings, enable `allow_lan` (default on) — the inbound listens on `0.0.0.0`
 so other devices on your network can use `socks5://<your-ip>:1080` /
 `http://<your-ip>:1080`. Optionally enable inbound auth (username/password).
+
+## Run as a service
+
+Keep a chosen config connected across reboots:
+
+```bash
+v2raycli --install-service <profile-or-group-id>
+```
+
+- **Linux** — writes a systemd *user* unit to
+  `~/.config/systemd/user/v2raycli.service`; enable it with
+  `systemctl --user enable --now v2raycli`.
+- **Termux** — writes a `termux-services` run script to
+  `~/.termux/sv/v2raycli/run`; enable with `sv-enable v2raycli`.
+
+Remove it with `v2raycli --uninstall-service`.
 
 ## Engine selection
 

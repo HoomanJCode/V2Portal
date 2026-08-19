@@ -195,6 +195,32 @@ def test_import_flag_replace(tmp_path, monkeypatch):
     assert [p.name for p in dest.config.profiles] == ["shared"]
 
 
+def test_install_service_flag(tmp_path, monkeypatch, capsys):
+    from v2raycli import service
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    monkeypatch.setattr(service, "platform", lambda: "linux")
+    monkeypatch.setattr(service, "install_service", lambda s, i, c: tmp_path / "unit")
+
+    assert app._install_service(store, profile.id, None) == 0
+    assert "installed" in capsys.readouterr().out
+
+
+def test_install_service_flag_unknown_id(tmp_path, monkeypatch, capsys):
+    store = _store(tmp_path)
+    assert app._install_service(store, "nope", None) == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):
+    from v2raycli import service
+
+    monkeypatch.setattr(service, "uninstall_service", lambda: None)
+    assert app._uninstall_service() == 0
+    assert "no service" in capsys.readouterr().out
+
+
 def test_connect_runs_and_disconnects(tmp_path, monkeypatch, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="t", kind="socks", outbound=SOCKS))
