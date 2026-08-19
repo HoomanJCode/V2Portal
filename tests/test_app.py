@@ -13,6 +13,10 @@ def _store(tmp_path):
 
 def test_main_runs_and_exits_zero(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.json")
+    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
+    monkeypatch.setattr(config, "RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(config, "BIN_DIR", tmp_path / "bin")
+    monkeypatch.setattr(config, "GEO_DIR", tmp_path / "geo")
     monkeypatch.setattr(config, "ensure_dirs", lambda: None)
 
     assert app.main([]) == 0
