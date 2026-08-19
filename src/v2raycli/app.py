@@ -46,6 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replace", action="store_true", help="replace (not merge) when used with --import"
     )
+    parser.add_argument(
+        "--no-auto-update",
+        action="store_true",
+        help="skip auto-updating stale subscriptions on startup",
+    )
     return parser
 
 
@@ -64,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
     store = ConfigStore()
     store.load()
     backup.install_backup_hook(store)
+
+    if not args.no_auto_update:
+        _auto_update(store)
 
     if args.connect:
         return _connect(store, args.connect)
@@ -88,6 +96,25 @@ def main(argv: list[str] | None = None) -> int:
     from .tui.app_screen import run
 
     return run(store)
+
+
+def _auto_update(store: ConfigStore) -> None:
+    """Auto-update stale subscriptions; never raises, logs to stderr."""
+    from .subs.parser import auto_update_subscriptions
+
+    try:
+        results = auto_update_subscriptions(store)
+    except Exception as exc:  # noqa: BLE001 - never block startup
+        print(f"auto-update check failed: {exc}", file=sys.stderr)
+        return
+    updated = [r for r in results if r["updated"]]
+    failed = [r for r in results if not r["updated"]]
+    if updated:
+        store.save()
+        for r in updated:
+            print(f"auto-updated subscription: {r['name']}", file=sys.stderr)
+    for r in failed:
+        print(f"auto-update failed for {r['name']}: {r['error']}", file=sys.stderr)
 
 
 def _connect(store: ConfigStore, selection_id: str) -> int:

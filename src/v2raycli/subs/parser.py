@@ -169,3 +169,54 @@ def update_subscription(store, sub_id: str) -> tuple[list[Profile], list[str]]:
     sub.traffic_used = traffic
     sub.expires = expires
     return profiles, errors
+
+
+def is_stale(sub: Subscription, now: datetime | None = None) -> bool:
+    """True if ``sub`` should be auto-updated.
+
+    A subscription is stale when it is enabled, has a positive
+    ``auto_update_days``, and has never been updated or its last update is
+    older than that many days.
+    """
+    if not sub.enabled or sub.auto_update_days <= 0:
+        return False
+    if not sub.last_updated:
+        return True
+    try:
+        updated = datetime.fromisoformat(sub.last_updated)
+    except ValueError:
+        return True
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    return (now - updated).total_seconds() >= sub.auto_update_days * 86400
+
+
+def auto_update_subscriptions(store, now: datetime | None = None) -> list[dict]:
+    """Update every stale subscription; return per-subscription results.
+
+    Fetch errors are captured per subscription (``updated=False`` + ``error``)
+    so one failing URL never blocks the others. Callers should ``store.save()``
+    if any result has ``updated=True``.
+    """
+    results: list[dict] = []
+    for sub in list(store.config.subscriptions):
+        if not is_stale(sub, now):
+            continue
+        try:
+            update_subscription(store, sub.id)
+            results.append(
+                {"subscription_id": sub.id, "name": sub.name, "updated": True, "error": None}
+            )
+        except Exception as exc:  # noqa: BLE001 - isolate per-subscription failures
+            results.append(
+                {
+                    "subscription_id": sub.id,
+                    "name": sub.name,
+                    "updated": False,
+                    "error": str(exc),
+                }
+            )
+    return results

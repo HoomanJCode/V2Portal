@@ -12,7 +12,8 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **Dual engine** — sing-box (default) + xray-core, resolved per profile/group.
   xray is used automatically for `ssr` and the `leastLoad` strategy.
 - **Subscriptions** — paste a subscription URL or raw base64/plain payload;
-  import, update (deleted nodes are pruned), and test a single subscription.
+  import, update (deleted nodes are pruned), test a single subscription, and
+  auto-update on a schedule (`auto_update_days`).
 - **Protocols** — vmess, vless, trojan, ss, ssr, socks, http, wireguard,
   hysteria2, tuic, plus raw JSON configs. OpenVPN / OpenConnect via the system
   clients.
@@ -95,7 +96,20 @@ v2raycli --connect <profile-or-group-id>     # connect and stay running (Ctrl+C 
 v2raycli --test all                          # latency-test every outbound
 v2raycli --test <subscription-id>            # test one subscription's nodes
 v2raycli --test <id1,id2>                    # test specific profiles
+v2raycli --backup                            # snapshot the config, print its path
+v2raycli --list-backups                      # list snapshots (newest first)
+v2raycli --restore <backup.json>             # restore a snapshot (safety backup first)
+v2raycli --export <out.json> [--redact]      # export the full config (mask credentials)
+v2raycli --import <out.json> [--replace]     # import (merge by default, or replace)
 ```
+
+### Auto-update
+
+Set `auto_update_days` on a subscription to have it re-fetched automatically
+on startup when stale (never updated, or older than N days). Fetch failures are
+logged and skipped — they never block startup. Disable per-run with
+`--no-auto-update`.
+
 
 ## Adding proxies
 
