@@ -42,6 +42,13 @@ def test_headless_summary(tmp_path, capsys):
     assert "profiles: 0" in out
 
 
+def test_main_reports_malformed_config(tmp_path, capsys):
+    (tmp_path / "config.json").write_text("{not-json")
+
+    assert app.main(["--headless", "--config-dir", str(tmp_path)]) == 1
+    assert "config load failed" in capsys.readouterr().err
+
+
 def test_connect_unknown_id(tmp_path, capsys):
     store = _store(tmp_path)
     assert app._connect(store, "nope") == 1

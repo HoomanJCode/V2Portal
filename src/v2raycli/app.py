@@ -78,7 +78,11 @@ def main(argv: list[str] | None = None) -> int:
     config.ensure_dirs()
     backup.set_private_permissions()
     store = ConfigStore()
-    store.load()
+    try:
+        store.load()
+    except (OSError, ValueError) as exc:
+        print(f"config load failed: {exc}", file=sys.stderr)
+        return 1
     backup.install_backup_hook(store)
 
     if args.install_service:

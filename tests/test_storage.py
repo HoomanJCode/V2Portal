@@ -1,5 +1,7 @@
+import pytest
+
 from v2raycli.models import Group, Profile, Subscription
-from v2raycli.storage import ConfigStore
+from v2raycli.storage import ConfigLoadError, ConfigStore
 
 
 def test_first_run_creates_default(tmp_path):
@@ -10,6 +12,22 @@ def test_first_run_creates_default(tmp_path):
     assert cfg.settings.default_engine == "sing-box"
     assert cfg.profiles == []
     assert (tmp_path / "config.json").exists()
+
+
+def test_load_rejects_malformed_config(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text("{not-json")
+
+    with pytest.raises(ConfigLoadError, match="could not load config"):
+        ConfigStore(path).load()
+
+
+def test_load_rejects_wrong_config_shape(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text('{"profiles": {}}')
+
+    with pytest.raises(ConfigLoadError, match="must be a list"):
+        ConfigStore(path).load()
 
 
 def test_round_trip(tmp_path):

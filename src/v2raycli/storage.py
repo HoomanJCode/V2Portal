@@ -20,6 +20,10 @@ from .models import (
 )
 
 
+class ConfigLoadError(ValueError):
+    """Raised when the on-disk config cannot be decoded or validated."""
+
+
 class ConfigStore:
     """Load/save the config file and expose CRUD helpers.
 
@@ -51,8 +55,19 @@ class ConfigStore:
             self.config = self.default()
             self.save()
             return self.config
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        self.config = Config.from_dict(raw)
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("config root must be a JSON object")
+            for key in ("settings", "routing", "engines"):
+                if key in raw and not isinstance(raw[key], dict):
+                    raise ValueError(f"config field {key!r} must be an object")
+            for key in ("profiles", "subscriptions", "groups"):
+                if key in raw and not isinstance(raw[key], list):
+                    raise ValueError(f"config field {key!r} must be a list")
+            self.config = Config.from_dict(raw)
+        except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
+            raise ConfigLoadError(f"could not load config {self.path}: {exc}") from exc
         return self.config
 
     def register_pre_write_hook(self, hook: Callable) -> None:

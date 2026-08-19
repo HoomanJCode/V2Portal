@@ -36,8 +36,8 @@ everything else builds on. No proxy logic yet.
   - uuid4 ids; ISO-8601 timestamps; explicit `to_dict()` / `from_dict()`
 - [x] `storage.py`:
   - `load()` (creates default on first run), `save()` (atomic temp + replace),
-    `schema_version` stored on read/write (a version-mismatch warning can be
-    added when the schema next evolves)
+    `schema_version` stored on read/write; malformed or wrong-shaped config
+    files produce a clear load error without being overwritten
   - `ConfigStore` CRUD: profiles, subscriptions (unlink `profile_ids` on remove),
     groups, routing rules, settings/engines update
   - note: the backup pre-write hook is added in Phase 09, not here
