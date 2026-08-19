@@ -20,6 +20,7 @@ def test_add_manual_config():
     raw = json.dumps({"protocol": "vmess", "tag": "x", "settings": {"vnext": []}})
     p = add_manual_config(raw, "m")
     assert p.kind == "manual"
+    assert p.engine == "xray"
     assert "tag" not in p.outbound
     assert p.outbound["protocol"] == "vmess"
     assert p.outbound["settings"]["vnext"] == []
@@ -32,6 +33,10 @@ def test_add_manual_config_rejects_invalid():
         add_manual_config(json.dumps({"protocol": "socks", "listen": "0.0.0.0"}), "m")
     with pytest.raises(ValueError):
         add_manual_config(json.dumps({"protocol": "bogus"}), "m")
+    with pytest.raises(ValueError, match="engine='xray'"):
+        add_manual_config(
+            json.dumps({"protocol": "vmess", "settings": {}}), "m", engine="sing-box"
+        )
 
 
 def test_add_socks_http():

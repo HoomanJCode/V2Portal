@@ -134,7 +134,7 @@ In **Manage → Add**, you can add:
 | Socks / HTTP | server address, port, optional username/password |
 | WireGuard | private key, address, peers |
 | Hysteria2 / TUIC | server, auth, TLS/transport options |
-| Raw config | paste a v2ray/xray outbound JSON object |
+| Raw config | paste a v2ray/xray outbound JSON object (uses xray engine) |
 | OpenVPN | config file path or inline config + args |
 | OpenConnect | server + args |
 

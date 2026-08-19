@@ -50,7 +50,7 @@ def _add(store) -> None:
         [
             ("sub", "Subscription URL"),
             ("link", "Paste share link"),
-            ("raw", "Paste raw v2ray outbound JSON"),
+            ("raw", "Paste raw xray/v2ray outbound JSON (xray engine)"),
             ("socks", "SOCKS proxy"),
             ("http", "HTTP proxy"),
             ("wireguard", "WireGuard"),
@@ -93,7 +93,7 @@ def _add(store) -> None:
     if kind == "raw":
         raw = widgets.input_text("Raw outbound JSON")
         try:
-            profile = manual.add_manual_config(raw, name)
+            profile = manual.add_manual_config(raw, name, engine="xray")
         except ValueError as exc:
             widgets.show_message("Invalid config", str(exc))
             return

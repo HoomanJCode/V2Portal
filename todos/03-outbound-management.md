@@ -9,9 +9,9 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 
 ### Manual outbounds (`outbounds/manual.py`)
 
-- [x] `add_manual_config(json_text, name, engine)` — accept a raw **outbound**
-      object pasted by the user, normalize into `Profile(kind="manual")`,
-      validate protocol against the chosen engine, reject inbounds.
+- [x] `add_manual_config(json_text, name, engine)` — accept a raw **xray
+      outbound** object pasted by the user, normalize into `Profile(kind="manual")`,
+      resolve it to xray, validate protocol, and reject inbounds.
 - [x] `add_socks_proxy(name, host, port, user, pass)` → `kind=socks`.
 - [x] `add_http_proxy(name, host, port, user, pass)` → `kind=http`.
 - [x] `add_wireguard(name, private_key, address, peers)` → `kind=wireguard`.

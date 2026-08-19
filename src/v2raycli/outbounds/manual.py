@@ -19,11 +19,12 @@ ALLOWED_MANUAL_PROTOCOLS = {
 }
 
 
-def add_manual_config(json_text: str, name: str, engine: str = "auto") -> Profile:
+def add_manual_config(json_text: str, name: str, engine: str = "xray") -> Profile:
     """Build a ``kind=manual`` Profile from a raw xray outbound object.
 
-    The protocol is validated and the object is stored minus ``protocol``/
-    ``tag`` (those are re-added by the engine adapter later).
+    Raw manual objects use xray's ``protocol``/``settings`` shape, so they are
+    always resolved by xray. The protocol is validated and the object is stored
+    minus ``tag`` (the engine adapter assigns the stable profile id later).
     """
     try:
         data = json.loads(json_text)
@@ -36,6 +37,10 @@ def add_manual_config(json_text: str, name: str, engine: str = "auto") -> Profil
     protocol = data.get("protocol")
     if protocol not in ALLOWED_MANUAL_PROTOCOLS:
         raise ValueError(f"unsupported protocol: {protocol}")
+    if engine == "auto":
+        engine = "xray"
+    if engine != "xray":
+        raise ValueError("raw manual configs use xray's outbound format; choose engine='xray'")
     # Keep the protocol (it identifies a manual outbound); drop only the tag,
     # which is assigned from the profile id at config-generation time.
     outbound = {k: v for k, v in data.items() if k != "tag"}
