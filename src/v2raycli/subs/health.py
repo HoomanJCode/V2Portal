@@ -7,6 +7,7 @@ warnings and the ``--health`` report.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 from ..models import Subscription
@@ -14,9 +15,12 @@ from ..models import Subscription
 
 def human_bytes(n: int | float | None) -> str:
     """Format a byte count as ``1.5 GiB`` (binary units)."""
-    if n is None or n < 0:
+    try:
+        value = float(n)
+    except (TypeError, ValueError):
         return "0 B"
-    value = float(n)
+    if not math.isfinite(value) or value < 0:
+        return "0 B"
     for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
         if value < 1024 or unit == "PiB":
             return f"{int(value)} B" if unit == "B" else f"{value:.1f} {unit}"

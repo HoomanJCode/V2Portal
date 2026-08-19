@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timedelta, timezone
 
 from v2raycli.models import Subscription
@@ -13,6 +14,9 @@ def test_human_bytes():
     assert human_bytes(1536) == "1.5 KiB"
     assert human_bytes(5 * 1024 * 1024) == "5.0 MiB"
     assert human_bytes(2 * 1024**3) == "2.0 GiB"
+    assert human_bytes("not-a-number") == "0 B"
+    assert human_bytes("-1") == "0 B"
+    assert human_bytes(math.nan) == "0 B"
 
 
 def test_parse_iso():

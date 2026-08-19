@@ -43,7 +43,8 @@ protocols, and support updating them. Parser-heavy phase.
 - [x] `fetch(url, user_agent) -> (body, headers)` via `httpx`; timeout, redirect,
       typed errors (timeout/DNS/HTTP status).
 - [x] Support `file://` and `paste://<payload>`.
-- [x] Parse `Subscription-Userinfo` → `expires` + `traffic_used`.
+- [x] Parse `Subscription-Userinfo` → `expires` + `traffic_used`; malformed
+      traffic values remain safe for health reporting.
 
 ### Subscription parsing (`subs/parser.py`)
 
