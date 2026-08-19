@@ -31,6 +31,7 @@ class TestResult:
     engine: str = ""
     ok: bool = False
     latency_ms: float | None = None
+    connect_ms: float | None = None
     error: str | None = None
     not_testable: bool = False
 
@@ -67,6 +68,46 @@ def _http_latency(url: str, port: int, timeout: float = 10.0) -> tuple[bool, flo
             return ok, elapsed, "" if ok else f"http {response.status_code}"
     except Exception as exc:
         return False, (time.monotonic() - start) * 1000.0, str(exc)
+
+
+def _url_authority(url: str) -> tuple[str, int]:
+    """Return (host, port) for a URL, defaulting to the scheme's port."""
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    return host, port
+
+
+def _connect_ms(port: int, host: str, dst_port: int, timeout: float = 10.0) -> float | None:
+    """Time the SOCKS5 CONNECT phase (TCP through the proxy) to ``host:dst_port``."""
+    if not host:
+        return None
+    start = time.monotonic()
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=timeout)
+        sock.settimeout(timeout)
+        sock.sendall(b"\x05\x01\x00")
+        if sock.recv(2) != b"\x05\x00":
+            return None
+        host_bytes = host.encode()
+        sock.sendall(b"\x05\x01\x00\x03" + bytes([len(host_bytes)]) + host_bytes + dst_port.to_bytes(2, "big"))
+        reply = sock.recv(4)
+        if reply[:2] != b"\x05\x00":
+            return None
+        atyp = reply[3]
+        if atyp == 1:
+            sock.recv(6)
+        elif atyp == 3:
+            n = sock.recv(1)[0]
+            sock.recv(n + 2)
+        elif atyp == 4:
+            sock.recv(18)
+        sock.close()
+        return (time.monotonic() - start) * 1000.0
+    except OSError:
+        return None
 
 
 def build_test_config(profile: Profile, settings, port: int) -> tuple[str, dict]:
@@ -120,9 +161,11 @@ def test_profile(
                 engine=engine, ok=False, error="engine did not start",
             )
         ok, latency, error = _http_latency(settings.test_url, port)
+        host, dst_port = _url_authority(settings.test_url)
+        connect_ms = _connect_ms(port, host, dst_port) if ok else None
         return TestResult(
             profile_id=profile.id, name=profile.name, kind=profile.kind,
-            engine=engine, ok=ok, latency_ms=latency, error=error,
+            engine=engine, ok=ok, latency_ms=latency, error=error, connect_ms=connect_ms,
         )
     except BinaryError as exc:
         return TestResult(
@@ -188,6 +231,7 @@ def render_table(results: list[TestResult]) -> None:
     table.add_column("Name")
     table.add_column("Kind")
     table.add_column("Engine")
+    table.add_column("Connect")
     table.add_column("Latency")
     table.add_column("Status")
 
@@ -195,6 +239,7 @@ def render_table(results: list[TestResult]) -> None:
         return (not r.ok, r.latency_ms if r.latency_ms is not None else float("inf"))
 
     for result in sorted(results, key=sort_key):
+        connect = f"{result.connect_ms:.0f} ms" if result.connect_ms is not None else "-"
         latency = f"{result.latency_ms:.0f} ms" if result.latency_ms is not None else "-"
         if result.not_testable:
             status, style = "skip", "dim"
@@ -202,7 +247,7 @@ def render_table(results: list[TestResult]) -> None:
             status, style = "OK", "green"
         else:
             status, style = "FAIL", "red"
-        table.add_row(result.name, result.kind, result.engine, latency, status, style=style)
+        table.add_row(result.name, result.kind, result.engine, connect, latency, status, style=style)
     console.print(table)
 
 

@@ -22,7 +22,7 @@ table.
       "not testable" in the table).
 - [x] Render via `rich.table` sorted by latency, failures last, color-coded.
 - [x] Persist last results to `runtime/test_results.json` for cached display.
-- [ ] Stretch: report TCP-connect vs full-request timing split.
+- [x] Stretch: report TCP-connect vs full-request timing split (`connect_ms`).
 
 ## Tests
 
@@ -44,5 +44,6 @@ table.
 
 - [x] Live latency probe against a real sing-box upstream — verified (ok=True).
 - [ ] Windows end-to-end run to confirm no leaked processes.
-- [ ] TCP-connect vs full-request timing split (stretch).
+- [x] TCP-connect vs full-request timing split (stretch) — implemented as
+      `connect_ms` in `TestResult`, shown as a `Connect` column.
 - [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).

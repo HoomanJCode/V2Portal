@@ -66,11 +66,13 @@ def test_test_profile_success_structured_result(tmp_path, monkeypatch):
     captured: dict = {}
     _install_fakes(monkeypatch, captured)
     monkeypatch.setattr(latency, "_http_latency", lambda url, port, timeout=10.0: (True, 42.0, ""))
+    monkeypatch.setattr(latency, "_connect_ms", lambda port, host, dst_port, timeout=10.0: 15.0)
 
     result = latency.test_profile(profile, store.config.settings)
 
     assert result.ok is True
     assert result.latency_ms == 42.0
+    assert result.connect_ms == 15.0
     assert result.engine == "sing-box"
     assert result.name == "s"
     assert result.error == ""
@@ -134,6 +136,12 @@ def test_test_profile_vpn_skipped(tmp_path, monkeypatch):
     assert result.not_testable is True
     assert result.ok is False
     assert called["locate"] is False
+
+
+def test_url_authority():
+    assert latency._url_authority("http://example.com/x") == ("example.com", 80)
+    assert latency._url_authority("https://example.com:8443/x") == ("example.com", 8443)
+    assert latency._url_authority("https://example.com/") == ("example.com", 443)
 
 
 def test_scope_selectors(tmp_path):
