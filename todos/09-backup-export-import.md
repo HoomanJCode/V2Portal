@@ -27,7 +27,8 @@ share-link export/import for migration, sharing, and disaster recovery.
 - [x] `export_share_links(profile_ids, path)` — newline-separated share-link
       file via `subs.share.encode_link` (skip profiles that can't encode).
 - [x] `import_full(path, mode="merge")`:
-  - validate `schema_version` and structure; reject malformed files cleanly
+  - validate `schema_version` and structure before any merge, replacement, or
+    safety backup; reject malformed or unreadable files cleanly
   - `merge`: add/update by profile id, dedupe by (protocol, host, port,
     credential), keep existing on conflict (or ask in TUI)
   - `replace`: back up current config, then load the imported file wholesale
@@ -48,7 +49,8 @@ share-link export/import for migration, sharing, and disaster recovery.
       safety backup first; `0700` perms (POSIX-only assertion).
 - [x] `test_exchange.py`: export→import round-trip is lossless; redacted export
       contains no secrets; merge dedupe/conflict; replace backs up first;
-      share-link export matches `encode_link` output.
+      malformed imports fail before mutation; share-link export matches
+      `encode_link` output.
 
 ## Definition of Done
 

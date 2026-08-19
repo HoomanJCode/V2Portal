@@ -13,6 +13,7 @@ from pathlib import Path
 from . import config
 from .backup import create_backup
 from .models import Config, Profile
+from .storage import _validate_persisted_shape
 from .subs.parser import _profile_key, parse_payload
 from .subs.share import ShareLinkError, decode_link, encode_link
 
@@ -143,6 +144,28 @@ def _relink(store) -> None:
     _relink_config(store.config)
 
 
+def _load_full_config(path) -> Config:
+    """Read and validate an exported config before any store mutation."""
+    try:
+        source = Path(path)
+        text = source.read_text(encoding="utf-8")
+    except (OSError, TypeError, ValueError, UnicodeError) as exc:
+        raise ValueError(f"could not read export: {exc}") from exc
+    try:
+        raw = json.loads(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid export JSON: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("export must be a JSON object")
+    if raw.get("schema_version") != config.SCHEMA_VERSION:
+        raise ValueError(f"unsupported schema_version: {raw.get('schema_version')}")
+    try:
+        _validate_persisted_shape(raw)
+        return Config.from_dict(raw)
+    except (ValueError, TypeError, AttributeError, KeyError) as exc:
+        raise ValueError(f"invalid export: {exc}") from exc
+
+
 def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
     """Import a full-config export file.
 
@@ -150,12 +173,7 @@ def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
     ``mode="replace"`` backs up the current config then loads the file
     wholesale.
     """
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("export must be a JSON object")
-    if raw.get("schema_version") != config.SCHEMA_VERSION:
-        raise ValueError(f"unsupported schema_version: {raw.get('schema_version')}")
-    incoming = Config.from_dict(raw)
+    incoming = _load_full_config(path)
 
     if mode == "replace":
         create_backup(

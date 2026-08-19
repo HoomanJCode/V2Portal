@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from v2raycli import backup, exchange
 from v2raycli.models import Group, Profile, Subscription
 from v2raycli.storage import ConfigStore
@@ -172,6 +174,31 @@ def test_import_replace_backs_up_first(tmp_path):
 
     assert [p.name for p in store.config.profiles] == ["new"]
     assert any(b.reason == "import-replace" for b in backup.list_backups(bdir))
+
+
+def test_import_full_rejects_malformed_nested_shape_before_backup(tmp_path):
+    store = _store(tmp_path)
+    backup_dir = tmp_path / "backups"
+    backup.install_backup_hook(store, backup_dir=backup_dir)
+    bad = tmp_path / "bad-shape.json"
+    bad.write_text(json.dumps({"schema_version": 2, "profiles": [{"outbound": []}]}))
+
+    try:
+        exchange.import_full(store, bad, mode="replace", backup_dir=backup_dir)
+    except ValueError as exc:
+        assert "outbound" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+    assert store.config.profiles == []
+    assert backup.list_backups(backup_dir) == []
+
+
+def test_import_full_rejects_missing_file_cleanly(tmp_path):
+    store = _store(tmp_path)
+
+    with pytest.raises(ValueError, match="could not read export"):
+        exchange.import_full(store, tmp_path / "missing.json")
 
 
 def test_import_full_rejects_bad_schema(tmp_path):
