@@ -2,25 +2,26 @@
 
 These files are the implementation backlog. Read `../PLAN.md` first for the
 architecture, decisions, and data model. Execute the phases **in numeric
-order**; each phase ends with "Definition of Done" checkboxes and lists which
-earlier phases it depends on.
+order**; each phase ends with "Definition of Done" and lists dependencies.
 
 | # | File | Scope | Depends on |
 |---|---|---|---|
-| 01 | `01-scaffold-and-config.md` | Project skeleton, packaging, config dir, settings & storage layer | — |
-| 02 | `02-share-link-and-subscription.md` | Share-link decode/encode + subscription fetch/parse/update | 01 |
-| 03 | `03-outbound-management.md` | Manual v2ray/socks/http outbounds + groups (balancer, chain) | 01, 02 |
-| 04 | `04-xray-config-generation.md` | Profile/Group → xray JSON, mixed inbound, binary download | 01, 03 |
-| 05 | `05-runtime-connection.md` | Launch/stop xray, live status, LAN exposure | 04 |
-| 06 | `06-interactive-tui.md` | Interactive menus, connect/switch screen, management UI | 05 |
-| 07 | `07-outbound-testing.md` | Latency/reachability test for all or per-subscription | 04 |
-| 08 | `08-cross-platform-packaging.md` | Windows/Termux polish, PyInstaller, README, release | 06, 07 |
+| 01 | `01-scaffold-and-config.md` | Package skeleton, settings (auth, engines, routing), models & storage | — |
+| 02 | `02-share-link-and-subscription.md` | Share-link decode (incl. hysteria2/tuic/wireguard) + subscription fetch/parse/update | 01 |
+| 03 | `03-outbound-management.md` | Manual outbounds, VPN profiles (openvpn/openconnect), groups, split-routing rules | 01, 02 |
+| 04 | `04-engine-config-generation.md` | Engine adapter (sing-box + xray), binary download, mixed inbound, split routing, chain/balancer | 01, 03 |
+| 05 | `05-runtime-connection.md` | Launch/stop cores + VPN clients, live status, LAN exposure, auth | 04 |
+| 06 | `06-interactive-tui.md` | Interactive menus, connect/switch screen, management + routing UI | 05 |
+| 07 | `07-outbound-testing.md` | Engine-aware latency/reachability test, all or per-subscription | 04 |
+| 08 | `08-cross-platform-packaging.md` | Windows/Termux polish, VPN client detection, README, release | 06, 07 |
 
 ## Conventions for the implementing agent
 
-- Keep `models.py` dataclasses the single source of truth; storage, config-gen,
-  and TUI all consume them.
-- Every outbound/group gets a stable UUID tag; never use user names as tags.
-- Validate xray config by running `xray run -test -config <file>` before launching.
+- `models.py` dataclasses are the single source of truth (Profile `kind` and
+  `engine` fields drive everything downstream).
+- Outbound/group tags = stable UUIDs; never user names.
+- Engine selection is resolved once (in `engines/base.py::resolve_engine`) and
+  reused by config-gen, runner, and tester.
+- Validate engine config with the engine's own check command before launching.
 - Add a `pytest` test next to any parser/generator change.
-- Do not commit downloaded xray binaries or the runtime config.
+- Do not commit downloaded engine binaries, geo assets, or the runtime config.

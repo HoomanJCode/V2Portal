@@ -1,54 +1,50 @@
 # Phase 06 — Interactive TUI
 
 Goal: the full interactive experience. On start, show a selection of configs
-(subscription nodes + manual proxies + groups); once connected, show a live
-status screen; provide management menus for everything built so far.
+(subscription nodes + manual proxies + groups + VPNs); once connected, show a
+live status screen; provide management menus for everything built so far.
 
-Use **prompt_toolkit** (menus, fuzzy completions, dialogs) + **rich**
-(tables/status). Keep it working in a plain Windows console and Termux (avoid
-full-screen curses assumptions where possible).
+Use **prompt_toolkit** + **rich**, keyboard-driven, working in plain Windows
+console and Termux (avoid full-screen curses assumptions where possible).
 
 ## Tasks
 
-- [ ] `tui/widgets.py` — small reusable pieces:
-  - `menu(options) -> index` (arrow/`j`/`k` + fuzzy typeahead, Enter select)
-  - `confirm(prompt)`, `input_text(prompt, default)`, `input_int`
-  - `pick_profile(profiles, groups)` — combined, searchable list (groups first
-    or a toggle), returning the chosen profile or group
-- [ ] `tui/app_screen.py` — main screen loop:
-  - on start: if profiles exist, immediately show the **select config** menu
-    (mix of subscription nodes, manual proxies, groups); else guide through
-    "add a subscription / paste a link / add socks/http / paste v2ray config"
-  - actions: `Connect`, `Manage`, `Test`, `Settings`, `Quit`
-- [ ] `tui/manage.py` — management menu:
-  - **Add**: subscription URL, paste share link, paste raw v2ray outbound,
-    add SOCKS proxy, add HTTP proxy
+- [ ] `tui/widgets.py`: `menu(options)` (arrow/`j`/`k` + fuzzy typeahead),
+      `confirm`, `input_text`, `input_int`, `input_secret`,
+      `pick_profile(profiles, groups, include_vpn=True)` (searchable, grouped).
+- [ ] `tui/app_screen.py` — main loop:
+  - on start: if profiles exist, show **select config** menu (subscription
+    nodes, manual proxies, groups, VPNs); else guide through adding a first
+    config
+  - actions: Connect, Manage, Test, Routing, Settings, Quit.
+- [ ] `tui/manage.py`:
+  - **Add**: subscription URL, paste share link, paste raw outbound, SOCKS/HTTP
+    proxy, WireGuard, hysteria2, tuic, OpenVPN (.ovpn), OpenConnect (server)
   - **Subscriptions**: list / update one / update all / remove
   - **Profiles**: list / edit name / remove / export share link
-  - **Groups**: create balancer (pick strategy + members), create chain
-    (pick ordered hops), edit, remove
-- [ ] `tui/connection_screen.py` — live status while connected:
-  - show target name, inbound URLs (`socks5://`, `http://`, LAN IP),
-    up/down traffic (if Phase 05 stats exist), uptime
-  - keys: `s` switch (back to select menu), `d` disconnect, `q` back,
-    `t` jump to test
-  - refresh without blocking; render updates on a short ticker or on log events
-- [ ] `tui/test_screen.py` — pick scope (all / one subscription / specific
-      profiles) and render a live-updating latency table (see Phase 07).
-- [ ] `tui/settings_screen.py` — edit listen address, mixed port, DNS, log
-      level, test URL.
+  - **Groups**: create balancer (strategy + members), create chain (ordered
+    hops), edit, remove
+- [ ] `tui/routing_screen.py`: toggle `mode` all/split; add/reorder/remove rules
+      (action, domain/IP/geo matchers, optional target).
+- [ ] `tui/connection_screen.py` — live status:
+  - target name, engine, inbound URLs + auth (socks5/http, LAN IP), up/down
+    traffic (if stats exist), uptime
+  - keys: `s` switch, `d` disconnect, `t` test, `q` back
+- [ ] `tui/test_screen.py`: scope picker + live latency table (Phase 07).
+- [ ] `tui/settings_screen.py`: listen, mixed port, inbound auth, DNS, log level,
+      test URL, default engine, per-engine binary path.
 - [ ] Wire `app.py` to launch the TUI and route between screens.
 
 ## Acceptance / manual checks
 
-- [ ] Fresh install (no config) walks a new user into adding their first config.
-- [ ] Adding a subscription, selecting one of its nodes, and connecting works
-      end-to-end from the TUI.
-- [ ] Creating a balancer over several nodes and connecting to it works.
-- [ ] All flows are keyboard-drivable; nothing requires a mouse.
+- [ ] Fresh install walks a new user into adding their first config.
+- [ ] Add subscription → select a node → connect end-to-end from the TUI.
+- [ ] Create balancer over several nodes and connect; create chain and connect.
+- [ ] Add an OpenVPN profile and connect (mock client).
+- [ ] All flows keyboard-drivable.
 
 ## Definition of Done
 
 - [ ] Every Phase 03–05 feature is reachable from the TUI.
-- [ ] Manual walkthrough passes on Linux; Windows and Termux verified in Phase 08.
+- [ ] Manual walkthrough passes on Linux; Windows/Termux in Phase 08.
 - [ ] `pytest` (existing suite) still passes.

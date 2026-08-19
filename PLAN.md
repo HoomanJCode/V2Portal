@@ -6,59 +6,100 @@
 
 ## 1. What this is
 
-A fully-interactive command-line client that wraps a v2ray-family core
-(**xray-core**) to do three jobs:
+A fully-interactive command-line client that wraps two proxy engines
+(**sing-box**, default, and **xray-core**, fallback) plus the system
+`openvpn`/`openconnect` clients to do four jobs:
 
 1. **Manage proxies** — subscribe to subscriptions, paste individual v2ray
-   share links or raw v2ray configs, and add plain SOCKS5 / HTTP proxies as
-   outbounds. Everything persists to a local config file.
-2. **Connect** — pick a proxy (a single node, a node from a subscription, a
-   balancer, or a chain), then run a local **mixed inbound** server (SOCKS5 +
-   HTTP on one port) bound to the LAN so any device on the network can use it.
-3. **Test** — measure latency / reachability of all outbounds, or only the
+   share links or raw configs, add plain SOCKS5 / HTTP / WireGuard / hysteria2 /
+   tuic outbounds, and add OpenVPN / Cisco AnyConnect VPN profiles. Everything
+   persists to a local config file.
+2. **Connect** — pick a proxy (single node, subscription node, balancer, or
+   chain), then run a local **mixed inbound** (SOCKS5 + HTTP on one port) bound
+   to the LAN so any device on the network can use it.
+3. **Route** — route all traffic through the selection, or use user-defined
+   split-routing rules (direct / bypass / block by domain, IP, or geo).
+4. **Test** — measure latency / reachability of all outbounds, or only the
    outbounds of one subscription.
 
-## 2. Decisions (made, with rationale)
+## 2. Decisions (locked in with the user)
 
-| Decision | Choice | Why |
+| Decision | Choice |
+|---|---|
+| Language | **Python 3.10+** (Linux, Windows, Termux; fastest to iterate) |
+| Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
+| Protocol coverage | vmess, vless, trojan, ss, ssr, wireguard, hysteria2, tuic, socks, http |
+| OpenVPN / Cisco AnyConnect | Integrate via system `openvpn` / `openconnect` clients as a separate "VPN profile" type (not chainable/balanceable with proxy outbounds) |
+| Interactive UI | **prompt_toolkit** + **rich** |
+| Config storage | **JSON** via `platformdirs` |
+| HTTP client | **httpx** |
+| Routing | **Split routing** (rules by domain / IP / geo), defaulting to "route everything" |
+| Inbound auth | **Optional** — per-connection username/password for socks+http |
+| Subscription update | **Delete** nodes that disappeared upstream |
+| System behavior | **LAN server only** — run the mixed inbound; never touch OS routing/proxy |
+
+## 3. Engine & protocol matrix
+
+| Protocol | sing-box | xray-core |
 |---|---|---|
-| Language | **Python 3.10+** | Available on Linux, Windows (installer) and Termux (`pkg install python`); fastest to iterate; very readable for a later AI/contributor. |
-| Engine | **xray-core** (subprocess) | Actively maintained fork of v2ray-core; supports all v2ray share-link protocols (vmess/vless/trojan/ss/ssr) plus socks/http outbounds; has `balancer` (random, roundRobin, leastPing, leastLoad) matching the requested auto-select strategies; supports outbound chaining via `proxySettings`. |
-| Interactive UI | **prompt_toolkit** + **rich** | Pure-Python, works on Windows and Termux, robust menus/fuzzy pickers/tables, no curses dependency hell. |
-| Config storage | **JSON** at a platform config dir (via `platformdirs`) | Human-readable, trivial to diff/backup, no schema migration tooling needed. |
-| HTTP client | **httpx** | Modern, supports timeouts/proxies (SOCKS via `socksio`), used for fetching subscriptions and for latency probing. |
-| Packaging | `pyproject.toml` + console script; documented manual install for Termux; optional PyInstaller single-folder bundle later | Keep it runnable on all three platforms without a heavy build step. |
-| Engine binary | **Auto-download** a pinned xray-core release (per OS/arch) into the config dir, with fallback to a system `xray`/`v2ray` on `PATH` | No manual dependency; user can override the path. |
+| vmess / vless / trojan / ss | ✅ | ✅ |
+| ssr (ShadowsocksR) | ❌ | ✅ |
+| socks / http | ✅ | ✅ |
+| wireguard | ✅ | ✅ |
+| hysteria2 | ✅ | ❌ |
+| tuic | ✅ | ❌ |
+| OpenVPN / AnyConnect | ❌ (external client) | ❌ (external client) |
 
-> **Can be changed cheaply.** The parsing, config-storage, and config-generation
-> logic is language-independent in spirit. If you prefer a single Go binary or a
-> Node CLI, only the code (not the model) changes. Flag this early.
+- **Default engine = sing-box** (native `mixed` inbound = socks+http one port;
+  `url_test` / round-robin selector for auto-select).
+- **xray-core** is used when a selected profile/group requires it (ssr, or the
+  `leastPing`/`leastLoad` balancer strategies).
+- A profile/group carries an `engine` field: `"auto"` (resolved from `kind` and
+  strategy), `"sing-box"`, or `"xray"`.
 
-## 3. High-level architecture
+### Auto-select strategy → engine mapping
+
+| User-facing strategy | sing-box | xray-core |
+|---|---|---|
+| latency | `urltest` outbound | balancer `leastPing` |
+| random | `selector` (strategy `random`) | balancer `random` |
+| round robin | `selector` (strategy `round_robin`) | balancer `roundRobin` |
+| least load | — (fallback to round robin) | balancer `leastLoad` |
+
+> **VERIFY during Phase 04** the exact sing-box selector `strategy` values and
+> the xray balancer `strategy.type` values for the pinned versions.
+
+### Chaining → engine mapping
+
+- **sing-box**: outbound `detour` field (chain each hop to the next).
+- **xray-core**: outbound base `proxySettings.tag` (chain each hop to the next).
+
+> **VERIFY** exact field placement for the pinned versions in Phase 04.
+
+## 4. High-level architecture
 
 ```
-┌─────────────────────────── v2ray-cli (Python) ───────────────────────────┐
-│                                                                          │
-│  TUI (prompt_toolkit + rich)                                             │
-│    ├─ profile / subscription / group menus (add, edit, remove, select)  │
-│    ├─ live connection screen (status, inbound addr, up/down traffic)     │
-│    └─ test screen (latency table)                                        │
-│                                                                          │
-│  Core                                                                     │
-│    ├─ storage        : load/save config.json (platform config dir)       │
-│    ├─ subs.fetcher   : download subscription payloads                    │
-│    ├─ subs.parser    : base64 / plain / share-link → Profile objects     │
-│    ├─ outbounds      : manual v2ray/socks/http, groups (balancer/chain)  │
-│    ├─ xray.config_gen: Profile/Group → xray JSON config                  │
-│    ├─ xray.runner    : spawn/kill `xray run`, parse logs, expose stats   │
-│    └─ test.latency   : per-outbound latency probe                        │
-│                                                                          │
-└───────────────────────────────┬──────────────────────────────────────────┘
-                                │ spawns
-                         ┌──────▼────────┐
-                         │   xray-core   │  mixed inbound (SOCKS5+HTTP) :1080
-                         │  (subprocess) │  ──► selected outbound/group
-                         └───────────────┘
+┌───────────────────────────── v2ray-cli (Python) ────────────────────────────┐
+│  TUI (prompt_toolkit + rich)                                                │
+│    ├─ select config (subscription nodes + manual proxies + groups + VPNs)  │
+│    ├─ manage (add/update subscriptions, outbounds, groups, VPNs, rules)    │
+│    ├─ live connection screen (status, inbound addr, auth, up/down)         │
+│    └─ test screen (latency table)                                          │
+│                                                                             │
+│  Core                                                                        │
+│    ├─ storage      : load/save config.json                                  │
+│    ├─ subs         : fetch + parse subscriptions, decode share links        │
+│    ├─ outbounds    : manual/vpn profiles, groups (balancer/chain)           │
+│    ├─ routing      : split-routing rule model + normalization               │
+│    ├─ engines      : base adapter + singbox.py + xray.py + binary.py        │
+│    ├─ runner       : spawn/kill engine cores + vpn clients, logs, stats     │
+│    └─ test.latency : engine-aware per-outbound latency probe                │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │ spawns (one at a time)
+        ┌───────────────────────┼───────────────────────────┐
+        ▼                       ▼                           ▼
+   sing-box core            xray-core                 openvpn/openconnect
+   mixed inbound :1080      socks+http :1080          (VPN profile, no inbound)
 ```
 
 ### Directory layout (to be created in Phase 01)
@@ -68,28 +109,33 @@ v2ray-cli/
 ├── pyproject.toml
 ├── README.md
 ├── PLAN.md
-├── todos/                       # this planning backlog
+├── todos/
 ├── src/v2raycli/
 │   ├── __init__.py
-│   ├── __main__.py              # python -m v2raycli
-│   ├── app.py                   # top-level loop / command dispatch
-│   ├── config.py                # settings + platform paths
-│   ├── models.py                # dataclasses (Profile, Subscription, Group, Settings)
-│   ├── storage.py               # load/save/validate config.json
+│   ├── __main__.py
+│   ├── app.py
+│   ├── config.py                  # settings + platform paths
+│   ├── models.py                  # dataclasses + enums
+│   ├── storage.py
 │   ├── subs/
 │   │   ├── __init__.py
 │   │   ├── fetcher.py
-│   │   ├── parser.py            # subscription payload → links
-│   │   └── share.py             # vmess/vless/trojan/ss/ssr link <-> outbound
+│   │   ├── parser.py
+│   │   └── share.py               # link <-> outbound for all protocols
 │   ├── outbounds/
 │   │   ├── __init__.py
 │   │   ├── manual.py
-│   │   └── groups.py            # balancer + chain builders
-│   ├── xray/
+│   │   ├── groups.py
+│   │   └── vpn.py                 # openvpn(.ovpn) + openconnect profiles
+│   ├── routing/
+│   │   └── rules.py
+│   ├── engines/
 │   │   ├── __init__.py
-│   │   ├── binary.py            # locate/download xray-core
-│   │   ├── config_gen.py        # Profile/Group → xray JSON
-│   │   └── runner.py            # subprocess lifecycle + log parsing
+│   │   ├── base.py                # EngineAdapter ABC
+│   │   ├── singbox.py
+│   │   ├── xray.py
+│   │   └── binary.py              # locate/download both cores
+│   ├── runner.py                  # subprocess lifecycle (cores + vpn)
 │   ├── test/
 │   │   └── latency.py
 │   └── tui/
@@ -97,187 +143,172 @@ v2ray-cli/
 │       ├── app_screen.py
 │       ├── select_profile.py
 │       ├── manage.py
+│       ├── connection_screen.py
 │       ├── test_screen.py
 │       └── widgets.py
-└── tests/                       # pytest unit tests
+└── tests/                         # pytest
     ├── test_share.py
     ├── test_parser.py
     ├── test_config_gen.py
-    └── test_storage.py
+    ├── test_storage.py
+    ├── test_groups.py
+    └── test_routing.py
 ```
 
-## 4. Data model (`config.json`)
+## 5. Data model (`config.json`)
 
 Stored at `<platform config dir>/v2ray-cli/config.json`
 (Linux/Termux `~/.config/v2ray-cli/`, Windows `%APPDATA%\v2ray-cli\`).
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "settings": {
-    "listen": "0.0.0.0",           // LAN-accessible inbound
-    "mixed_port": 1080,            // SOCKS5 + HTTP on the same port
+    "listen": "0.0.0.0",
+    "mixed_port": 1080,
     "allow_lan": true,
+    "inbound_auth": { "enabled": false, "username": "", "password": "" },
     "dns": ["1.1.1.1", "8.8.8.8"],
     "log_level": "info",
-    "test_url": "http://cp.cloudflare.com/generate_204"
+    "test_url": "http://cp.cloudflare.com/generate_204",
+    "default_engine": "sing-box"
   },
-  "xray": {
-    "binary_path": "auto",         // "auto" | "system" | "/absolute/path"
-    "version": "latest"            // pinned release tag once downloaded
+  "routing": {
+    "mode": "all",                       // "all" | "split"
+    "rules": [ /* ordered, see below */ ]
   },
-  "profiles": [ /* leaf outbounds, see below */ ],
-  "subscriptions": [ /* subscription definitions */ ],
-  "groups": [ /* balancers + chains */ ]
+  "engines": {
+    "sing-box": { "binary_path": "auto", "version": "latest" },
+    "xray":     { "binary_path": "auto", "version": "latest" }
+  },
+  "profiles": [],
+  "subscriptions": [],
+  "groups": []
 }
 ```
 
-### Profile (one concrete outbound)
-
-```jsonc
-{
-  "id": "3f2b…",                     // uuid4
-  "name": "US-01",
-  "kind": "vmess|vless|trojan|ss|ssr|socks|http|manual",
-  "share_link": "vmess://…",         // original link if imported from one
-  "outbound": { "settings": {...}, "streamSettings": {...} }, // xray outbound (minus tag/protocol)
-  "source": "subscription|manual",
-  "subscription_id": null,           // set when it came from a subscription
-  "enabled": true,
-  "created_at": "2026-08-19T…",
-  "updated_at": "2026-08-19T…"
-}
-```
-
-- `kind` **socks**/**http** → a plain proxy outbound; the "password"/address/port
-  are prompted and stored inside `outbound.settings`.
-- `kind` **manual** → the user pasted a raw xray outbound object; we wrap it.
-
-### Subscription
+### Routing rule
 
 ```jsonc
 {
   "id": "…",
-  "name": "My provider",
-  "url": "https://…",                // or a file:// path, or "paste://<payload>"
-  "user_agent": null,
-  "last_updated": null,
-  "expires": null,                   // from Subscription-Userinfo header
-  "traffic_used": 0,
-  "profile_ids": ["…", "…"],         // profiles parsed from this sub
-  "auto_update_days": 0,             // 0 = manual
-  "enabled": true
+  "action": "proxy|direct|block",
+  "target_id": null,              // profile/group id; null = currently selected
+  "match": {
+    "domains": ["example.com", "keyword:ads", "regex:^x\\."],
+    "ips": ["10.0.0.0/8", "192.168.0.0/16"],
+    "geoip": ["cn", "private"],
+    "geosite": ["gfw", "category-ads-all"]
+  }
 }
 ```
 
-### Group (what the user actually "connects" to)
+### Profile (one concrete outbound / VPN)
+
+```jsonc
+{
+  "id": "3f2b…",
+  "name": "US-01",
+  "kind": "vmess|vless|trojan|ss|ssr|socks|http|wireguard|hysteria2|tuic|manual|openvpn|openconnect",
+  "engine": "auto",                // auto | sing-box | xray  (ignored for openvpn/openconnect)
+  "share_link": "vmess://…",
+  "outbound": { /* engine outbound object, minus tag/protocol */ },
+  "vpn": null,                     // { "type": "openvpn|openconnect", "config_path": "…", "server": "…", "args": [] }
+  "source": "subscription|manual",
+  "subscription_id": null,
+  "enabled": true,
+  "created_at": "…",
+  "updated_at": "…"
+}
+```
+
+### Subscription — unchanged from v1 (see `todos/02`)
+
+```jsonc
+{
+  "id": "…", "name": "…", "url": "https://…|file://…|paste://…",
+  "user_agent": null, "last_updated": null, "expires": null, "traffic_used": 0,
+  "profile_ids": ["…"], "auto_update_days": 0, "enabled": true
+}
+```
+
+### Group (what the user connects to)
 
 ```jsonc
 {
   "id": "…",
   "name": "Auto lowest-latency",
   "type": "single|balancer|chain",
-  "strategy": "random|roundRobin|leastPing|leastLoad", // balancer only
-  "profile_ids": ["…", "…"]          // balancer: candidate set; chain: ordered hops
+  "strategy": "latency|random|roundRobin|leastLoad",  // balancer only
+  "profile_ids": ["…"],           // balancer: candidate set; chain: ordered hops
+  "engine": "auto"
 }
 ```
 
-- `single` groups are implicit (a profile can be selected directly) — a `single`
-  group is only stored when the user saves a "favorite" with a custom name.
-- **Balancer** = auto-select over a set of profiles using the chosen strategy.
-- **Chain** = ordered hop list; entry = `profile_ids[0]`, exit = last element.
+## 6. Config generation (per engine)
 
-## 5. Mapping to xray-core config
+The engine adapter exposes:
+- `supported_kinds: set[str]`
+- `generate(settings, routing, target) -> dict` — full engine config
+- `run_args(config_path) -> list[str]` / `validate_args(config_path)`
 
-The generator (`xray/config_gen.py`) emits a fresh JSON config each time the
-user connects. Core shape:
+Common shape produced for **both** engines:
 
-```jsonc
-{
-  "log": { "loglevel": "info" },
-  "inbounds": [
-    {
-      "tag": "mixed-in",
-      "listen": "0.0.0.0",
-      "port": 1080,
-      "protocol": "socks",
-      "settings": { "auth": "noauth", "udp": true }
-      // NOTE: xray's SOCKS inbound also answers HTTP CONNECT on the same port,
-      // giving "SOCKS + HTTP on one port". VERIFY this during Phase 04; if the
-      // pinned xray build does not, fall back to two inbounds on separate ports
-      // (socks 1080 + http 1081) and surface both addresses in the TUI.
-    }
-  ],
-  "outbounds": [ /* one entry per profile in the selected set, plus a `direct` */ ],
-  "routing": {
-    "balancers": [ /* only for balancer groups */ ],
-    "rules": [
-      { "type": "field", "inboundTag": ["mixed-in"], "outboundTag": "<selected>" }
-    ]
-  }
-}
-```
+- **Inbound**: sing-box → `mixed` inbound (socks5+http one port); xray → `socks`
+  inbound (verify it also answers HTTP CONNECT; else emit socks + http on two
+  ports). Apply `settings.inbound_auth` when enabled. Bind `settings.listen`.
+- **Outbounds**: one per referenced profile + a `direct`/`block` fallback;
+  tags = profile `id`.
+- **Target**:
+  - single → route to that outbound.
+  - balancer → sing-box `selector`/`urltest`; xray `routing.balancers` + rule.
+  - chain → sing-box `detour`; xray `proxySettings`; route to last hop.
+- **Routing**: when `mode == "split"`, emit engine-native rules from
+  `routing.rules`; final fallback = selected target.
 
-Rules per group type:
+## 7. Connect flow
 
-- **single** → `outboundTag` = the profile's tag.
-- **balancer** → add an entry to `routing.balancers`
-  `{ "tag": "<group id>", "selector": ["<tag…>"], "strategy": { "type": "leastPing" } }`
-  and route to the balancer tag. Strategies map 1:1:
-  `random`, `roundRobin`, `leastPing`, `leastLoad`.
-- **chain** → emit one outbound per hop and chain them with `proxySettings`:
-  hop `i` gets `"proxySettings": { "tag": "<tag of hop i-1>", "transportLayer": false }`
-  (first hop has none); route to the **last** hop's tag.
-  **VERIFY exact field name/location** (`proxySettings` on the outbound base object)
-  against the pinned xray version in Phase 04; adjust the generator accordingly.
+1. User picks a profile / group / VPN from the interactive list.
+2. Resolve the engine (`auto` → from kind/strategy); download binary if needed.
+3. `engines.<engine>.generate(...)` → write `runtime/config.json`.
+4. Validate (`<binary> check` / `xray run -test`), then start via `runner`.
+5. For `openvpn`/`openconnect` profiles, instead launch the system client with
+   the stored config; no inbound server is created (the VPN owns system routing
+   — this is an explicit user choice, kept separate from proxy outbounds).
+6. TUI shows target, engine, inbound URL(s) + auth, and (stretch) live traffic.
 
-Outbound tags: use the profile `id` (stable, collision-free); keep a human label
-in a comment/log only (xray tags are internal).
+## 8. Testing outbounds
 
-## 6. The connect flow
+- Engine-aware: same per-profile probe as before, but the temporary config and
+  binary are chosen by the profile's resolved engine.
+- VPN profiles (openvpn/openconnect) are **not** latency-tested; they show a
+  simple "connect test" (client launches and establishes, then disconnects) —
+  optional, deferred.
 
-1. User picks a profile or group from the interactive list (which shows both
-   subscription nodes and manually-added profiles/groups).
-2. `config_gen` builds the xray config and writes `runtime/config.json`.
-3. `runner` starts `xray run -config <path>` and reports the process status.
-4. TUI shows: connected target, inbound `mixed://0.0.0.0:1080`, and (stretch)
-   live up/down traffic parsed from xray logs or the stats API.
-5. "Switch" regenerates config and restarts the process. "Stop" terminates it.
+## 9. Cross-platform notes
 
-## 7. Testing outbounds
+- Two engine binaries to auto-download per OS/arch (sing-box + xray).
+- `openvpn`/`openconnect` are system dependencies — detected on `PATH`; a clear
+  error + install hint is shown if missing.
+- Linux, Windows (`CREATE_NO_WINDOW`, `%APPDATA%`), Termux (arm64, `0.0.0.0`
+  LAN binding) as before.
 
-Per-outbound latency test (Phase 07):
+## 10. Risks / open questions to verify during implementation
 
-- For each profile under test, start a short-lived xray with a minimal config:
-  an ephemeral local SOCKS inbound, a `freedom` outbound whose
-  `proxySettings.tag` = the profile, and a rule routing the test inbound through
-  freedom. Time an HTTP request to `settings.test_url` through it, then kill it.
-- Run a small batch concurrently; report `{ name, ok, latency_ms, error }`.
-- Reuse the same machinery for "test all" vs "test one subscription".
+1. **Mixed inbound** — confirm sing-box `mixed` works on the pinned build; for
+   xray, confirm socks inbound answers HTTP CONNECT (else dual-port fallback).
+2. **Selector/balancer strategies** — exact strategy strings for sing-box
+   (`random`, `round_robin`, `url_test`) and xray (`random`, `roundRobin`,
+   `leastPing`, `leastLoad`).
+3. **Chaining fields** — sing-box `detour` vs xray `proxySettings` placement.
+4. **Share-link variants** — ss legacy/SIP002, ssr payload, hysteria2/tuic/
+   wireguard link formats; base64 padding variants.
+5. **OpenVPN/AnyConnect integration** — confirm client CLI flags for "run with
+   this config and daemonize/foreground" across OSes; VPN profiles are isolated
+   from proxy chaining/balancing.
+6. **Geo routing data** — sing-box and xray need geoip/geosite asset files;
+   decide bundled vs downloaded on first use.
 
-Stretch: use xray's `observatory`/leastPing to get latencies without per-node
-processes, but keep the explicit approach as the default because it gives a
-clear per-node result.
+## 11. Phase order
 
-## 8. Cross-platform notes
-
-- **Linux** — primary target; xray binary from release tarball.
-- **Windows** — `%APPDATA%` config; console via `cmd`/PowerShell; ensure the
-  process is killed cleanly on Ctrl+C and no console window flashes (use
-  `subprocess.CREATE_NO_WINDOW`).
-- **Termux (Android)** — Python via `pkg install python`; xray arm64 binary;
-  binding `0.0.0.0` works so LAN devices can connect; show the phone's LAN IP.
-
-## 9. Risks / open questions to verify during implementation
-
-1. **Mixed inbound** — confirm the pinned xray build answers HTTP CONNECT on the
-   SOCKS inbound (single-port SOCKS+HTTP). Fallback documented above.
-2. **Chaining field** — confirm `proxySettings` placement for the pinned xray.
-3. **Subscription encodings** — base64 (standard/url-safe, with or without
-   padding), plain newline lists, and Clash YAML (optional stretch).
-4. **SS/SSR link variants** — legacy base64 vs SIP002 `ss://` forms.
-5. **Android DNS/TLS** — Termux may need `udp: true` and specific DNS settings.
-
-## 10. Phase order
-
-See `todos/README.md` for the ordered, dependency-annotated backlog.
+See `todos/README.md`.

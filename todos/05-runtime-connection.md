@@ -1,47 +1,44 @@
 # Phase 05 — Runtime & Connection Lifecycle
 
-Goal: actually run xray as a managed subprocess, expose the LAN-facing mixed
-inbound, and give the upper layers a clean status/log/traffic interface.
+Goal: run the chosen engine (or VPN client) as a managed subprocess, expose the
+LAN-facing mixed inbound, and give upper layers a clean status/log interface.
 
 ## Tasks
 
-- [ ] `xray/runner.py` — `Runner` class:
-  - `start(config_path)` → spawn `xray run -config <path>` with stdout/stderr
-    piped (no shell), `CREATE_NO_WINDOW` on Windows
-  - `stop()` → terminate on POSIX / `taskkill`-free terminate on Windows,
-    with a graceful-then-kill escalation and no orphaned processes
-  - `is_running()`, `pid`, `wait(timeout)`
-  - `stream_logs()` → parse xray log lines into structured events
-    (level, message); handle the log format changes across xray versions
-- [ ] `ConnectionController` (new module, e.g. `app/connection.py` or
-      `xray/controller.py`):
-  - `connect(target)` → `config_gen.generate` + `write_runtime_config` +
-    `validate_config` + `runner.start`; return a `ConnectionStatus`
-  - `switch(target)` → regenerate + restart (stop, then start)
-  - `disconnect()` → stop and mark idle
-  - status object: `{ state: idle|connecting|connected|error, target_name,
-    inbound: {listen, mixed_port, urls:["socks5://0.0.0.0:1080","http://0.0.0.0:1080"]},
-    pid, started_at, error }`
-- [ ] LAN helpers: detect local LAN IPs (e.g. via `socket`/`netifaces`-free
-      approach) and include a `lan://<ip>:<port>` hint in the status so users
-      can copy the address for other devices.
-- [ ] Traffic stats (stretch, but wire the seam now): an `api`-inbound +
-      `stats`/`policy` config knob and a `get_stats()` that reports up/down
-      bytes per outbound; if skipped, return `null` so the TUI degrades cleanly.
-- [ ] Handle the common failure modes into typed errors: binary missing,
-      port already in use, invalid config, xray exits immediately.
+- [ ] `runner.py` — generic `Proc` helper:
+  - `start(argv)` (no shell; `CREATE_NO_WINDOW` on Windows), `stop()`
+    (graceful then kill, no orphans), `is_running()`, `pid`, `wait()`.
+- [ ] `ConnectionController`:
+  - `connect(target)` → `resolve_engine` → `generate` → `write_runtime_config` →
+    `validate_config` → start; return `ConnectionStatus`
+  - `switch(target)` (regenerate + restart), `disconnect()`.
+  - status: `{ state, target_name, engine, inbound {listen, mixed_port,
+    urls, auth}, pid, started_at, error }`.
+- [ ] `connect_vpn(profile)` for `kind ∈ {openvpn, openconnect}`:
+  - locate client (`shutil.which`), build argv from `vpn.config_path/server/args`
+  - start in foreground-but-managed mode; no inbound server; status reflects the
+    VPN being up and that OS routing is owned by the client (not the CLI).
+- [ ] LAN helpers: detect local IPs; include `lan://<ip>:<port>` hint + auth in
+      status for other devices.
+- [ ] Log parsing: structured events per engine (sing-box/xray log formats).
+- [ ] Traffic stats (stretch, seam now): sing-box `experimental.clash_api` or
+      xray api/stats; return `null` if disabled so TUI degrades cleanly.
+- [ ] Typed errors: binary missing, VPN client missing, port in use, invalid
+      config, immediate exit.
 
 ## Tests
 
-- [ ] `test_runner.py`: with a fake `xray` script on `PATH` (prints then sleeps),
-      assert start/stop/status transitions and no leftover processes.
-- [ ] `test_controller.py`: connect→switch→disconnect sequence calls the
-      expected generator/runner methods (mocked); port-in-use error mapped.
+- [ ] `test_runner.py`: fake `sing-box`/`xray` scripts (print then sleep) —
+      start/stop/status, no leftover processes.
+- [ ] `test_controller.py`: connect→switch→disconnect calls expected
+      adapter/runner methods (mocked); port-in-use and missing-binary mapped.
+- [ ] `test_vpn_connect.py`: argv building for openvpn/openconnect (mocked
+      client, no real connection).
 
 ## Definition of Done
 
-- [ ] A manually created `Profile(kind="socks")` can be connected to end-to-end
-      from the Python API (not the TUI yet), and `curl -x http://<lan-ip>:1080`
-      from another machine routes through it.
-- [ ] Clean shutdown on Ctrl+C and no zombie xray processes.
+- [ ] A `kind=socks` profile connects end-to-end from the Python API, and
+      `curl -x http://<lan-ip>:1080` from another machine routes through it.
+- [ ] `kind=openvpn` profile launches the (mock) client with correct argv.
+- [ ] Clean shutdown on Ctrl+C; no zombie processes.
 - [ ] `pytest` passes.
