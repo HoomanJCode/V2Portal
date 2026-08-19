@@ -40,7 +40,7 @@ def _write_json(path: Path, data: dict) -> None:
     )
 
 
-def redact(value, in_users: bool = False):
+def _redact(value, in_users: bool = False):
     """Recursively mask credentials/keys; returns a new structure."""
     if isinstance(value, dict):
         result: dict = {}
@@ -50,10 +50,10 @@ def redact(value, in_users: bool = False):
             elif key == "id" and in_users:
                 result[key] = "REDACTED"
             else:
-                result[key] = redact(item, in_users or key == "users")
+                result[key] = _redact(item, in_users or key == "users")
         return result
     if isinstance(value, list):
-        return [redact(item, in_users) for item in value]
+        return [_redact(item, in_users) for item in value]
     return value
 
 
@@ -61,7 +61,7 @@ def export_full(store, path=None, redact: bool = False) -> dict:
     """Return (and optionally write) a portable full-config export."""
     data = store.config.to_dict()
     if redact:
-        data = redact(data)
+        data = _redact(data)
     if path is not None:
         _write_json(Path(path), data)
     return data
@@ -133,7 +133,7 @@ def _relink(store) -> None:
         group.profile_ids = [pid for pid in group.profile_ids if pid in profile_ids]
 
 
-def import_full(store, path, mode: str = "merge") -> Config:
+def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
     """Import a full-config export file.
 
     ``mode="merge"`` combines collections (keep existing on dedupe conflicts);
@@ -148,7 +148,12 @@ def import_full(store, path, mode: str = "merge") -> Config:
     incoming = Config.from_dict(raw)
 
     if mode == "replace":
-        create_backup("import-replace", store=store, keep=store.config.settings.backup_keep)
+        create_backup(
+            "import-replace",
+            store=store,
+            backup_dir=backup_dir,
+            keep=store.config.settings.backup_keep,
+        )
         store.config = incoming
         store.save()
         return store.config
