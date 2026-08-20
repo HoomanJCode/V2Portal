@@ -248,7 +248,12 @@ Config is JSON at `<config-dir>/config.json`. Derived dirs under the same base:
 ```bash
 pip install -e .[dev]
 pytest
+python scripts/verify_acceptance.py --json
 ```
+
+GitHub Actions runs the pytest suite and the credential-free acceptance smoke
+on Python 3.10, 3.11, and 3.12 for pushes and pull requests. Live engine,
+remote-node, and platform walkthroughs remain separate from CI.
 
 Read-only platform diagnostics (does not load or modify the config, download
 binaries, or start processes):

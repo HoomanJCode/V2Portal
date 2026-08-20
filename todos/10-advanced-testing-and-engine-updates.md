@@ -58,6 +58,8 @@ xray only when they explicitly request it.
       instead of raising a misleading missing-file traceback.
 - [x] Allow explicit CLI engine updates to use an ephemeral HTTP/SOCKS proxy;
       never persist the proxy value or apply it to automatic startup updates.
+- [x] Add CI coverage for pytest and the credential-free acceptance smoke on
+      Python 3.10, 3.11, and 3.12; live engine/platform checks remain separate.
 
 ## Definition of Done
 
@@ -66,5 +68,6 @@ xray only when they explicitly request it.
 - [x] Real proxy delay is measured separately from endpoint/connect timing.
 - [x] Users can explicitly update sing-box, xray, or both from CLI and TUI.
 - [x] Failed updates leave the prior working binary intact.
-- [ ] `pytest` passes and live verification is recorded without marking blocked
-      platform/credential checks as complete.
+- [ ] CI `pytest` passes and live verification is recorded without marking
+      blocked platform/credential checks as complete. The workflow is configured
+      but has not run in this environment.
