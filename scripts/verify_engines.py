@@ -466,6 +466,82 @@ def check_traffic_stats(checks: Checks, singbox: Path) -> None:
         stop(upstream)
 
 
+def check_websocket_transport(checks: Checks, singbox: Path) -> None:
+    """Drive the SOCKS-connect + WebSocket handshake/ping probe path live."""
+    import base64
+    import hashlib
+    import threading
+
+    from v2raycli.test import latency
+
+    ws_port, proxy_port = free_port(), free_port()
+    ready = threading.Event()
+    guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+    def ws_server() -> None:
+        server = socket.socket()
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", ws_port))
+        server.listen(1)
+        ready.set()
+        try:
+            conn, _ = server.accept()
+            data = b""
+            while b"\r\n\r\n" not in data:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    return
+                data += chunk
+            key = next(
+                (
+                    line.split(": ", 1)[1]
+                    for line in data.decode("latin-1").split("\r\n")
+                    if line.lower().startswith("sec-websocket-key")
+                ),
+                "",
+            )
+            accept = base64.b64encode(hashlib.sha1((key + guid).encode()).digest()).decode()
+            conn.sendall(
+                (
+                    "HTTP/1.1 101 Switching Protocols\r\n"
+                    "Upgrade: websocket\r\n"
+                    "Connection: Upgrade\r\n"
+                    f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+                ).encode("ascii")
+            )
+            header = conn.recv(2)
+            if len(header) == 2:
+                length = header[1] & 0x7F
+                mask = conn.recv(4) if header[1] & 0x80 else b""
+                payload = b""
+                while len(payload) < length:
+                    payload += conn.recv(length - len(payload))
+                if mask:
+                    payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+                conn.sendall(bytes([0x8A, length]) + payload)
+            conn.close()
+        finally:
+            server.close()
+
+    threading.Thread(target=ws_server, daemon=True).start()
+    proxy = start_socks_server(singbox, proxy_port)
+    try:
+        if not (wait_port(proxy_port) and ready.wait(timeout=8)):
+            checks.check("websocket transport (setup)", False, "proxy or ws server never started")
+            return
+        sock = latency._socks_connect(proxy_port, "127.0.0.1", ws_port, 5.0)
+        try:
+            ok, ms, status = latency._websocket_handshake(sock, "127.0.0.1", "/", {})
+            checks.check("websocket handshake", ok, f"status={status} ms={ms:.1f}")
+            if ok:
+                pok, pms, pstatus = latency._websocket_ping(sock, timeout=5.0)
+                checks.check("websocket ping/pong", pok, f"status={pstatus} ms={pms:.1f}")
+        finally:
+            sock.close()
+    finally:
+        stop(proxy)
+
+
 def acquire_binaries(
     checks: Checks,
     bin_dir: Path,
@@ -538,6 +614,7 @@ def main(argv: list[str] | None = None) -> int:
     check_split_routing(checks, bin_dir / "sing-box")
     check_lan_binding(checks, bin_dir / "sing-box")
     check_traffic_stats(checks, bin_dir / "sing-box")
+    check_websocket_transport(checks, bin_dir / "sing-box")
 
     return 0 if checks.summary() else 1
 
