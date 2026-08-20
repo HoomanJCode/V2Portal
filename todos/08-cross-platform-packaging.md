@@ -11,8 +11,8 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
       read-only environment diagnostics)*
 - [x] Add `scripts/verify_acceptance.py`, a credential-free orchestration smoke
       command covering subscription import, split routing, connection switching,
-      test dispatch, cleanup, and OpenVPN argv validation without downloading
-      engines or contacting nodes.
+      test dispatch, cleanup, and OpenVPN/OpenConnect argv validation without
+      downloading engines or contacting nodes.
 - [ ] Verify on **Windows**:
   - console behavior in `cmd`/PowerShell (colors, keys, Ctrl+C)
   - `CREATE_NO_WINDOW` on engine/VPN subprocesses; no flashing windows

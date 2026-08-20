@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 from v2raycli import app, connection
 from v2raycli.models import Profile, RoutingConfig
-from v2raycli.outbounds.vpn import add_openvpn
+from v2raycli.outbounds.vpn import add_openconnect, add_openvpn
 from v2raycli.routing.rules import add_rule
 from v2raycli.storage import ConfigStore
 from v2raycli.subs.parser import import_subscription
@@ -165,6 +165,27 @@ def run_smoke(checks: Checks | None = None) -> bool:
                     "3",
                     "--config",
                     str(vpn_config),
+                ],
+            )
+
+            openconnect_profile = add_openconnect(
+                "smoke-openconnect",
+                "vpn.example.invalid",
+                args=["--user", "smoke"],
+            )
+            openconnect_argv = controller.vpn_argv(
+                "openconnect",
+                "/fake/openconnect",
+                openconnect_profile.vpn,
+                openconnect_profile,
+            )
+            checks.check(
+                "OpenConnect profile argv",
+                openconnect_argv == [
+                    "/fake/openconnect",
+                    "--user",
+                    "smoke",
+                    "vpn.example.invalid",
                 ],
             )
 
