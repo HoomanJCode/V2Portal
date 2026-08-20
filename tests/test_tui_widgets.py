@@ -7,7 +7,8 @@ from v2raycli.tui import widgets
 class _FakeSession:
     answers = iter(())
 
-    def prompt(self, _text, **_kwargs):
+    def prompt(self, text, **_kwargs):
+        print(text)
         return next(self.answers)
 
 
@@ -52,7 +53,7 @@ def test_small_terminal_text_and_message_fallback(monkeypatch, capsys):
 
 
 def test_terminal_size_error_uses_simple_ui(monkeypatch):
-    def fail(_fallback):
+    def fail(fallback=None):
         raise OSError("no terminal")
 
     monkeypatch.setattr(widgets.shutil, "get_terminal_size", fail)

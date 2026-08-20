@@ -309,7 +309,9 @@ def test_singbox_rejects_malformed_server_shape(tmp_path):
 
 def test_singbox_rejects_malformed_vmess_shape(tmp_path):
     store = _store(tmp_path)
-    missing_vnext = store.add_profile(Profile(name="bad", kind="vmess", outbound={}))
+    missing_vnext = store.add_profile(
+        Profile(name="bad", kind="vmess", outbound={"settings": {}})
+    )
     with pytest.raises(ValueError, match="settings.vnext"):
         _generate(store, missing_vnext, default="sing-box")
 

@@ -92,6 +92,7 @@ def test_mocked_full_flow_from_subscription_to_disconnect(tmp_path, monkeypatch)
 
     monkeypatch.setattr(manage.widgets, "menu", lambda *args: "sub")
     monkeypatch.setattr(manage.widgets, "input_text", lambda *args: next(inputs))
+    monkeypatch.setattr(manage.widgets, "show_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         manage,
         "import_subscription",

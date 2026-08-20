@@ -138,7 +138,13 @@ def test_import_merge_triggers_backup_hook(tmp_path):
     store = _store(tmp_path)
     store.add_profile(Profile(name="old", kind="socks", outbound=SOCKS))
     incoming = _store(tmp_path, "incoming.json")
-    incoming.add_profile(Profile(name="new", kind="socks", outbound=SOCKS))
+    incoming.add_profile(
+        Profile(
+            name="new",
+            kind="socks",
+            outbound={"settings": {"servers": [{"address": "5.6.7.8", "port": 1080}]}},
+        )
+    )
     path = _export(tmp_path, incoming)
     backup_dir = tmp_path / "backups"
     backup.install_backup_hook(store, backup_dir=backup_dir)
