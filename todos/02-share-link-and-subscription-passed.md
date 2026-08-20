@@ -43,7 +43,8 @@ protocols, and support updating them. Parser-heavy phase.
 
 - [x] `fetch(url, user_agent) -> (body, headers)` via `httpx`; timeout, redirect,
       typed errors (timeout/DNS/HTTP status); reject invalid URL and user-agent
-      shapes before I/O.
+      shapes before I/O. Uses a v2rayN-compatible default user agent when no
+      custom agent is supplied.
 - [x] Support `file://` and `paste://<payload>`.
 - [x] Parse `Subscription-Userinfo` → `expires` + `traffic_used`; malformed
       traffic values remain safe for health reporting, and non-text payloads or
@@ -53,6 +54,9 @@ protocols, and support updating them. Parser-heavy phase.
 
 - [x] `parse_payload(body) -> list[str]`: plain newline list, base64 blob
       (std/url-safe, padded/unpadded), tolerate BOM/whitespace/blank lines.
+- [x] Xray/v2rayN JSON subscription arrays are converted to Xray manual
+      profiles, skipping direct/block-only entries and retaining stable update
+      identities.
 - [x] `import_subscription(name, url) -> (subscription, profiles, errors)`:
       fetch → parse → decode → create Profiles (`source="subscription"`,
       `subscription_id` set); dedupe by (protocol, host, port, credential);

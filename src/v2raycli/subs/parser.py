@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 from datetime import datetime, timezone
 
 from ..models import Profile, Subscription, now_iso
+from ..outbounds.manual import ALLOWED_MANUAL_PROTOCOLS, add_manual_config
 from . import fetcher
 from .share import ShareLinkError, decode_link
 
@@ -42,6 +45,53 @@ def parse_payload(body: str) -> list[str]:
     if decoded is not None:
         text = decoded
     return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def _json_entries(body: str) -> list[dict] | None:
+    """Return Xray JSON subscription entries, or None for link payloads."""
+    text = body.lstrip(chr(0xFEFF)).strip()
+    if not text.startswith(("{", "[")):
+        return None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON subscription payload: {exc.msg}") from exc
+    if isinstance(payload, dict):
+        payload = [payload]
+    if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+        raise ValueError("JSON subscription payload must contain config objects")
+    return payload
+
+
+def _json_profile(entry: dict, index: int) -> Profile:
+    """Convert one v2rayN/Xray config object into an Xray manual profile."""
+    candidates = entry.get("outbounds") if "outbounds" in entry else [entry]
+    if not isinstance(candidates, list):
+        raise ValueError("outbounds must be a list")
+    outbound = next(
+        (
+            item
+            for item in candidates
+            if isinstance(item, dict) and item.get("protocol") in ALLOWED_MANUAL_PROTOCOLS
+        ),
+        None,
+    )
+    if outbound is None:
+        raise ValueError("config has no supported proxy outbound")
+    name = (
+        entry.get("remarks")
+        or entry.get("remark")
+        or entry.get("name")
+        or outbound.get("tag")
+        or f"json-node-{index + 1}"
+    )
+    if not isinstance(name, str) or not name.strip():
+        name = f"json-node-{index + 1}"
+    clean_outbound = {key: value for key, value in outbound.items() if key != "tag"}
+    profile = add_manual_config(json.dumps(clean_outbound), name.strip(), engine="xray")
+    identity = json.dumps(clean_outbound, sort_keys=True, separators=(",", ":"))
+    profile.share_link = "xray-json://" + hashlib.sha256(identity.encode()).hexdigest()
+    return profile
 
 
 def _profile_key(p: Profile) -> tuple:
@@ -104,23 +154,39 @@ def _userinfo(headers: dict) -> tuple[int, str | None]:
 
 def _build(sub_id: str, url: str, user_agent: str | None) -> tuple[list[Profile], list[str], int, str | None]:
     body, headers = fetcher.fetch(url, user_agent)
-    links = parse_payload(body)
+    entries = _json_entries(body)
     profiles: list[Profile] = []
     errors: list[str] = []
     seen: set = set()
-    for link in links:
-        try:
-            profile = decode_link(link)
-        except ShareLinkError as exc:
-            errors.append(f"{link[:40]}: {exc}")
-            continue
-        key = _profile_key(profile)
-        if key in seen:
-            continue
-        seen.add(key)
-        profile.source = "subscription"
-        profile.subscription_id = sub_id
-        profiles.append(profile)
+    if entries is not None:
+        for index, entry in enumerate(entries):
+            try:
+                profile = _json_profile(entry, index)
+            except (TypeError, ValueError) as exc:
+                errors.append(f"json node {index + 1}: {exc}")
+                continue
+            key = _profile_key(profile)
+            if key in seen:
+                continue
+            seen.add(key)
+            profile.source = "subscription"
+            profile.subscription_id = sub_id
+            profiles.append(profile)
+    else:
+        links = parse_payload(body)
+        for link in links:
+            try:
+                profile = decode_link(link)
+            except ShareLinkError as exc:
+                errors.append(f"{link[:40]}: {exc}")
+                continue
+            key = _profile_key(profile)
+            if key in seen:
+                continue
+            seen.add(key)
+            profile.source = "subscription"
+            profile.subscription_id = sub_id
+            profiles.append(profile)
     traffic, expires = _userinfo(headers)
     return profiles, errors, traffic, expires
 

@@ -1,4 +1,5 @@
 import base64
+import json
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,68 @@ def test_sample_fixture_imports_all_protocols():
     kinds = {p.kind for p in profiles}
     assert {"vless", "trojan", "socks", "http", "hysteria2", "tuic"} <= kinds
     assert sub.profile_ids == [p.id for p in profiles]
+
+
+def test_import_xray_json_subscription(tmp_path):
+    body = json.dumps(
+        [
+            {
+                "remarks": "json-vless",
+                "outbounds": [
+                    {
+                        "protocol": "vless",
+                        "tag": "proxy",
+                        "settings": {
+                            "vnext": [
+                                {
+                                    "address": "node.example.com",
+                                    "port": 443,
+                                    "users": [{"id": "00000000-0000-0000-0000-000000000001"}],
+                                }
+                            ]
+                        },
+                    },
+                    {"protocol": "freedom", "tag": "direct"},
+                ],
+            },
+            {
+                "remark": "json-ss",
+                "protocol": "shadowsocks",
+                "settings": {
+                    "servers": [
+                        {
+                            "address": "ss.example.com",
+                            "port": 8388,
+                            "method": "aes-128-gcm",
+                            "password": "password",
+                        }
+                    ]
+                },
+            },
+        ]
+    )
+    path = tmp_path / "xray.json"
+    path.write_text(body)
+
+    sub, profiles, errors = import_subscription("JSON", f"file://{path}")
+
+    assert not errors
+    assert [profile.name for profile in profiles] == ["json-vless", "json-ss"]
+    assert all(profile.kind == "manual" for profile in profiles)
+    assert all(profile.engine == "xray" for profile in profiles)
+    assert all(profile.share_link.startswith("xray-json://") for profile in profiles)
+    assert all("tag" not in profile.outbound for profile in profiles)
+    assert sub.profile_ids == [profile.id for profile in profiles]
+
+
+def test_import_xray_json_reports_unsupported_nodes(tmp_path):
+    path = tmp_path / "xray.json"
+    path.write_text(json.dumps([{"remarks": "direct-only", "outbounds": [{"protocol": "freedom"}]}]))
+
+    _sub, profiles, errors = import_subscription("JSON", f"file://{path}")
+
+    assert profiles == []
+    assert errors == ["json node 1: config has no supported proxy outbound"]
 
 
 def test_import_subscription(tmp_path):

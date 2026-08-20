@@ -7,6 +7,9 @@ from pathlib import Path
 import httpx
 
 
+DEFAULT_USER_AGENT = "v2rayN/6.23"
+
+
 class FetchError(Exception):
     """A typed failure while fetching a subscription."""
 
@@ -35,7 +38,7 @@ def fetch(url: str, user_agent: str | None = None) -> tuple[str, dict]:
     if not url.startswith(("http://", "https://")):
         raise FetchError("unsupported subscription URL scheme")
 
-    headers = {"User-Agent": user_agent} if user_agent else {}
+    headers = {"User-Agent": user_agent or DEFAULT_USER_AGENT}
     try:
         with httpx.Client(follow_redirects=True, timeout=30.0, headers=headers) as client:
             resp = client.get(url)

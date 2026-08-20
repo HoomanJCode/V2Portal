@@ -35,6 +35,8 @@ def test_file_missing_raises(tmp_path):
 
 
 def test_http_fetch_mocked(monkeypatch):
+    captured = {}
+
     class FakeResponse:
         text = "vmess://x"
         headers = {"Subscription-Userinfo": "upload=1; download=2; total=3; expire=1700000000"}
@@ -44,7 +46,7 @@ def test_http_fetch_mocked(monkeypatch):
 
     class FakeClient:
         def __init__(self, **kwargs):
-            pass
+            captured.update(kwargs)
 
         def __enter__(self):
             return self
@@ -59,3 +61,7 @@ def test_http_fetch_mocked(monkeypatch):
     body, headers = fetch("https://example.com/sub")
     assert body == "vmess://x"
     assert headers["subscription-userinfo"].startswith("upload=1")
+    assert captured["headers"]["User-Agent"] == fetcher.DEFAULT_USER_AGENT
+
+    fetch("https://example.com/sub", user_agent="custom-client")
+    assert captured["headers"]["User-Agent"] == "custom-client"
