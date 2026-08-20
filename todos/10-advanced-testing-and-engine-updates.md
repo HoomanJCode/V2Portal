@@ -1,6 +1,6 @@
 # Phase 10 — Advanced Outbound Testing & Engine Updates
 
-> **Status:** In progress; endpoint, WebSocket, and engine-update slices are implemented.
+> **Status:** In progress; all automatable implementation slices are covered.
 
 Goal: provide deeper per-config verification and let users update sing-box or
 xray only when they explicitly request it.
@@ -48,8 +48,9 @@ xray only when they explicitly request it.
 - [x] Unit-test full-request delay and mixed success/failure reporting.
 - [x] Test CLI/TUI update confirmation, engine selection, custom binary
       protection, running-engine protection, atomic replacement, and rollback.
-- [ ] Test the supplied mixed-protocol subscription shape with configs that
-      fail individually; one bad node must not stop the remaining tests.
+- [x] Test a credential-free mixed-protocol v2rayN subscription shape with
+      configs that fail individually; one bad node does not stop the remaining
+      tests. Live supplied credentials remain external to the repository.
 
 ## Definition of Done
 

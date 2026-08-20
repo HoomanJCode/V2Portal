@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from v2raycli import app, connection
@@ -9,12 +10,72 @@ from v2raycli.tui import manage
 
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
+MIXED_JSON = [
+    {
+        "remarks": "mixed-vless",
+        "outbounds": [{
+            "protocol": "vless",
+            "settings": {"vnext": [{
+                "address": "vless.example",
+                "port": 443,
+                "users": [{"id": "00000000-0000-0000-0000-000000000010"}],
+            }]},
+        }],
+    },
+    {
+        "remarks": "mixed-ss",
+        "protocol": "shadowsocks",
+        "settings": {"servers": [{
+            "address": "ss.example",
+            "port": 8388,
+            "method": "aes-128-gcm",
+            "password": "fixture-password",
+        }]},
+    },
+    {
+        "remarks": "mixed-socks",
+        "protocol": "socks",
+        "settings": {"servers": [{"address": "socks.example", "port": 1080}]},
+    },
+    {"remarks": "direct-only", "outbounds": [{"protocol": "freedom"}]},
+]
 
 
 def _store(tmp_path):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
     return store
+
+
+def test_mixed_subscription_nodes_fail_individually(tmp_path, monkeypatch):
+    from v2raycli.subs.parser import import_subscription
+
+    path = tmp_path / "mixed.json"
+    path.write_text(json.dumps(MIXED_JSON), encoding="utf-8")
+    sub, profiles, errors = import_subscription("mixed", f"file://{path}")
+
+    assert len(profiles) == 3
+    assert len(errors) == 1
+    assert "direct-only" not in {profile.name for profile in profiles}
+    assert sub.profile_ids == [profile.id for profile in profiles]
+
+    def fake_test(profile, settings, engines=None, bin_dir=None):
+        return latency.TestResult(
+            profile_id=profile.id,
+            name=profile.name,
+            kind=profile.kind,
+            engine=profile.engine,
+            ok=profile.name != "mixed-ss",
+            latency_ms=12.0 if profile.name != "mixed-ss" else None,
+            error=None if profile.name != "mixed-ss" else "proxy refused",
+        )
+
+    monkeypatch.setattr(latency, "test_profile", fake_test)
+    results = latency.test_many(profiles, _store(tmp_path).config.settings, concurrency=3)
+
+    assert [result.name for result in results] == ["mixed-vless", "mixed-ss", "mixed-socks"]
+    assert [result.ok for result in results] == [True, False, True]
+    assert results[1].error == "proxy refused"
 
 
 def test_mocked_full_flow_from_subscription_to_disconnect(tmp_path, monkeypatch):
