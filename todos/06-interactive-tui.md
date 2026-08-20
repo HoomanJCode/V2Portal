@@ -58,6 +58,8 @@ console and Termux.
 ## Definition of Done
 
 - [x] Every Phase 03–05 feature is reachable from the TUI (code path).
-- [~] Manual walkthrough — imports + main-loop smoke verified; a full
-      interactive run still needs a human at a TTY (Linux/Windows/Termux).
+- [~] Manual walkthrough — the real TUI is now smoke-tested on a pty
+      (launch, render the menu, keyboard-select Quit, clean exit —
+      `test_tui_pty.py`); a full human-driven, menu-by-menu walkthrough on
+      Linux/Windows/Termux remains deferred.
 - [x] `pytest` (existing suite) still passes — 112 tests.
