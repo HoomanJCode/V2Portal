@@ -265,6 +265,7 @@ does not download engines or contact remote nodes):
 
 ```bash
 python scripts/verify_acceptance.py
+python scripts/verify_acceptance.py --json
 ```
 
 Live engine verification (downloads sing-box + xray, runs their own config

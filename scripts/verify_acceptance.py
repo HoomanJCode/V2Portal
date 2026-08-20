@@ -56,17 +56,29 @@ MIXED_PAYLOAD = [
 
 
 class Checks:
-    def __init__(self) -> None:
+    def __init__(self, quiet: bool = False) -> None:
+        self.quiet = quiet
         self.results: list[tuple[str, bool, str]] = []
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         self.results.append((name, ok, detail))
-        print(f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  {detail}" if detail else ""))
+        if not self.quiet:
+            print(f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  {detail}" if detail else ""))
 
     def summary(self) -> bool:
         failed = [result for result in self.results if not result[1]]
-        print("\n" + ("ALL CHECKS PASSED" if not failed else f"{len(failed)} CHECK(S) FAILED"))
+        if not self.quiet:
+            print("\n" + ("ALL CHECKS PASSED" if not failed else f"{len(failed)} CHECK(S) FAILED"))
         return not failed
+
+    def as_dict(self) -> dict:
+        return {
+            "ok": not any(not ok for _, ok, _ in self.results),
+            "checks": [
+                {"name": name, "ok": ok, "detail": detail}
+                for name, ok, detail in self.results
+            ],
+        }
 
 
 class FakeProc:
@@ -215,12 +227,18 @@ def run_smoke(checks: Checks | None = None) -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(description="Run a credential-free v2raycli acceptance smoke flow.")
+    parser = argparse.ArgumentParser(description="Run a credential-free v2raycli acceptance smoke flow.")
+    parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    build_parser().parse_args(argv)
-    return 0 if run_smoke() else 1
+    args = build_parser().parse_args(argv)
+    checks = Checks(quiet=args.json)
+    ok = run_smoke(checks)
+    if args.json:
+        print(json.dumps(checks.as_dict(), ensure_ascii=False, sort_keys=True))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
