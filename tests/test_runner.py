@@ -1,3 +1,4 @@
+from v2raycli import runner
 from v2raycli.runner import Proc
 
 
@@ -6,6 +7,22 @@ def _script(tmp_path, body):
     script.write_text("#!/bin/sh\n" + body + "\n")
     script.chmod(0o755)
     return str(script)
+
+
+def test_windows_process_flags(monkeypatch):
+    monkeypatch.setattr(runner.os, "name", "nt")
+    monkeypatch.setattr(runner.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200, raising=False)
+
+    assert runner._process_kwargs() == {
+        "creationflags": 0x08000000 | 0x00000200,
+    }
+
+
+def test_non_windows_process_flags(monkeypatch):
+    monkeypatch.setattr(runner.os, "name", "posix")
+
+    assert runner._process_kwargs() == {"start_new_session": True}
 
 
 def test_start_stop_and_logs(tmp_path):

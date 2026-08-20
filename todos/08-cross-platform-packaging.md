@@ -13,7 +13,9 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
   - `%APPDATA%` config; firewall note when LAN binding is enabled
   - binary download + extraction for both engines on Windows
   - `openvpn`/`openconnect` detection on PATH
-      *(deferred — no Windows host here)*
+      *(deferred — no Windows host here; subprocess flag coverage is in
+      `test_runner.py` and config-path fallback coverage is in
+      `test_config.py`)*
 - [~] Verify on **Termux (Android)**:
   - [x] `pkg install python` + `pip install .` documented
   - [x] arm64 binaries for sing-box + xray auto-download (verified live:
@@ -39,7 +41,8 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 ## Definition of Done
 
 - [ ] All three platforms run the full flow successfully. *(deferred — needs
-      real engine binaries + a Windows host)*
+      real engine binaries + a Windows host; platform fallback and subprocess
+      behavior have automated unit coverage)*
 - [x] README and install instructions complete and accurate.
 - [x] No platform-specific hacks left uncommented; `pytest` green (91 tests).
 

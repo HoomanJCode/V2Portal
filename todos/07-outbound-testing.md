@@ -43,7 +43,9 @@ table.
 ## Deferred (needs a real remote proxy / Windows host)
 
 - [x] Live latency probe against a real sing-box upstream — verified (ok=True).
-- [ ] Windows end-to-end run to confirm no leaked processes.
+- [ ] Windows end-to-end run to confirm no leaked processes. Automated
+      process-group flag coverage is in `test_runner.py`; a Windows host is
+      still required for end-to-end confirmation.
 - [x] TCP-connect vs full-request timing split (stretch) — implemented as
       `connect_ms` in `TestResult`, shown as a `Connect` column.
 - [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).
