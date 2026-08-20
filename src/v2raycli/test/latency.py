@@ -63,6 +63,8 @@ class WebSocketResult:
 
 @dataclass
 class TestResult:
+    __test__ = False  # a dataclass, not a pytest test class
+
     profile_id: str = ""
     name: str = ""
     kind: str = ""
