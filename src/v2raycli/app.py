@@ -38,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SCOPE",
         help="probe remote endpoints with ICMP/TCP and exit using the same scope syntax as --test",
     )
+    parser.add_argument(
+        "--ws-test",
+        metavar="SCOPE",
+        help="test WS/WSS handshake and ping/pong using the same scope syntax as --test",
+    )
     parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
     parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
     parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
@@ -109,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.probe:
         return _probe(store, args.probe)
+
+    if args.ws_test:
+        return _ws_test(store, args.ws_test)
 
     if args.backup:
         return _backup(store)
@@ -269,6 +277,22 @@ def _probe(store: ConfigStore, scope: str) -> int:
     results = probe_many(profiles)
     render_endpoint_table(results)
     return 0 if all(result.tcp_status in {"ok", "not_testable"} for result in results) else 1
+
+
+def _ws_test(store: ConfigStore, scope: str) -> int:
+    from .test.latency import render_websocket_table, websocket_test_many
+
+    profiles = _resolve_test_scope(store, scope)
+    if not profiles:
+        print(f"no matching profiles for scope: {scope}", file=sys.stderr)
+        return 1
+    results = websocket_test_many(profiles, store.config.settings, engines=store.config.engines)
+    render_websocket_table(results)
+    return 0 if all(
+        result.not_testable
+        or (result.handshake_status == "ok" and result.payload_status == "ok")
+        for result in results
+    ) else 1
 
 
 def _test(store: ConfigStore, scope: str) -> int:

@@ -13,13 +13,13 @@ xray only when they explicitly request it.
 - [x] Add a TCP-connect probe for each endpoint and report connect time,
       timeout, DNS failure, and refused connection distinctly. Exposed by
       `--probe`.
-- [ ] Add WebSocket transport testing:
-  - [ ] Start the resolved engine config for the selected profile.
-  - [ ] Connect through the local inbound and verify a WebSocket upgrade
+- [x] Add WebSocket transport testing:
+  - [x] Start the resolved engine config for the selected profile.
+  - [x] Connect through the local inbound and verify a WebSocket upgrade
         handshake (`101 Switching Protocols`) when the profile uses WS/WSS.
-  - [ ] Send a small ping/payload and verify a valid response before cleanup.
-  - [ ] Report handshake and payload failures per config without aborting the
-        remaining test run.
+  - [x] Send a small ping/payload and verify a valid response before cleanup.
+  - [x] Report handshake and payload failures per config without aborting the
+        remaining test run. Exposed by `--ws-test`.
 - [ ] Add real delay testing through each profile: perform a full HTTP request
       through the proxy, report TCP connect time separately from request time,
       and preserve per-config errors/timeouts.
@@ -43,8 +43,8 @@ xray only when they explicitly request it.
 ## Tests
 
 - [x] Unit-test ICMP-unavailable and TCP timeout/refused classification.
-- [ ] Unit-test WebSocket handshake and payload failure, full-request delay,
-      and mixed success/failure reporting.
+- [x] Unit-test WebSocket handshake and payload failure.
+- [ ] Unit-test full-request delay and mixed success/failure reporting.
 - [ ] Test CLI/TUI update confirmation, engine selection, custom binary
       protection, running-engine protection, atomic replacement, and rollback.
 - [ ] Test the supplied mixed-protocol subscription shape with configs that
@@ -53,7 +53,7 @@ xray only when they explicitly request it.
 ## Definition of Done
 
 - [x] ICMP and TCP endpoint measurements are visible and distinguishable.
-- [ ] WS/WSS profiles complete handshake plus payload checks when applicable.
+- [x] WS/WSS profiles complete handshake plus payload checks when applicable.
 - [ ] Real proxy delay is measured separately from endpoint/connect timing.
 - [ ] Users can explicitly update sing-box, xray, or both from CLI and TUI.
 - [ ] Failed updates leave the prior working binary intact.

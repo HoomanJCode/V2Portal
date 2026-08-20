@@ -217,6 +217,114 @@ def test_probe_many_returns_input_order(tmp_path, monkeypatch):
     assert [result.profile_id for result in results] == [a.id, b.id]
 
 
+class FakeWebSocketSocket:
+    def __init__(self, response=b""):
+        self.response = response
+        self.sent = []
+        self.timeout = None
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def sendall(self, data):
+        self.sent.append(data)
+        if data.startswith(b"GET "):
+            request = data.decode("ascii")
+            key = next(line.split(": ", 1)[1] for line in request.split("\\r\\n") if line.startswith("Sec-WebSocket-Key:"))
+            accept = latency.base64.b64encode(
+                latency.hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+            ).decode("ascii")
+            self.response = (
+                "HTTP/1.1 101 Switching Protocols\\r\\n"
+                "Upgrade: websocket\\r\\n"
+                "Connection: Upgrade\\r\\n"
+                f"Sec-WebSocket-Accept: {accept}\\r\\n\\r\\n"
+            ).encode("ascii")
+
+    def recv(self, size):
+        data, self.response = self.response[:size], self.response[size:]
+        return data
+
+    def close(self):
+        pass
+
+
+def test_websocket_transport_detects_ws_and_wss(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="ws", kind="vmess", outbound={
+        "settings": {"vnext": [{"address": "ws.example", "port": 443}]},
+        "streamSettings": {
+            "network": "ws", "security": "tls",
+            "wsSettings": {"path": "/socket", "headers": {"Host": "cdn.example"}},
+            "tlsSettings": {"serverName": "cdn.example"},
+        },
+    }))
+
+    transport = latency.websocket_transport(profile)
+
+    assert transport["secure"] is True
+    assert transport["host"] == "cdn.example"
+    assert transport["path"] == "/socket"
+    assert latency.websocket_transport(Profile(name="tcp", kind="socks", outbound=SOCKS)) is None
+
+
+def test_websocket_handshake_validates_101_and_accept():
+    sock = FakeWebSocketSocket()
+
+    ok, elapsed, status = latency._websocket_handshake(sock, "ws.example", "/", {})
+
+    assert ok is True
+    assert elapsed >= 0
+    assert status == "ok"
+    assert b"Upgrade: websocket" in sock.sent[0]
+
+
+def test_websocket_handshake_rejects_non_101():
+    sock = FakeWebSocketSocket(b"HTTP/1.1 404 Not Found\\r\\n\\r\\n")
+
+    ok, _, status = latency._websocket_handshake(sock, "ws.example", "/", {})
+
+    assert ok is False
+    assert status == "handshake_status"
+
+
+def test_websocket_ping_requires_matching_pong():
+    sock = FakeWebSocketSocket(b"\\x8a\\x08v2raycli")
+
+    ok, elapsed, status = latency._websocket_ping(sock)
+
+    assert ok is True
+    assert elapsed >= 0
+    assert status == "ok"
+    assert sock.sent[0][0] == 0x89
+    assert sock.sent[0][1] & 0x80
+
+    invalid = FakeWebSocketSocket(b"\\x8a\\x03bad")
+    assert latency._websocket_ping(invalid)[2] == "payload_invalid"
+
+
+def test_websocket_profile_cleans_up_engine(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="ws", kind="vmess", engine="xray", outbound={
+        "settings": {"vnext": [{"address": "ws.example", "port": 443, "users": [{"id": "u"}]}]},
+        "streamSettings": {"network": "ws", "wsSettings": {"path": "/"}},
+    }))
+    captured = {}
+    _install_fakes(monkeypatch, captured)
+    monkeypatch.setattr(latency, "locate_binary", lambda *a, **k: Path("/fake/xray"))
+    monkeypatch.setattr(latency, "_websocket_probe", lambda *a, **k: (
+        "ws.example", 443, "ok", 12.0, "ok", 3.0, None
+    ))
+
+    result = latency.test_websocket_profile(profile, store.config.settings)
+
+    assert result.handshake_status == "ok"
+    assert result.payload_status == "ok"
+    assert result.handshake_ms == 12.0
+    assert result.payload_ms == 3.0
+    assert FakeProc.instances[-1].stopped is True
+
+
 def test_scope_selectors(tmp_path):
     store = _store(tmp_path)
     sub = store.add_subscription(Subscription(name="sub"))

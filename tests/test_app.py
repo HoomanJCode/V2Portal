@@ -79,6 +79,29 @@ def test_probe_parser_option():
     assert args.probe == "all"
 
 
+def test_ws_test_parser_option():
+    args = app.build_parser().parse_args(["--ws-test", "all"])
+
+    assert args.ws_test == "all"
+
+
+def test_ws_test_skips_non_websocket_profiles(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    monkeypatch.setattr(
+        latency,
+        "websocket_test_many",
+        lambda profiles, settings, engines=None, concurrency=4, bin_dir=None: [
+            latency.WebSocketResult(profile_id=profile.id, name=profile.name, not_testable=True)
+        ],
+    )
+    monkeypatch.setattr(latency, "render_websocket_table", lambda results: None)
+
+    assert app._ws_test(store, profile.id) == 0
+
+
 def test_test_flag_all(tmp_path, monkeypatch):
     from v2raycli.test import latency
 

@@ -6,11 +6,16 @@ inbound routed through that profile, then timing an HTTP request through it.
 
 from __future__ import annotations
 
+import base64
 import errno
+import hashlib
 import json
 import math
 import os
+import secrets
 import socket
+import ssl
+import struct
 import subprocess
 import tempfile
 import time
@@ -38,6 +43,22 @@ class EndpointResult:
     tcp_ms: float | None = None
     tcp_status: str = "not_testable"
     error: str | None = None
+
+
+@dataclass
+class WebSocketResult:
+    profile_id: str = ""
+    name: str = ""
+    kind: str = ""
+    engine: str = ""
+    host: str = ""
+    port: int | None = None
+    handshake_ms: float | None = None
+    handshake_status: str = "not_testable"
+    payload_ms: float | None = None
+    payload_status: str = "not_testable"
+    error: str | None = None
+    not_testable: bool = False
 
 
 @dataclass
@@ -190,6 +211,295 @@ def render_endpoint_table(results: list[EndpointResult]) -> None:
         status = "OK" if result.tcp_status == "ok" else (result.error or result.tcp_status)
         style = "green" if result.tcp_status == "ok" else "red"
         table.add_row(result.name, f"{result.host}:{result.port or '-'}", icmp, tcp, status, style=style)
+    Console().print(table)
+
+
+def websocket_transport(profile) -> dict | None:
+    """Return normalized Xray WS/WSS settings, or None for other transports."""
+    outbound = profile.outbound if isinstance(profile.outbound, dict) else {}
+    stream = outbound.get("streamSettings")
+    if not isinstance(stream, dict) or stream.get("network") != "ws":
+        return None
+    ws = stream.get("wsSettings") or {}
+    if not isinstance(ws, dict):
+        return None
+    tls = stream.get("tlsSettings") or {}
+    if not isinstance(tls, dict):
+        return None
+    headers = ws.get("headers") or {}
+    if not isinstance(headers, dict):
+        return None
+    host, _ = profile_endpoint(profile)
+    host_header = headers.get("Host") or host
+    if not isinstance(host_header, str) or not host_header.strip():
+        return None
+    path = ws.get("path") or "/"
+    if not isinstance(path, str) or not path.startswith("/"):
+        return None
+    security = stream.get("security", "none")
+    if security not in ("none", "tls"):
+        return None
+    server_name = tls.get("serverName") or host
+    if not isinstance(server_name, str) or not server_name.strip():
+        return None
+    if any(
+        isinstance(value, str) and ("\\r" in value or "\\n" in value)
+        for value in (host_header, path, server_name, *headers.values())
+    ):
+        return None
+    return {
+        "secure": security == "tls",
+        "host": host_header.strip(),
+        "server_name": server_name.strip(),
+        "path": path,
+        "headers": {
+            key: value for key, value in headers.items()
+            if isinstance(key, str) and isinstance(value, str) and key.lower() != "host"
+        },
+        "allow_insecure": bool(tls.get("allowInsecure")),
+    }
+
+
+def _recv_exact(sock, size: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise OSError("connection closed while receiving WebSocket data")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _recv_headers(sock, limit: int = 65536) -> bytes:
+    data = bytearray()
+    while b"\\r\\n\\r\\n" not in data:
+        chunk = sock.recv(min(4096, limit - len(data)))
+        if not chunk:
+            raise OSError("connection closed during WebSocket handshake")
+        data.extend(chunk)
+        if len(data) >= limit:
+            raise OSError("WebSocket handshake headers are too large")
+    return bytes(data)
+
+
+def _websocket_handshake(sock, host: str, path: str, headers: dict, timeout: float = 5.0) -> tuple[bool, float, str]:
+    """Perform and validate the RFC 6455 HTTP upgrade handshake."""
+    started = time.monotonic()
+    key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+    request_headers = {
+        "Host": host,
+        "Upgrade": "websocket",
+        "Connection": "Upgrade",
+        "Sec-WebSocket-Key": key,
+        "Sec-WebSocket-Version": "13",
+        **headers,
+    }
+    request = [f"GET {path} HTTP/1.1"]
+    request.extend(f"{name}: {value}" for name, value in request_headers.items())
+    sock.settimeout(timeout)
+    sock.sendall(("\\r\\n".join(request) + "\\r\\n\\r\\n").encode("ascii"))
+    response = _recv_headers(sock).split(b"\\r\\n\\r\\n", 1)[0].decode("latin-1")
+    lines = response.split("\\r\\n")
+    status = lines[0].split(" ", 2) if lines else []
+    response_headers = {}
+    for line in lines[1:]:
+        name, separator, value = line.partition(":")
+        if separator:
+            response_headers[name.strip().lower()] = value.strip()
+    expected = base64.b64encode(
+        hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+    ).decode("ascii")
+    elapsed = (time.monotonic() - started) * 1000.0
+    if len(status) < 2 or status[1] != "101":
+        return False, elapsed, "handshake_status"
+    if response_headers.get("upgrade", "").lower() != "websocket":
+        return False, elapsed, "handshake_upgrade"
+    if response_headers.get("sec-websocket-accept") != expected:
+        return False, elapsed, "handshake_accept"
+    return True, elapsed, "ok"
+
+
+def _websocket_ping(sock, payload: bytes = b"v2raycli", timeout: float = 5.0) -> tuple[bool, float, str]:
+    """Send a masked client ping and require the matching server pong."""
+    started = time.monotonic()
+    mask = secrets.token_bytes(4)
+    masked = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+    if len(payload) < 126:
+        frame = bytes((0x89, 0x80 | len(payload))) + mask + masked
+    elif len(payload) <= 65535:
+        frame = bytes((0x89, 0xFE)) + struct.pack("!H", len(payload)) + mask + masked
+    else:
+        raise ValueError("WebSocket ping payload is too large")
+    sock.settimeout(timeout)
+    sock.sendall(frame)
+    first, second = _recv_exact(sock, 2)
+    opcode = first & 0x0F
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", _recv_exact(sock, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", _recv_exact(sock, 8))[0]
+    if second & 0x80:
+        response_mask = _recv_exact(sock, 4)
+    else:
+        response_mask = b""
+    response = _recv_exact(sock, length)
+    if response_mask:
+        response = bytes(value ^ response_mask[index % 4] for index, value in enumerate(response))
+    elapsed = (time.monotonic() - started) * 1000.0
+    if opcode != 0x0A or response != payload:
+        return False, elapsed, "payload_invalid"
+    return True, elapsed, "ok"
+
+
+def _socks_connect(local_port: int, host: str, port: int, timeout: float) -> socket.socket:
+    """Connect to a remote host through the local SOCKS5 inbound."""
+    sock = socket.create_connection(("127.0.0.1", local_port), timeout=timeout)
+    try:
+        sock.settimeout(timeout)
+        if _recv_exact_after_send(sock, b"\\x05\\x01\\x00", 2) != b"\\x05\\x00":
+            raise OSError("local SOCKS5 proxy rejected unauthenticated handshake")
+        encoded_host = host.encode("idna")
+        if not 1 <= len(encoded_host) <= 255:
+            raise OSError("remote host is not valid for SOCKS5")
+        request = b"\\x05\\x01\\x00\\x03" + bytes([len(encoded_host)]) + encoded_host + port.to_bytes(2, "big")
+        reply = _recv_exact_after_send(sock, request, 4)
+        if reply[:2] != b"\\x05\\x00":
+            raise OSError(f"SOCKS5 CONNECT failed ({reply[1] if len(reply) > 1 else 'unknown'})")
+        atyp = reply[3]
+        if atyp == 1:
+            _recv_exact(sock, 6)
+        elif atyp == 3:
+            length = _recv_exact(sock, 1)[0]
+            _recv_exact(sock, length + 2)
+        elif atyp == 4:
+            _recv_exact(sock, 18)
+        else:
+            raise OSError("SOCKS5 proxy returned an invalid address type")
+        return sock
+    except Exception:
+        sock.close()
+        raise
+
+
+def _recv_exact_after_send(sock, data: bytes, size: int) -> bytes:
+    sock.sendall(data)
+    return _recv_exact(sock, size)
+
+
+def _websocket_probe(profile, local_port: int, timeout: float = 5.0) -> tuple[str, int | None, str, float | None, str, float | None, str | None]:
+    transport = websocket_transport(profile)
+    host, port = profile_endpoint(profile)
+    if transport is None:
+        return host, port, "not_testable", None, "not_testable", None, "profile does not use WebSocket transport"
+    if not host or port is None:
+        return host, port, "invalid", None, "not_testable", None, "profile has no valid remote endpoint"
+    sock = _socks_connect(local_port, host, port, timeout)
+    try:
+        if transport["secure"]:
+            context = ssl._create_unverified_context() if transport["allow_insecure"] else ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=transport["server_name"])
+        handshake_ok, handshake_ms, handshake_status = _websocket_handshake(
+            sock, transport["host"], transport["path"], transport["headers"], timeout
+        )
+        if not handshake_ok:
+            return host, port, handshake_status, handshake_ms, "not_tested", None, handshake_status
+        payload_ok, payload_ms, payload_status = _websocket_ping(sock, timeout=timeout)
+        return host, port, "ok", handshake_ms, payload_status, payload_ms, None if payload_ok else payload_status
+    finally:
+        sock.close()
+
+
+def test_websocket_profile(
+    profile: Profile,
+    settings,
+    engines: dict | None = None,
+    bin_dir=None,
+) -> WebSocketResult:
+    host, port = profile_endpoint(profile)
+    result = WebSocketResult(profile_id=profile.id, name=profile.name, kind=profile.kind, host=host, port=port)
+    if profile.kind in VPN_KINDS or websocket_transport(profile) is None:
+        result.error = "profile does not use WebSocket transport"
+        result.not_testable = True
+        return result
+    engines = engines or {}
+    engine = resolve_engine(profile.kind, "", profile.engine, settings.default_engine)
+    result.engine = engine
+    proc: Proc | None = None
+    path: str | None = None
+    try:
+        local_port = _free_port()
+        engine, config_dict = build_test_config(profile, settings, local_port)
+        adapter = get_adapter(engine)
+        path = _write_temp_config(engine, config_dict)
+        binary = locate_binary(engine, engines.get(engine, {}), bin_dir=bin_dir)
+        proc = Proc()
+        proc.start([str(binary), *adapter.run_args(path)])
+        if not _wait_port(local_port):
+            result.error = "engine did not start"
+            result.handshake_status = "engine_failed"
+            return result
+        host, port, handshake_status, handshake_ms, payload_status, payload_ms, error = _websocket_probe(profile, local_port)
+        result.host, result.port = host, port
+        result.handshake_status, result.handshake_ms = handshake_status, handshake_ms
+        result.payload_status = payload_status
+        result.payload_ms = payload_ms
+        result.error = error
+        return result
+    except BinaryError as exc:
+        result.error = str(exc)
+        result.handshake_status = "binary_failed"
+        return result
+    except Exception as exc:  # pragma: no cover - defensive
+        result.error = str(exc)
+        result.handshake_status = "error"
+        return result
+    finally:
+        if proc is not None:
+            proc.stop()
+        if path is not None:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+def websocket_test_many(
+    profiles,
+    settings,
+    engines: dict | None = None,
+    concurrency: int = 4,
+    bin_dir=None,
+) -> list[WebSocketResult]:
+    results: dict[str, WebSocketResult] = {}
+    workers = max(1, min(int(concurrency), 16))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(test_websocket_profile, profile, settings, engines, bin_dir): profile.id
+            for profile in profiles
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            results[result.profile_id] = result
+    return [results[profile.id] for profile in profiles]
+
+
+def render_websocket_table(results: list[WebSocketResult]) -> None:
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(title="WebSocket tests")
+    for column in ("Name", "Endpoint", "Handshake", "Payload", "Status"):
+        table.add_column(column)
+    for result in results:
+        handshake = f"{result.handshake_ms:.0f} ms" if result.handshake_ms is not None else result.handshake_status
+        payload = f"{result.payload_ms:.0f} ms" if result.payload_ms is not None else result.payload_status
+        ok = result.handshake_status == "ok" and result.payload_status == "ok"
+        status = "skip" if result.not_testable else ("OK" if ok else (result.error or "FAIL"))
+        table.add_row(result.name, f"{result.host}:{result.port or '-'}", handshake, payload, status,
+                      style="green" if ok else ("dim" if result.not_testable else "red"))
     Console().print(table)
 
 
