@@ -26,7 +26,7 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
       `%APPDATA%` paths, `process_mode: windows-no-window-new-process-group`,
       `tui_available: False`; acceptance smoke passes; 321 tests green;
       `test_windows_no_leaked_processes` confirms clean shutdown)*
-- [~] Verify on **Termux (Android)**:
+- [x] Verify on **Termux (Android)**:
   - [x] `pkg install python` + `pip install .` documented
   - [x] arm64 binaries for sing-box + xray auto-download (verified live:
         sing-box android-arm64 + xray linux-arm64 both run on bionic)
