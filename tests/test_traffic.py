@@ -8,6 +8,8 @@ from v2raycli.connection import ConnectionController
 from v2raycli.models import Group, Profile, Settings
 from v2raycli.storage import ConfigStore
 
+from conftest import make_fake_script
+
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 CHECK_GUARD = 'if [ "$1" = "check" ] || [ "$2" = "-test" ]; then exit 0; fi'
 
@@ -98,10 +100,7 @@ def test_settings_roundtrip_traffic_api(tmp_path):
 
 
 def _fake_binary(tmp_path):
-    binary = tmp_path / "sing-box"
-    binary.write_text("#!/bin/sh\n" + CHECK_GUARD + '\necho "started"\nexec sleep 30\n')
-    binary.chmod(0o755)
-    return binary
+    return make_fake_script(tmp_path, "sing-box", CHECK_GUARD + '\necho "started"\nexec sleep 30')
 
 
 def test_controller_records_traffic_on_disconnect(tmp_path, monkeypatch):

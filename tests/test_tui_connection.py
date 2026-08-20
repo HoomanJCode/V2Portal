@@ -1,5 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("prompt_toolkit")
+
 from v2raycli.models import Profile
 from v2raycli.storage import ConfigStore
 from v2raycli.tui import app_screen, connection_screen

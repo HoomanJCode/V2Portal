@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from v2raycli.engines.binary import (
@@ -11,6 +13,8 @@ from v2raycli.engines.binary import (
     release_asset,
     update_binary,
 )
+
+from conftest import make_fake_script
 
 
 def test_release_asset_mapping():
@@ -170,12 +174,14 @@ def test_locate_absolute_missing(tmp_path):
 def test_locate_system(monkeypatch, tmp_path):
     fake = tmp_path / "xray"
     fake.write_text("x")
-    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "xray" else None)
+    target_name = "xray.exe" if sys.platform == "win32" else "xray"
+    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == target_name else None)
     assert locate_binary("xray", {"binary_path": "system"}) == fake
 
 
 def test_locate_auto_cached(tmp_path):
-    cached = tmp_path / "xray"
+    binary_name = "xray.exe" if sys.platform == "win32" else "xray"
+    cached = tmp_path / binary_name
     cached.write_text("x")
     assert locate_binary("xray", {"binary_path": "auto"}, bin_dir=tmp_path) == cached
 
@@ -219,8 +225,10 @@ def test_update_forwards_ephemeral_proxy(tmp_path, monkeypatch):
 def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
     from v2raycli.engines import binary
 
+    binary_name = "xray.exe" if sys.platform == "win32" else "xray"
+
     def fake_download(engine, version, platform, arch, bin_dir=None):
-        path = bin_dir / "xray"
+        path = bin_dir / binary_name
         path.write_bytes(b"new")
         return path
 
@@ -231,18 +239,19 @@ def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
 
     assert info.version == "2.0.0"
     assert info.previous_version is None
-    assert (tmp_path / "xray").read_bytes() == b"new"
-    assert not (tmp_path / "xray.previous").exists()
+    assert (tmp_path / binary_name).read_bytes() == b"new"
+    assert not (tmp_path / f"{binary_name}.previous").exists()
 
 
 def test_update_rolls_back_when_replaced_binary_fails_verification(tmp_path, monkeypatch):
     from v2raycli.engines import binary
 
-    target = tmp_path / "xray"
+    binary_name = "xray.exe" if sys.platform == "win32" else "xray"
+    target = tmp_path / binary_name
     target.write_bytes(b"old")
 
     def fake_download(engine, version, platform, arch, bin_dir=None):
-        path = bin_dir / "xray"
+        path = bin_dir / binary_name
         path.write_bytes(b"new")
         return path
 
@@ -258,11 +267,9 @@ def test_update_rolls_back_when_replaced_binary_fails_verification(tmp_path, mon
         update_binary("xray", {"binary_path": "auto"}, bin_dir=tmp_path)
 
     assert target.read_bytes() == b"old"
-    assert not (tmp_path / "xray.previous").exists()
+    assert not (tmp_path / f"{binary_name}.previous").exists()
 
 
 def test_get_version(tmp_path):
-    fake = tmp_path / "xray"
-    fake.write_text("#!/bin/sh\necho 'Xray 1.8.9 (test)'\n")
-    fake.chmod(0o755)
-    assert get_version("xray", fake) == "1.8.9"
+    path = make_fake_script(tmp_path, "xray", "echo 'Xray 1.8.9 (test)'")
+    assert get_version("xray", path) == "1.8.9"

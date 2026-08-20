@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("prompt_toolkit")
+
 from v2raycli import app, connection
 from v2raycli.models import Profile, RoutingConfig, Subscription
 from v2raycli.routing.rules import add_rule

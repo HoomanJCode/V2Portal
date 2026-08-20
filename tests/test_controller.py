@@ -3,6 +3,8 @@ from v2raycli.connection import ConnectionController
 from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
 from v2raycli.storage import ConfigStore
 
+from conftest import make_fake_script
+
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
 # Exit 0 when invoked for validation (check / -test), otherwise run the body.
@@ -16,10 +18,8 @@ def _store(tmp_path):
 
 
 def _fake(tmp_path, body):
-    binary = tmp_path / "sing-box"
-    binary.write_text("#!/bin/sh\n" + body + "\n")
-    binary.chmod(0o755)
-    return binary
+    path = make_fake_script(tmp_path, "sing-box", body)
+    return path
 
 
 def test_connect_proxy(tmp_path):

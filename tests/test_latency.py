@@ -117,7 +117,7 @@ def test_test_profile_success_structured_result(tmp_path, monkeypatch):
 
     # the runner was started against the fake binary with the probe config
     proc = FakeProc.instances[-1]
-    assert proc.argv[0] == "/fake/sing-box"
+    assert Path(proc.argv[0]) == Path("/fake/sing-box")
     assert proc.argv[1] == "run"
     assert "v2raycli-probe.json" in proc.argv[3]
     assert captured["config"]["route"]["final"] == profile.id
@@ -222,8 +222,10 @@ def test_icmp_probe_reports_success_and_blocked(monkeypatch):
 
 
 def test_tcp_probe_distinguishes_refused_dns_and_timeout(monkeypatch):
+    import errno as _errno
+
     def refused(*args, **kwargs):
-        raise OSError(111, "refused")
+        raise OSError(_errno.ECONNREFUSED, "refused")
 
     monkeypatch.setattr(latency.socket, "create_connection", refused)
     assert latency._tcp_probe("example.com", 443) == (None, "refused")

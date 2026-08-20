@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("prompt_toolkit")
+
 from v2raycli.models import Profile
 from v2raycli.storage import ConfigStore
 from v2raycli.test.latency import EndpointResult, TestResult, WebSocketResult

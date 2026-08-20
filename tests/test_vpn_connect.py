@@ -3,6 +3,8 @@ from v2raycli.models import Profile
 from v2raycli.outbounds.vpn import add_openconnect, add_openvpn
 from v2raycli.storage import ConfigStore
 
+from conftest import make_fake_script
+
 
 def _store(tmp_path):
     store = ConfigStore(tmp_path / "c.json")
@@ -33,10 +35,8 @@ def test_vpn_argv_building(tmp_path):
 
 def test_connect_openvpn_mocked(tmp_path, monkeypatch):
     store = _store(tmp_path)
-    fake = tmp_path / "openvpn"
-    fake.write_text("#!/bin/sh\necho started\nexec sleep 30\n")
-    fake.chmod(0o755)
-    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
+    fake = make_fake_script(tmp_path, "openvpn", 'echo started\nexec sleep 30')
+    monkeypatch.setattr("shutil.which", lambda name: fake if name == "openvpn" else None)
 
     config_path = tmp_path / "client.ovpn"
     config_path.write_text("client\n")
@@ -50,10 +50,8 @@ def test_connect_openvpn_mocked(tmp_path, monkeypatch):
 
 def test_inline_openvpn_config_removed_on_disconnect(tmp_path, monkeypatch):
     store = _store(tmp_path)
-    fake = tmp_path / "openvpn"
-    fake.write_text("#!/bin/sh\nexec sleep 30\n")
-    fake.chmod(0o755)
-    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
+    fake = make_fake_script(tmp_path, "openvpn", "exec sleep 30")
+    monkeypatch.setattr("shutil.which", lambda name: fake if name == "openvpn" else None)
 
     profile = store.add_profile(add_openvpn("v", inline="client\nsecret\n"))
     ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
@@ -68,10 +66,8 @@ def test_inline_openvpn_config_removed_on_disconnect(tmp_path, monkeypatch):
 
 def test_inline_openvpn_config_removed_after_launch_failure(tmp_path, monkeypatch):
     store = _store(tmp_path)
-    fake = tmp_path / "openvpn"
-    fake.write_text("#!/bin/sh\nexit 1\n")
-    fake.chmod(0o755)
-    monkeypatch.setattr("shutil.which", lambda name: str(fake) if name == "openvpn" else None)
+    fake = make_fake_script(tmp_path, "openvpn", "exit 1")
+    monkeypatch.setattr("shutil.which", lambda name: fake if name == "openvpn" else None)
 
     profile = store.add_profile(add_openvpn("v", inline="client\nsecret\n"))
     ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)

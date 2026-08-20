@@ -1,6 +1,10 @@
 from os import terminal_size
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("prompt_toolkit")
+
 from v2raycli.tui import widgets
 
 

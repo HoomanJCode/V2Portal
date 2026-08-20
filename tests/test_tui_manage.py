@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("prompt_toolkit")
+
 from v2raycli.models import Profile, Subscription
 from v2raycli.storage import ConfigStore
 from v2raycli.tui import manage

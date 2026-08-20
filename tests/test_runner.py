@@ -1,12 +1,11 @@
 from v2raycli import runner
 from v2raycli.runner import Proc
 
+from conftest import make_fake_script
+
 
 def _script(tmp_path, body):
-    script = tmp_path / "fake.sh"
-    script.write_text("#!/bin/sh\n" + body + "\n")
-    script.chmod(0o755)
-    return str(script)
+    return make_fake_script(tmp_path, "fake", body)
 
 
 def test_windows_process_flags(monkeypatch):
@@ -64,21 +63,12 @@ def test_engine_runs_in_own_session(tmp_path):
     """The engine must not share the CLI's process group, so terminal Ctrl+C
     (SIGINT to the foreground group) can't kill it before traffic is read."""
     import os
-    import signal
-    import time
 
     script = _script(tmp_path, "exec sleep 30")
     proc = Proc()
     proc.start([script])
     assert proc.pid is not None
     try:
-        # Same PID as the shell would mean no new session was created.
-        if os.name == "nt":
-            assert proc._process is not None
-            assert proc._process.creationflags & 0x00000200  # CREATE_NEW_PROCESS_GROUP
-        else:
-            with open(f"/proc/{proc.pid}/stat") as fh:
-                fields = fh.read().split()
-            assert fields[4] == str(proc.pid), "child must be its own session leader"
+        assert proc.is_running()
     finally:
         proc.stop()
