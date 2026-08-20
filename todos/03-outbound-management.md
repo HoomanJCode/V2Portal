@@ -74,3 +74,5 @@ profiles, build groups (chain / auto-select), and manage split-routing rules.
 - [x] Storage CRUD complete for profiles, VPNs, groups, and routing rules.
 - [x] `resolve_target` + `normalize_rules` are the only seams config-gen needs.
 - [x] `pytest` passes — 55 tests.
+
+passed

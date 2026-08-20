@@ -62,3 +62,5 @@ everything else builds on. No proxy logic yet.
 - [x] `config.json` created on first run with all default settings, empty
       profiles/subscriptions/groups, and `routing.mode = "all"` (verified via
       `tests/test_storage.py`).
+
+passed

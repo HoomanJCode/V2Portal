@@ -79,3 +79,5 @@ protocols, and support updating them. Parser-heavy phase.
       profiles across protocols with 0 unexpected errors.
 - [x] `update_subscription` deletes vanished nodes and prunes group references.
 - [x] `pytest` passes with no network dependency — 34 tests.
+
+passed

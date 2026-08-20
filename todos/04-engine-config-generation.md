@@ -94,3 +94,5 @@ strategy details must be verified and locked in.
 - [x] SOCKS+HTTP single port confirmed on sing-box 1.13.19 (live E2E); 2-hop
       chain egress confirmed live (dead-first-hop negative control).
 - [x] `pytest` passes — 112 tests.
+
+passed

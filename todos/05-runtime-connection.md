@@ -53,3 +53,5 @@ LAN-facing mixed inbound, and give upper layers a clean status/log interface.
 - [x] `kind=openvpn` profile launches the (mock) client with correct argv.
 - [x] Clean shutdown on Ctrl+C; no zombie processes (verified with mock).
 - [x] `pytest` passes — 112 tests.
+
+passed

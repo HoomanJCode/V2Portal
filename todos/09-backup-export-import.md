@@ -59,3 +59,5 @@ share-link export/import for migration, sharing, and disaster recovery.
 - [x] Destructive ops automatically leave a recoverable backup.
 - [x] Redacted exports contain no credentials/keys.
 - [x] `pytest` passes (108 tests).
+
+passed
