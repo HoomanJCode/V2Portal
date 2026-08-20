@@ -4,11 +4,13 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 
 ## Tasks
 
-- [ ] Verify on **Linux**: full walkthrough (add sub → split-route config →
-      connect → LAN curl → switch → test → disconnect; add OpenVPN profile).
-      *(deferred — needs real engine binaries; mocked orchestration coverage is
-      in `test_acceptance_flow.py`; run `scripts/verify_platform.py` first for
-      read-only environment diagnostics)*
+- [~] Verify on **Linux**: live engine layer verified via
+      `scripts/verify_engines.py` (both binaries downloaded; config-gen for
+      single/balancer/chain/vmess/wireguard; mixed inbound HTTP+SOCKS5;
+      outbound routing, 2-hop chain + dead-hop control, split routing, LAN
+      binding, and Clash traffic stats all pass). The interactive TTY
+      walkthrough and a live OpenVPN client connection remain deferred (no
+      desktop Linux host or OpenVPN binary here).
 - [x] Add `scripts/verify_acceptance.py`, a credential-free orchestration smoke
       command covering subscription import, split routing, connection switching,
       test dispatch, cleanup, and OpenVPN/OpenConnect argv validation without
@@ -55,8 +57,9 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 
 ## Deferred (needs a Windows host / full walkthrough)
 
-- Linux + Windows end-to-end walkthroughs (Termux binaries + config gen + mixed
-  inbound verified; full TUI walkthrough still needs installed TUI deps). Run
-  `scripts/verify_platform.py` before the live walkthrough.
+- Linux desktop + Windows end-to-end walkthroughs (live engine layer now
+  verified on Termux via `scripts/verify_engines.py`; the full TUI walkthrough
+  still needs a real TTY, and a live OpenVPN client still needs the binary).
+  Run `scripts/verify_platform.py` before the live walkthrough.
 - Windows console + `CREATE_NO_WINDOW` + firewall verification.
 - Termux `0.0.0.0` LAN binding + terminal-size fallback.
