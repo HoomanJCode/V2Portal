@@ -54,6 +54,8 @@ xray only when they explicitly request it.
 - [x] Allow the live engine verification script to use an explicit, ephemeral
       HTTP/SOCKS proxy for GitHub metadata and binary downloads without storing
       the proxy value.
+- [x] Report unavailable engine binaries cleanly and skip dependent live checks
+      instead of raising a misleading missing-file traceback.
 
 ## Definition of Done
 

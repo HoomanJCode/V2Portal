@@ -448,6 +448,42 @@ def check_traffic_stats(checks: Checks, singbox: Path) -> None:
         stop(upstream)
 
 
+def acquire_binaries(
+    checks: Checks,
+    bin_dir: Path,
+    *,
+    skip_download: bool = False,
+    proxy: str | None = None,
+) -> dict[str, Path]:
+    """Resolve both engine binaries and report failures without raising.
+
+    The live checks require both engines. A failed download should be reported
+    as a normal verification result instead of producing a second, misleading
+    missing-file traceback from the engine checks.
+    """
+    binaries: dict[str, Path] = {}
+    for engine in ("sing-box", "xray"):
+        binary = bin_dir / engine
+        try:
+            if not skip_download or not binary.exists():
+                binary = download_binary(
+                    engine,
+                    "latest",
+                    platform_name(),
+                    arch_name(),
+                    bin_dir=bin_dir,
+                    proxy=proxy,
+                )
+            if not binary.exists():
+                raise FileNotFoundError(binary)
+        except Exception as exc:  # pragma: no cover - network/platform dependent
+            checks.check(f"{engine} binary", False, f"{type(exc).__name__}: {exc}")
+            continue
+        checks.check(f"{engine} binary", True, str(binary))
+        binaries[engine] = binary
+    return binaries
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
     parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
@@ -467,21 +503,15 @@ def main(argv: list[str] | None = None) -> int:
     bin_dir = args.bin_dir or Path(tempfile.mkdtemp(prefix="v2raycli-verify-"))
     bin_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        for engine in ("sing-box", "xray"):
-            binary = bin_dir / engine if engine == "sing-box" else bin_dir / "xray"
-            if not args.skip_download or not binary.exists():
-                binary = download_binary(
-                    engine,
-                    "latest",
-                    platform_name(),
-                    arch_name(),
-                    bin_dir=bin_dir,
-                    proxy=args.proxy,
-                )
-            checks.check(f"{engine} binary", binary.exists(), str(binary))
-    except Exception as exc:  # pragma: no cover - network dependent
-        checks.check("download binaries", False, f"{type(exc).__name__}: {exc}")
+    binaries = acquire_binaries(
+        checks,
+        bin_dir,
+        skip_download=args.skip_download,
+        proxy=args.proxy,
+    )
+    if len(binaries) != 2:
+        checks.check("engine checks", False, "skipped because both engine binaries are required")
+        return 0 if checks.summary() else 1
 
     check_configs(checks, bin_dir)
     check_mixed_inbound(checks, bin_dir / "sing-box")
