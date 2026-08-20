@@ -51,7 +51,8 @@ console and Termux.
       (mocked UI coverage; live engine connection remains deferred).
 - [x] Add an OpenVPN profile and connect (mocked UI/profile coverage; live TTY
       walkthrough remains deferred).
-- [ ] All flows keyboard-drivable.
+- [x] All flows keyboard-drivable through prompt-toolkit dialogs or the
+      numbered small-terminal fallback (covered by `test_tui_widgets.py`).
 
 ## Definition of Done
 
