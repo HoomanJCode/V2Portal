@@ -33,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SCOPE",
         help="latency-test outbounds and exit: 'all', a subscription id, or comma-separated profile ids",
     )
+    parser.add_argument(
+        "--probe",
+        metavar="SCOPE",
+        help="probe remote endpoints with ICMP/TCP and exit using the same scope syntax as --test",
+    )
     parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
     parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
     parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
@@ -101,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.test:
         return _test(store, args.test)
+
+    if args.probe:
+        return _probe(store, args.probe)
 
     if args.backup:
         return _backup(store)
@@ -240,16 +248,33 @@ def _connect(store: ConfigStore, selection_id: str) -> int:
     return 0
 
 
-def _test(store: ConfigStore, scope: str) -> int:
-    from .test.latency import render_table, save_results, select_profiles, test_many
+def _resolve_test_scope(store: ConfigStore, scope: str):
+    from .test.latency import select_profiles
 
     ids = [part.strip() for part in scope.split(",") if part.strip()]
     if scope.strip() == "all":
-        profiles = select_profiles(store, "all")
-    elif len(ids) == 1 and store.get_subscription(ids[0]) is not None:
-        profiles = select_profiles(store, ("subscription", ids[0]))
-    else:
-        profiles = select_profiles(store, ("profiles", ids))
+        return select_profiles(store, "all")
+    if len(ids) == 1 and store.get_subscription(ids[0]) is not None:
+        return select_profiles(store, ("subscription", ids[0]))
+    return select_profiles(store, ("profiles", ids))
+
+
+def _probe(store: ConfigStore, scope: str) -> int:
+    from .test.latency import probe_many, render_endpoint_table
+
+    profiles = _resolve_test_scope(store, scope)
+    if not profiles:
+        print(f"no matching profiles for scope: {scope}", file=sys.stderr)
+        return 1
+    results = probe_many(profiles)
+    render_endpoint_table(results)
+    return 0 if all(result.tcp_status in {"ok", "not_testable"} for result in results) else 1
+
+
+def _test(store: ConfigStore, scope: str) -> int:
+    from .test.latency import render_table, save_results, test_many
+
+    profiles = _resolve_test_scope(store, scope)
 
     if not profiles:
         print(f"no matching profiles for scope: {scope}", file=sys.stderr)

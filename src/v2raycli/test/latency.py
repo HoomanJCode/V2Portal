@@ -6,9 +6,12 @@ inbound routed through that profile, then timing an HTTP request through it.
 
 from __future__ import annotations
 
+import errno
 import json
+import math
 import os
 import socket
+import subprocess
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +27,20 @@ from ..runner import Proc
 
 
 @dataclass
+class EndpointResult:
+    profile_id: str = ""
+    name: str = ""
+    kind: str = ""
+    host: str = ""
+    port: int | None = None
+    icmp_ms: float | None = None
+    icmp_status: str = "not_testable"
+    tcp_ms: float | None = None
+    tcp_status: str = "not_testable"
+    error: str | None = None
+
+
+@dataclass
 class TestResult:
     profile_id: str = ""
     name: str = ""
@@ -34,6 +51,146 @@ class TestResult:
     connect_ms: float | None = None
     error: str | None = None
     not_testable: bool = False
+
+
+def _normalized_port(value) -> int | None:
+    if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        return None
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return None
+    return port if 1 <= port <= 65535 else None
+
+
+def _split_endpoint(value) -> tuple[str, int | None]:
+    if not isinstance(value, str) or not value.strip():
+        return "", None
+    value = value.strip()
+    if value.startswith("["):
+        end = value.find("]")
+        if end < 0:
+            return "", None
+        host = value[1:end]
+        port_text = value[end + 1 :].lstrip(":")
+    else:
+        host, separator, port_text = value.rpartition(":")
+        if not separator:
+            return value, None
+    return host, _normalized_port(port_text)
+
+
+def profile_endpoint(profile) -> tuple[str, int | None]:
+    """Extract the first remote endpoint from a supported profile shape."""
+    outbound = profile.outbound if isinstance(profile.outbound, dict) else {}
+    server = outbound.get("server")
+    port = outbound.get("server_port")
+    if isinstance(server, str) and server.strip():
+        return server.strip(), _normalized_port(port)
+
+    settings = outbound.get("settings")
+    if isinstance(settings, dict):
+        servers = settings.get("vnext") or settings.get("servers")
+        if isinstance(servers, list) and servers and isinstance(servers[0], dict):
+            remote = servers[0]
+            address = remote.get("address")
+            remote_port = remote.get("port")
+            if isinstance(address, str) and address.strip():
+                return address.strip(), _normalized_port(remote_port)
+        peers = settings.get("peers")
+        if isinstance(peers, list) and peers and isinstance(peers[0], dict):
+            return _split_endpoint(peers[0].get("endpoint"))
+    return "", None
+
+
+def _icmp_probe(host: str, timeout: float = 3.0) -> tuple[float | None, str]:
+    """Probe one host with the platform ping utility."""
+    if not host:
+        return None, "not_testable"
+    started = time.monotonic()
+    if os.name == "nt":
+        argv = ["ping", "-n", "1", "-w", str(max(1, math.ceil(timeout * 1000))), host]
+    else:
+        argv = ["ping", "-c", "1", "-W", str(max(1, math.ceil(timeout))), host]
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout + 1.0)
+    except FileNotFoundError:
+        return None, "unsupported"
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except OSError:
+        return None, "unsupported"
+    if result.returncode == 0:
+        return (time.monotonic() - started) * 1000.0, "ok"
+    return None, "blocked"
+
+
+def _tcp_probe(host: str, port: int | None, timeout: float = 5.0) -> tuple[float | None, str]:
+    """Measure a direct TCP connection and preserve common failure classes."""
+    if not host or port is None:
+        return None, "not_testable"
+    started = time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return (time.monotonic() - started) * 1000.0, "ok"
+    except socket.gaierror:
+        return None, "dns_error"
+    except TimeoutError:
+        return None, "timeout"
+    except OSError as exc:
+        if exc.errno in (errno.ECONNREFUSED, 10061):
+            return None, "refused"
+        if exc.errno in (errno.ETIMEDOUT, 10060):
+            return None, "timeout"
+        return None, "error"
+
+
+def probe_endpoint(profile, timeout: float = 5.0) -> EndpointResult:
+    host, port = profile_endpoint(profile)
+    result = EndpointResult(
+        profile_id=profile.id,
+        name=profile.name,
+        kind=profile.kind,
+        host=host,
+        port=port,
+    )
+    if not host or port is None:
+        result.tcp_status = "invalid"
+        result.error = "profile has no valid remote endpoint"
+        return result
+    result.icmp_ms, result.icmp_status = _icmp_probe(host, min(timeout, 3.0))
+    result.tcp_ms, result.tcp_status = _tcp_probe(host, port, timeout)
+    if result.tcp_status not in ("ok", "not_testable"):
+        result.error = f"tcp {result.tcp_status}"
+    return result
+
+
+def probe_many(profiles, concurrency: int = 8, timeout: float = 5.0) -> list[EndpointResult]:
+    """Probe endpoints concurrently while preserving profile input order."""
+    results: dict[str, EndpointResult] = {}
+    workers = max(1, min(int(concurrency), 32))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(probe_endpoint, profile, timeout): profile.id for profile in profiles}
+        for future in as_completed(futures):
+            result = future.result()
+            results[result.profile_id] = result
+    return [results[profile.id] for profile in profiles]
+
+
+def render_endpoint_table(results: list[EndpointResult]) -> None:
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(title="Endpoint probes")
+    for column in ("Name", "Endpoint", "ICMP", "TCP", "Status"):
+        table.add_column(column)
+    for result in results:
+        icmp = f"{result.icmp_ms:.0f} ms" if result.icmp_ms is not None else result.icmp_status
+        tcp = f"{result.tcp_ms:.0f} ms" if result.tcp_ms is not None else result.tcp_status
+        status = "OK" if result.tcp_status == "ok" else (result.error or result.tcp_status)
+        style = "green" if result.tcp_status == "ok" else "red"
+        table.add_row(result.name, f"{result.host}:{result.port or '-'}", icmp, tcp, status, style=style)
+    Console().print(table)
 
 
 def _free_port() -> int:

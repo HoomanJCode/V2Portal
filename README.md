@@ -23,8 +23,9 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **LAN proxy inbound** — sing-box serves SOCKS5 *and* HTTP on one port;
   xray exposes SOCKS5 plus HTTP CONNECT on adjacent ports, with optional
   username/password auth.
-- **Latency testing** — test all outbounds, one subscription, or a selection,
-  with a sorted, color-coded table.
+- **Outbound testing** — `--probe` separately measures endpoint ICMP/TCP
+  reachability with DNS/refusal/timeout classification; `--test` measures real
+  proxy request delay through the engine.
 - **Traffic stats** — cumulative per-profile/group up/down usage (sing-box),
   recorded on disconnect.
 - **Config on disk** — a single JSON file in your platform config dir.
@@ -96,7 +97,9 @@ v2raycli --version
 v2raycli --config-dir /path/to/dir          # alternate config location
 v2raycli --headless                          # print a summary, no TUI
 v2raycli --connect <profile-or-group-id>     # connect and stay running (Ctrl+C to stop)
-v2raycli --test all                          # latency-test every outbound
+v2raycli --probe all                         # ICMP/TCP probe every endpoint
+v2raycli --probe <subscription-id>            # probe one subscription's endpoints
+v2raycli --test all                          # full proxy delay-test every outbound
 v2raycli --test <subscription-id>            # test one subscription's nodes
 v2raycli --test <id1,id2>                    # test specific profiles
 v2raycli --backup                            # snapshot the config, print its path

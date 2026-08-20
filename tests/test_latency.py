@@ -144,6 +144,79 @@ def test_url_authority():
     assert latency._url_authority("https://example.com/") == ("example.com", 443)
 
 
+def test_profile_endpoint_supports_xray_and_singbox_shapes(tmp_path):
+    store = _store(tmp_path)
+    xray = store.add_profile(Profile(name="x", kind="vmess", outbound={
+        "settings": {"vnext": [{"address": "x.example", "port": 443}]}
+    }))
+    singbox = store.add_profile(Profile(name="s", kind="hysteria2", outbound={
+        "server": "h.example", "server_port": 8443
+    }))
+    wireguard = store.add_profile(Profile(name="w", kind="wireguard", outbound={
+        "settings": {"peers": [{"endpoint": "[2001:db8::1]:51820"}]}
+    }))
+
+    assert latency.profile_endpoint(xray) == ("x.example", 443)
+    assert latency.profile_endpoint(singbox) == ("h.example", 8443)
+    assert latency.profile_endpoint(wireguard) == ("2001:db8::1", 51820)
+
+
+def test_icmp_probe_reports_unsupported(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("ping")
+
+    monkeypatch.setattr(latency.subprocess, "run", missing)
+
+    assert latency._icmp_probe("example.com") == (None, "unsupported")
+
+
+def test_icmp_probe_reports_success_and_blocked(monkeypatch):
+    class Completed:
+        returncode = 0
+
+    monkeypatch.setattr(latency.subprocess, "run", lambda *args, **kwargs: Completed())
+    elapsed, status = latency._icmp_probe("example.com")
+    assert status == "ok"
+    assert elapsed is not None
+
+    Completed.returncode = 1
+    assert latency._icmp_probe("example.com") == (None, "blocked")
+
+
+def test_tcp_probe_distinguishes_refused_dns_and_timeout(monkeypatch):
+    def refused(*args, **kwargs):
+        raise OSError(111, "refused")
+
+    monkeypatch.setattr(latency.socket, "create_connection", refused)
+    assert latency._tcp_probe("example.com", 443) == (None, "refused")
+
+    def dns_failure(*args, **kwargs):
+        raise latency.socket.gaierror("not found")
+
+    monkeypatch.setattr(latency.socket, "create_connection", dns_failure)
+    assert latency._tcp_probe("bad.example", 443) == (None, "dns_error")
+
+    def timed_out(*args, **kwargs):
+        raise TimeoutError()
+
+    monkeypatch.setattr(latency.socket, "create_connection", timed_out)
+    assert latency._tcp_probe("slow.example", 443) == (None, "timeout")
+
+
+def test_probe_many_returns_input_order(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    a = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    b = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+
+    def fake(profile, timeout=5.0):
+        return latency.EndpointResult(profile_id=profile.id, name=profile.name, tcp_status="ok")
+
+    monkeypatch.setattr(latency, "probe_endpoint", fake)
+    results = latency.probe_many([a, b], concurrency=2)
+
+    assert [result.profile_id for result in results] == [a.id, b.id]
+
+
 def test_scope_selectors(tmp_path):
     store = _store(tmp_path)
     sub = store.add_subscription(Subscription(name="sub"))

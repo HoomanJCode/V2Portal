@@ -1,17 +1,18 @@
 # Phase 10 — Advanced Outbound Testing & Engine Updates
 
-> **Status:** Planned; implementation intentionally not started.
+> **Status:** In progress; endpoint ICMP/TCP probes are implemented.
 
 Goal: provide deeper per-config verification and let users update sing-box or
 xray only when they explicitly request it.
 
 ## Advanced outbound tests
 
-- [ ] Add an ICMP ping probe for each endpoint when the platform permits it;
+- [x] Add an ICMP ping probe for each endpoint when the platform permits it;
       record unsupported/blocked ICMP separately instead of treating it as a
-      proxy failure.
-- [ ] Add a TCP-connect probe for each endpoint and report connect time,
-      timeout, DNS failure, and refused connection distinctly.
+      proxy failure. Exposed by `--probe`.
+- [x] Add a TCP-connect probe for each endpoint and report connect time,
+      timeout, DNS failure, and refused connection distinctly. Exposed by
+      `--probe`.
 - [ ] Add WebSocket transport testing:
   - [ ] Start the resolved engine config for the selected profile.
   - [ ] Connect through the local inbound and verify a WebSocket upgrade
@@ -41,8 +42,9 @@ xray only when they explicitly request it.
 
 ## Tests
 
-- [ ] Unit-test ICMP-unavailable, TCP timeout/refused, WebSocket handshake and
-      payload failure, full-request delay, and mixed success/failure reporting.
+- [x] Unit-test ICMP-unavailable and TCP timeout/refused classification.
+- [ ] Unit-test WebSocket handshake and payload failure, full-request delay,
+      and mixed success/failure reporting.
 - [ ] Test CLI/TUI update confirmation, engine selection, custom binary
       protection, running-engine protection, atomic replacement, and rollback.
 - [ ] Test the supplied mixed-protocol subscription shape with configs that
@@ -50,7 +52,7 @@ xray only when they explicitly request it.
 
 ## Definition of Done
 
-- [ ] ICMP and TCP endpoint measurements are visible and distinguishable.
+- [x] ICMP and TCP endpoint measurements are visible and distinguishable.
 - [ ] WS/WSS profiles complete handshake plus payload checks when applicable.
 - [ ] Real proxy delay is measured separately from endpoint/connect timing.
 - [ ] Users can explicitly update sing-box, xray, or both from CLI and TUI.

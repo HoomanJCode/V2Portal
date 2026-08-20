@@ -55,6 +55,30 @@ def test_connect_unknown_id(tmp_path, capsys):
     assert "unknown" in capsys.readouterr().err
 
 
+def test_probe_flag_resolves_scope_and_returns_failure(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    captured = {}
+
+    def fake_probe_many(profiles, concurrency=8, timeout=5.0):
+        captured["profiles"] = list(profiles)
+        return [latency.EndpointResult(profile_id=profile.id, name=profile.name, tcp_status="refused")]
+
+    monkeypatch.setattr(latency, "probe_many", fake_probe_many)
+    monkeypatch.setattr(latency, "render_endpoint_table", lambda results: None)
+
+    assert app._probe(store, profile.id) == 1
+    assert captured["profiles"] == [profile]
+
+
+def test_probe_parser_option():
+    args = app.build_parser().parse_args(["--probe", "all"])
+
+    assert args.probe == "all"
+
+
 def test_test_flag_all(tmp_path, monkeypatch):
     from v2raycli.test import latency
 
