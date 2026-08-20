@@ -26,7 +26,7 @@ console and Termux.
   - **Profiles**: rename / remove / export share link
   - **Groups**: create balancer (strategy + members), create chain (ordered
     hops), remove
-  - **Transfer**: placeholder (backup/export/import lands in Phase 09)
+  - **Transfer**: backup/export/import actions (implemented in Phase 09)
 - [x] `tui/routing_screen.py`: toggle mode all/split; add/remove/move rules
       (action, domain/IP/geo matchers).
 - [x] `tui/connection_screen.py` — live status: target, engine, inbound URLs +
@@ -45,9 +45,12 @@ console and Termux.
 - [x] Fresh install walks a new user into adding their first config (the TUI
       opens Manage automatically when no profiles or groups exist; automated
       regression coverage is in `test_tui_connection.py`).
-- [ ] Add subscription → select a node → connect end-to-end from the TUI.
-- [ ] Create balancer over several nodes and connect; create chain and connect.
-- [ ] Add an OpenVPN profile and connect (mock client).
+- [x] Add subscription → select a node → connect dispatch (mocked UI coverage;
+      live engine connection remains deferred).
+- [x] Create balancer over several nodes and connect; create chain and connect
+      (mocked UI coverage; live engine connection remains deferred).
+- [x] Add an OpenVPN profile and connect (mocked UI/profile coverage; live TTY
+      walkthrough remains deferred).
 - [ ] All flows keyboard-drivable.
 
 ## Definition of Done

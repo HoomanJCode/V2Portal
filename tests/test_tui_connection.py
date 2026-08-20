@@ -119,6 +119,28 @@ def test_tui_action_error_returns_to_main_menu(tmp_path, monkeypatch):
     assert events[-1] == "disconnect"
 
 
+def test_tui_connect_dispatches_selected_profile(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    profile = store.add_profile(Profile(name="selected", kind="socks", outbound=SOCKS))
+    connected = []
+
+    monkeypatch.setattr(
+        app_screen.widgets,
+        "pick_profile",
+        lambda profiles, groups: ("profile", profile.id),
+    )
+    monkeypatch.setattr(
+        app_screen,
+        "run_connection",
+        lambda current_store, controller, selection: connected.append(selection),
+    )
+
+    app_screen._connect(store, object())
+
+    assert connected == [profile]
+
+
 def test_connection_screen_switches_target(tmp_path, monkeypatch):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
