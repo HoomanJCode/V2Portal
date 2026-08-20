@@ -305,6 +305,20 @@ Common shape produced for **both** engines:
 - VPN profiles (openvpn/openconnect) are **not** latency-tested; they show a
   simple "connect test" (client launches and establishes, then disconnects) —
   optional, deferred.
+- Planned Phase 10 adds separate ICMP and TCP endpoint measurements, followed
+  by a real full-request delay through the proxy. ICMP-unavailable platforms
+  must report "unsupported" rather than a failed node.
+- Planned WebSocket checks start the resolved engine, verify the WS/WSS upgrade,
+  send a small ping/payload, and report handshake/payload failures per profile.
+
+### Explicit engine updates
+
+- Planned Phase 10 adds user-requested updates for sing-box, xray, or both from
+  the CLI and TUI. Startup and connection must never update automatically.
+- Updates apply only to binaries managed by the `auto` path; custom binary paths
+  require an explicit warning and must not be overwritten silently.
+- Downloads are staged, version-checked, atomically replaced, and rolled back if
+  verification or replacement fails. Running engine processes block replacement.
 
 ## 10. Cross-platform notes
 
@@ -334,4 +348,5 @@ Common shape produced for **both** engines:
 
 ## 12. Phase order
 
-See `todos/README.md`.
+See `todos/README.md`. Phase 10 contains the planned advanced outbound tests
+and explicit engine-update workflow.

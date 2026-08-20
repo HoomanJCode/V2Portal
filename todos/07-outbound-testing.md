@@ -49,3 +49,8 @@ table.
 - [x] TCP-connect vs full-request timing split (stretch) — implemented as
       `connect_ms` in `TestResult`, shown as a `Connect` column.
 - [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).
+
+## Planned follow-up
+
+Phase 10 extends this tester with separate ICMP/TCP probes, WebSocket
+handshake-plus-payload checks, and full proxy delay measurements.
