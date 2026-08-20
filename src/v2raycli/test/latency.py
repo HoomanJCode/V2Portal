@@ -243,7 +243,7 @@ def websocket_transport(profile) -> dict | None:
     if not isinstance(server_name, str) or not server_name.strip():
         return None
     if any(
-        isinstance(value, str) and ("\\r" in value or "\\n" in value)
+        isinstance(value, str) and ("\r" in value or "\n" in value)
         for value in (host_header, path, server_name, *headers.values())
     ):
         return None
@@ -274,7 +274,7 @@ def _recv_exact(sock, size: int) -> bytes:
 
 def _recv_headers(sock, limit: int = 65536) -> bytes:
     data = bytearray()
-    while b"\\r\\n\\r\\n" not in data:
+    while b"\r\n\r\n" not in data:
         chunk = sock.recv(min(4096, limit - len(data)))
         if not chunk:
             raise OSError("connection closed during WebSocket handshake")
@@ -299,9 +299,9 @@ def _websocket_handshake(sock, host: str, path: str, headers: dict, timeout: flo
     request = [f"GET {path} HTTP/1.1"]
     request.extend(f"{name}: {value}" for name, value in request_headers.items())
     sock.settimeout(timeout)
-    sock.sendall(("\\r\\n".join(request) + "\\r\\n\\r\\n").encode("ascii"))
-    response = _recv_headers(sock).split(b"\\r\\n\\r\\n", 1)[0].decode("latin-1")
-    lines = response.split("\\r\\n")
+    sock.sendall(("\r\n".join(request) + "\r\n\r\n").encode("ascii"))
+    response = _recv_headers(sock).split(b"\r\n\r\n", 1)[0].decode("latin-1")
+    lines = response.split("\r\n")
     status = lines[0].split(" ", 2) if lines else []
     response_headers = {}
     for line in lines[1:]:
@@ -359,14 +359,14 @@ def _socks_connect(local_port: int, host: str, port: int, timeout: float) -> soc
     sock = socket.create_connection(("127.0.0.1", local_port), timeout=timeout)
     try:
         sock.settimeout(timeout)
-        if _recv_exact_after_send(sock, b"\\x05\\x01\\x00", 2) != b"\\x05\\x00":
+        if _recv_exact_after_send(sock, b"\x05\x01\x00", 2) != b"\x05\x00":
             raise OSError("local SOCKS5 proxy rejected unauthenticated handshake")
         encoded_host = host.encode("idna")
         if not 1 <= len(encoded_host) <= 255:
             raise OSError("remote host is not valid for SOCKS5")
-        request = b"\\x05\\x01\\x00\\x03" + bytes([len(encoded_host)]) + encoded_host + port.to_bytes(2, "big")
+        request = b"\x05\x01\x00\x03" + bytes([len(encoded_host)]) + encoded_host + port.to_bytes(2, "big")
         reply = _recv_exact_after_send(sock, request, 4)
-        if reply[:2] != b"\\x05\\x00":
+        if reply[:2] != b"\x05\x00":
             raise OSError(f"SOCKS5 CONNECT failed ({reply[1] if len(reply) > 1 else 'unknown'})")
         atyp = reply[3]
         if atyp == 1:

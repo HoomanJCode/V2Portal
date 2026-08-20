@@ -160,7 +160,7 @@ def run_smoke(checks: Checks | None = None) -> bool:
             checks.check("disconnect cleanup", controller.status.state == "idle")
 
             vpn_config = root / "smoke.ovpn"
-            vpn_config.write_text("client\\n", encoding="utf-8")
+            vpn_config.write_text("client\n", encoding="utf-8")
             vpn_profile = add_openvpn(
                 "smoke-openvpn",
                 config_path=str(vpn_config),

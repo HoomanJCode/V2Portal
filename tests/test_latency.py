@@ -264,17 +264,17 @@ class FakeWebSocketSocket:
 
     def sendall(self, data):
         self.sent.append(data)
-        if data.startswith(b"GET "):
+        if data.startswith(b"GET ") and not self.response:
             request = data.decode("ascii")
-            key = next(line.split(": ", 1)[1] for line in request.split("\\r\\n") if line.startswith("Sec-WebSocket-Key:"))
+            key = next(line.split(": ", 1)[1] for line in request.split("\r\n") if line.startswith("Sec-WebSocket-Key:"))
             accept = latency.base64.b64encode(
                 latency.hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
             ).decode("ascii")
             self.response = (
-                "HTTP/1.1 101 Switching Protocols\\r\\n"
-                "Upgrade: websocket\\r\\n"
-                "Connection: Upgrade\\r\\n"
-                f"Sec-WebSocket-Accept: {accept}\\r\\n\\r\\n"
+                "HTTP/1.1 101 Switching Protocols\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
             ).encode("ascii")
 
     def recv(self, size):
@@ -316,7 +316,7 @@ def test_websocket_handshake_validates_101_and_accept():
 
 
 def test_websocket_handshake_rejects_non_101():
-    sock = FakeWebSocketSocket(b"HTTP/1.1 404 Not Found\\r\\n\\r\\n")
+    sock = FakeWebSocketSocket(b"HTTP/1.1 404 Not Found\r\n\r\n")
 
     ok, _, status = latency._websocket_handshake(sock, "ws.example", "/", {})
 
@@ -325,7 +325,7 @@ def test_websocket_handshake_rejects_non_101():
 
 
 def test_websocket_ping_requires_matching_pong():
-    sock = FakeWebSocketSocket(b"\\x8a\\x08v2raycli")
+    sock = FakeWebSocketSocket(b"\x8a\x08v2raycli")
 
     ok, elapsed, status = latency._websocket_ping(sock)
 
@@ -335,7 +335,7 @@ def test_websocket_ping_requires_matching_pong():
     assert sock.sent[0][0] == 0x89
     assert sock.sent[0][1] & 0x80
 
-    invalid = FakeWebSocketSocket(b"\\x8a\\x03bad")
+    invalid = FakeWebSocketSocket(b"\x8a\x03bad")
     assert latency._websocket_ping(invalid)[2] == "payload_invalid"
 
 

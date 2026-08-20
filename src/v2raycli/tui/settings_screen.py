@@ -100,4 +100,4 @@ def run_updates(store, controller=None) -> None:
             continue
         previous = info.previous_version or "not installed"
         messages.append(f"{engine}: {previous} -> {info.version}")
-    widgets.show_message("Engine updates", "\\n".join(messages))
+    widgets.show_message("Engine updates", "\n".join(messages))
