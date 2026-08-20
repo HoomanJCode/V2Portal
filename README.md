@@ -258,6 +258,13 @@ python scripts/verify_platform.py
 python scripts/verify_platform.py --json
 ```
 
+Credential-free orchestration smoke (does not download engines or contact
+remote nodes):
+
+```bash
+python scripts/verify_acceptance.py
+```
+
 Live engine verification (downloads sing-box + xray, runs their own config
 checks, and exercises the proxy end-to-end):
 

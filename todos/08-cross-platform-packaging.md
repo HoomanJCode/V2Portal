@@ -9,6 +9,9 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
       *(deferred — needs real engine binaries; mocked orchestration coverage is
       in `test_acceptance_flow.py`; run `scripts/verify_platform.py` first for
       read-only environment diagnostics)*
+- [x] Add `scripts/verify_acceptance.py`, a credential-free orchestration smoke
+      command covering subscription import, split routing, connection switching,
+      test dispatch, and cleanup without downloading engines or contacting nodes.
 - [ ] Verify on **Windows**:
   - console behavior in `cmd`/PowerShell (colors, keys, Ctrl+C)
   - `CREATE_NO_WINDOW` on engine/VPN subprocesses; no flashing windows
