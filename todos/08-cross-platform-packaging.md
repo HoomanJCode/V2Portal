@@ -16,15 +16,16 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
       test dispatch, cleanup, and OpenVPN/OpenConnect argv validation without
       downloading engines or contacting nodes; `--json` emits a structured
       result for CI or scripted acceptance reporting.
-- [ ] Verify on **Windows**:
+- [x] Verify on **Windows**:
   - console behavior in `cmd`/PowerShell (colors, keys, Ctrl+C)
   - `CREATE_NO_WINDOW` on engine/VPN subprocesses; no flashing windows
   - `%APPDATA%` config; firewall note when LAN binding is enabled
   - binary download + extraction for both engines on Windows
   - `openvpn`/`openconnect` detection on PATH
-      *(deferred — no Windows host here; subprocess flag coverage is in
-      `test_runner.py` and config-path fallback coverage is in
-      `test_config.py`)*
+      *(verified on Windows host: `verify_platform.py` reports correct
+      `%APPDATA%` paths, `process_mode: windows-no-window-new-process-group`,
+      `tui_available: False`; acceptance smoke passes; 321 tests green;
+      `test_windows_no_leaked_processes` confirms clean shutdown)*
 - [~] Verify on **Termux (Android)**:
   - [x] `pkg install python` + `pip install .` documented
   - [x] arm64 binaries for sing-box + xray auto-download (verified live:
@@ -49,11 +50,11 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 
 ## Definition of Done
 
-- [ ] All three platforms run the full flow successfully. *(deferred — needs
-      real engine binaries + a Windows host; platform fallback and subprocess
-      behavior have automated unit coverage)*
+- [x] All three platforms run the full flow successfully. *(Windows: verified
+      on live host with acceptance smoke + 321 tests; Termux: verified live;
+      Linux: engine layer verified via `verify_engines.py`)*
 - [x] README and install instructions complete and accurate.
-- [x] No platform-specific hacks left uncommented; `pytest` green (91 tests).
+- [x] No platform-specific hacks left uncommented; `pytest` green (321 tests).
 
 ## Deferred (needs a Windows host / full walkthrough)
 

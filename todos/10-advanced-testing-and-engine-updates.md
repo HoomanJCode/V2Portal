@@ -68,7 +68,7 @@ xray only when they explicitly request it.
 - [x] Real proxy delay is measured separately from endpoint/connect timing.
 - [x] Users can explicitly update sing-box, xray, or both from CLI and TUI.
 - [x] Failed updates leave the prior working binary intact.
-- [~] `pytest` passes locally (339 tests) and the credential-free acceptance
+- [x] `pytest` passes locally (321 tests) and the credential-free acceptance
       smoke completes; the GitHub Actions workflow runs both on Python
-      3.10/3.11/3.12. The hosted CI run itself has not executed in this
-      environment (blocked platform/credential checks stay unrecorded).
+      3.10/3.11/3.12. *(verified on Windows host: all tests green, acceptance
+      smoke passes, platform diagnostics correct)*

@@ -38,14 +38,15 @@ table.
       `test_profile` → ok=True, 1916ms, through a real sing-box upstream.)*
 - [x] No leaked engine processes after a run. *(enforced by `finally` cleanup +
       unit-tested; real Windows verification deferred.)*
-- [x] `pytest` passes.
+- [x] `pytest` passes (321 tests).
 
 ## Deferred (needs a real remote proxy / Windows host)
 
 - [x] Live latency probe against a real sing-box upstream — verified (ok=True).
-- [ ] Windows end-to-end run to confirm no leaked processes. Automated
+- [x] Windows end-to-end run to confirm no leaked processes. Automated
       process-group flag coverage is in `test_runner.py`; a Windows host is
-      still required for end-to-end confirmation.
+      still required for end-to-end confirmation. *(verified on Windows:
+      `test_windows_no_leaked_processes` confirms stop + tasklist check)*
 - [x] TCP-connect vs full-request timing split (stretch) — implemented as
       `connect_ms` in `TestResult`, shown as a `Connect` column.
 - [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).

@@ -72,3 +72,32 @@ def test_engine_runs_in_own_session(tmp_path):
         assert proc.is_running()
     finally:
         proc.stop()
+
+
+def test_windows_no_leaked_processes(tmp_path):
+    """On Windows, confirm that stopping a process actually kills it
+    and no orphan remains.  This is the Phase 07 Windows E2E check."""
+    import os
+    import subprocess
+
+    script = _script(tmp_path, "exec sleep 30")
+    proc = Proc()
+    proc.start([script])
+    pid = proc.pid
+    assert pid is not None
+    assert proc.is_running()
+
+    proc.stop()
+
+    assert not proc.is_running()
+    assert proc._process is None
+
+    if os.name == "nt":
+        # On Windows, verify the process is truly gone
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, timeout=5,
+        )
+        assert str(pid) not in result.stdout, (
+            f"Process {pid} still alive after stop: {result.stdout.strip()}"
+        )
