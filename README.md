@@ -87,7 +87,8 @@ Start screen:
   start the proxy.
 - **Manage** — add subscriptions, share links, manual proxies, VPN profiles, and
   groups.
-- **Test** — latency-test all outbounds or one subscription.
+- **Test** — run full proxy delay, ICMP/TCP endpoint, or WS/WSS tests for all
+  outbounds, one subscription, or selected profiles.
 - **Routing** — edit split-routing rules.
 - **Settings** — port, LAN sharing, inbound auth, default engine, test URL,
   and confirmed engine updates.

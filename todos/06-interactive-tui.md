@@ -33,7 +33,8 @@ console and Termux.
       auth, LAN IP, pid; keys `s` switch, `d` disconnect, `t` test, `q` back;
       Ctrl+C/EOF cleanly disconnects while `q` returns to the main menu with
       the connection preserved.
-- [x] `tui/test_screen.py`: placeholder (latency tester lands in Phase 07).
+- [x] `tui/test_screen.py`: full proxy-delay, ICMP/TCP endpoint, and WS/WSS
+      testing actions with shared scope selection.
 - [x] `tui/settings_screen.py`: listen, mixed port, LAN sharing, inbound auth,
       DNS, log level, test URL, default engine.
 - [x] Wire `app.py` — `main()` launches the TUI on a TTY when
