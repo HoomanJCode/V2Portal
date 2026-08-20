@@ -258,6 +258,9 @@ def check_outbound_routing(checks: Checks, singbox: Path) -> None:
             checks.check("outbound routing (connect)", False, status.error or status.state)
             return
         try:
+            if not wait_port(inbound_port):
+                checks.check("outbound routing (inbound listen)", False, "inbound port never opened")
+                return
             checks.check("outbound routing (connect)", True, f"engine={status.engine}")
             line = socks_http_get(inbound_port, "example.com")
             checks.check("outbound routing (egress via socks outbound)", line.startswith("HTTP/1."), line)
@@ -297,6 +300,9 @@ def check_chain(checks: Checks, singbox: Path) -> None:
             checks.check("chain (connect)", False, status.error or status.state)
             return
         try:
+            if not wait_port(inbound_port):
+                checks.check("chain egress (2 hops)", False, "inbound port never opened")
+                return
             line = socks_http_get(inbound_port, "example.com")
             checks.check("chain egress (2 hops)", line.startswith("HTTP/1."), line)
         finally:
@@ -312,6 +318,9 @@ def check_chain(checks: Checks, singbox: Path) -> None:
             checks.check("chain dead-hop (connect)", False, status2.error or status2.state)
             return
         try:
+            if not wait_port(inbound_port):
+                checks.check("chain dead first hop fails", False, "inbound port never opened")
+                return
             try:
                 line = socks_http_get(inbound_port, "example.com")
                 checks.check("chain dead first hop fails", False, f"unexpected success: {line}")
@@ -342,8 +351,14 @@ def check_split_routing(checks: Checks, singbox: Path) -> None:
         checks.check("split routing (connect)", False, status.error or status.state)
         return
     try:
-        line = socks_http_get(inbound_port, "example.com")
-        checks.check("split routing direct rule", line.startswith("HTTP/1."), line)
+        if not wait_port(inbound_port):
+            checks.check("split routing (inbound listen)", False, "inbound port never opened")
+            return
+        try:
+            line = socks_http_get(inbound_port, "example.com")
+            checks.check("split routing direct rule", line.startswith("HTTP/1."), line)
+        except Exception as exc:
+            checks.check("split routing direct rule", False, type(exc).__name__)
         try:
             line2 = socks_http_get(inbound_port, "www.gstatic.com")
             checks.check("split routing fallthrough to proxy", False, f"unexpected: {line2}")
@@ -423,6 +438,9 @@ def check_traffic_stats(checks: Checks, singbox: Path) -> None:
             checks.check("traffic stats (connect)", False, status.error or status.state)
             return
         try:
+            if not wait_port(inbound_port):
+                checks.check("traffic stats (inbound listen)", False, "inbound port never opened")
+                return
             import httpx
 
             with httpx.Client(proxy=f"http://127.0.0.1:{inbound_port}", timeout=20) as client:
