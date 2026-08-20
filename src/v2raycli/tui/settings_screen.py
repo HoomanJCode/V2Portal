@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..engines.binary import BinaryError, update_binary
 from . import widgets
 
 
@@ -9,7 +10,7 @@ def _split(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
-def run(store) -> None:
+def run(store, controller=None) -> None:
     settings = store.config.settings
     while True:
         action = widgets.menu(
@@ -24,6 +25,7 @@ def run(store) -> None:
                 ("testurl", f"Test URL: {settings.test_url}"),
                 ("engine", f"Default engine: {settings.default_engine}"),
                 ("traffic", f"Traffic stats: {'on' if settings.traffic_api else 'off'}"),
+                ("updates", "Update engine binaries"),
                 ("back", "Back"),
             ],
         )
@@ -56,4 +58,46 @@ def run(store) -> None:
             settings.traffic_api = widgets.confirm("Enable traffic stats (sing-box Clash API)?")
             if settings.traffic_api:
                 settings.traffic_api_port = widgets.input_int("Traffic API port", settings.traffic_api_port)
+        elif action == "updates":
+            run_updates(store, controller)
         store.save()
+
+
+def run_updates(store, controller=None) -> None:
+    """Explicitly update selected auto-managed engines after confirmation."""
+    selection = widgets.menu(
+        "Engine updates",
+        [
+            ("sing-box", "Update sing-box"),
+            ("xray", "Update xray"),
+            ("both", "Update both"),
+            ("back", "Cancel"),
+        ],
+    )
+    if not selection or selection == "back":
+        return
+    if not widgets.confirm("Download and replace the selected engine binary/binaries?"):
+        widgets.show_message("Cancelled", "No engine binaries were changed.")
+        return
+
+    engines = ["sing-box", "xray"] if selection == "both" else [selection]
+    messages: list[str] = []
+    for engine in engines:
+        status = getattr(controller, "status", None)
+        running = bool(
+            status
+            and getattr(status, "state", "") == "connected"
+            and getattr(status, "engine", "") == engine
+        )
+        try:
+            info = update_binary(
+                engine,
+                store.config.engines.get(engine, {}),
+                running=running,
+            )
+        except BinaryError as exc:
+            messages.append(f"{engine}: failed — {exc}")
+            continue
+        previous = info.previous_version or "not installed"
+        messages.append(f"{engine}: {previous} -> {info.version}")
+    widgets.show_message("Engine updates", "\\n".join(messages))

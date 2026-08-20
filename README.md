@@ -89,7 +89,8 @@ Start screen:
   groups.
 - **Test** — latency-test all outbounds or one subscription.
 - **Routing** — edit split-routing rules.
-- **Settings** — port, LAN sharing, inbound auth, default engine, test URL.
+- **Settings** — port, LAN sharing, inbound auth, default engine, test URL,
+  and confirmed engine updates.
 
 ### Scripting / headless
 
@@ -102,6 +103,9 @@ v2raycli --probe all                         # ICMP/TCP probe every endpoint
 v2raycli --probe <subscription-id>           # probe one subscription's endpoints
 v2raycli --ws-test all                        # validate WS/WSS profiles
 v2raycli --test all                           # full proxy delay-test every outbound
+v2raycli --update sing-box                    # explicitly update sing-box
+v2raycli --update xray                        # explicitly update xray
+v2raycli --update both                        # explicitly update both engines
 v2raycli --test <subscription-id>            # test one subscription's nodes
 v2raycli --test <id1,id2>                    # test specific profiles
 v2raycli --backup                            # snapshot the config, print its path
@@ -113,6 +117,15 @@ v2raycli --install-service <id>              # install a boot service (systemd/T
 v2raycli --uninstall-service                 # remove the installed service
 v2raycli --health                            # show subscription expiry/traffic status
 ```
+
+### Engine updates
+
+Engine updates are never automatic. Use `--update sing-box`, `--update xray`,
+or `--update both`, or choose **Settings/Manage → Update engine binaries**.
+Only binaries configured with `binary_path: "auto"` are replaceable; custom and
+system paths are protected. Downloads are staged, version-checked, atomically
+replaced, and rolled back if verification fails. Updates are blocked for an
+engine currently connected in the TUI.
 
 ### Auto-update
 

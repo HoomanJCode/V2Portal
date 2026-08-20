@@ -8,6 +8,7 @@ from v2raycli.engines.binary import (
     get_version,
     locate_binary,
     release_asset,
+    update_binary,
 )
 
 
@@ -107,6 +108,58 @@ def test_locate_auto_cached(tmp_path):
 def test_get_version_rejects_missing_binary(tmp_path):
     with pytest.raises(BinaryError, match="not runnable"):
         get_version("xray", tmp_path / "missing")
+
+
+def test_update_rejects_custom_and_running_engines(tmp_path):
+    with pytest.raises(BinaryError, match="custom binary path is protected"):
+        update_binary("xray", {"binary_path": str(tmp_path / "custom")}, bin_dir=tmp_path)
+    with pytest.raises(BinaryError, match="while it is running"):
+        update_binary("xray", {"binary_path": "auto"}, bin_dir=tmp_path, running=True)
+
+
+def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
+    from v2raycli.engines import binary
+
+    def fake_download(engine, version, platform, arch, bin_dir=None):
+        path = bin_dir / "xray"
+        path.write_bytes(b"new")
+        return path
+
+    monkeypatch.setattr(binary, "download_binary", fake_download)
+    monkeypatch.setattr(binary, "get_version", lambda engine, path: "2.0.0")
+
+    info = update_binary("xray", {"binary_path": "auto", "version": "latest"}, bin_dir=tmp_path)
+
+    assert info.version == "2.0.0"
+    assert info.previous_version is None
+    assert (tmp_path / "xray").read_bytes() == b"new"
+    assert not (tmp_path / "xray.previous").exists()
+
+
+def test_update_rolls_back_when_replaced_binary_fails_verification(tmp_path, monkeypatch):
+    from v2raycli.engines import binary
+
+    target = tmp_path / "xray"
+    target.write_bytes(b"old")
+
+    def fake_download(engine, version, platform, arch, bin_dir=None):
+        path = bin_dir / "xray"
+        path.write_bytes(b"new")
+        return path
+
+    def fake_version(engine, path):
+        if path == target and path.read_bytes() == b"new":
+            raise BinaryError("bad replacement")
+        return "1.0.0"
+
+    monkeypatch.setattr(binary, "download_binary", fake_download)
+    monkeypatch.setattr(binary, "get_version", fake_version)
+
+    with pytest.raises(BinaryError, match="bad replacement"):
+        update_binary("xray", {"binary_path": "auto"}, bin_dir=tmp_path)
+
+    assert target.read_bytes() == b"old"
+    assert not (tmp_path / "xray.previous").exists()
 
 
 def test_get_version(tmp_path):

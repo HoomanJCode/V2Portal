@@ -60,7 +60,7 @@ def test_main_screen_disconnects_on_interrupt(tmp_path, monkeypatch):
             self.disconnected = True
 
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
-    monkeypatch.setattr(app_screen, "run_manage", lambda _store: None)
+    monkeypatch.setattr(app_screen, "run_manage", lambda _store, _controller=None: None)
     monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: None)
     monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt))
 
@@ -81,7 +81,7 @@ def test_fresh_tui_guides_user_to_manage(tmp_path, monkeypatch):
             events.append("disconnect")
 
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
-    monkeypatch.setattr(app_screen, "run_manage", lambda _store: events.append("manage"))
+    monkeypatch.setattr(app_screen, "run_manage", lambda _store, _controller=None: events.append("manage"))
     monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: events.append("welcome"))
     monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: "quit")
 
@@ -102,7 +102,7 @@ def test_tui_action_error_returns_to_main_menu(tmp_path, monkeypatch):
         def disconnect(self):
             events.append("disconnect")
 
-    def fail_manage(_store):
+    def fail_manage(_store, _controller=None):
         raise ValueError("invalid user input")
 
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)

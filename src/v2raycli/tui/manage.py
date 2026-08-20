@@ -7,13 +7,14 @@ from ..outbounds.groups import create_balancer_group, create_chain_group
 from ..subs.parser import import_subscription, update_subscription
 from ..subs.share import ShareLinkError, decode_link, encode_link
 from . import widgets
+from .settings_screen import run_updates
 
 
 def _split(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
-def run(store) -> None:
+def run(store, controller=None) -> None:
     while True:
         action = widgets.menu(
             "Manage",
@@ -23,6 +24,7 @@ def run(store) -> None:
                 ("profiles", "Profiles"),
                 ("groups", "Groups"),
                 ("transfer", "Backup / Export / Import"),
+                ("updates", "Update engine binaries"),
                 ("back", "Back"),
             ],
         )
@@ -38,6 +40,8 @@ def run(store) -> None:
             _groups(store)
         elif action == "transfer":
             _transfer(store)
+        elif action == "updates":
+            run_updates(store, controller)
         store.save()
 
 

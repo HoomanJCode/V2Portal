@@ -33,13 +33,13 @@ def run(store) -> int:
                 if action == "connect":
                     _connect(store, controller)
                 elif action == "manage":
-                    run_manage(store)
+                    run_manage(store, controller)
                 elif action == "test":
                     run_test(store)
                 elif action == "routing":
                     run_routing(store)
                 elif action == "settings":
-                    run_settings(store)
+                    run_settings(store, controller)
                 store.save()
             except Exception as exc:  # noqa: BLE001 - keep the interactive loop alive
                 widgets.show_message("Action failed", str(exc))

@@ -1,6 +1,6 @@
 # Phase 10 — Advanced Outbound Testing & Engine Updates
 
-> **Status:** In progress; endpoint ICMP/TCP probes are implemented.
+> **Status:** In progress; endpoint, WebSocket, and engine-update slices are implemented.
 
 Goal: provide deeper per-config verification and let users update sing-box or
 xray only when they explicitly request it.
@@ -28,16 +28,16 @@ xray only when they explicitly request it.
 
 ## User-requested engine updates
 
-- [ ] Add explicit CLI update actions for `sing-box`, `xray`, or both; do not
+- [x] Add explicit CLI update actions for `sing-box`, `xray`, or both; do not
       update binaries automatically during startup or connection.
-- [ ] Add matching TUI actions under Settings/Manage with confirmation,
+- [x] Add matching TUI actions under Settings/Manage with confirmation,
       current-version/latest-version output, and cancellation.
-- [ ] Update only binaries managed by the `auto` path; warn before replacing a
-      user-specified `binary_path` and never overwrite custom binaries silently.
-- [ ] Refuse or defer updates while the corresponding engine process is
-      connected; download to a temporary file, validate the version, then
-      replace the cached binary atomically.
-- [ ] Keep the previous cached binary until the replacement is verified, and
+- [x] Update only binaries managed by the `auto` path; custom and system
+      `binary_path` values are protected and never overwritten silently.
+- [x] Refuse updates while the corresponding engine process is connected;
+      download to a temporary file, validate the version, then replace the
+      cached binary atomically.
+- [x] Keep the previous cached binary until the replacement is verified, and
       restore it if version detection or replacement fails.
 
 ## Tests
@@ -45,7 +45,7 @@ xray only when they explicitly request it.
 - [x] Unit-test ICMP-unavailable and TCP timeout/refused classification.
 - [x] Unit-test WebSocket handshake and payload failure.
 - [ ] Unit-test full-request delay and mixed success/failure reporting.
-- [ ] Test CLI/TUI update confirmation, engine selection, custom binary
+- [x] Test CLI/TUI update confirmation, engine selection, custom binary
       protection, running-engine protection, atomic replacement, and rollback.
 - [ ] Test the supplied mixed-protocol subscription shape with configs that
       fail individually; one bad node must not stop the remaining tests.
@@ -55,7 +55,7 @@ xray only when they explicitly request it.
 - [x] ICMP and TCP endpoint measurements are visible and distinguishable.
 - [x] WS/WSS profiles complete handshake plus payload checks when applicable.
 - [ ] Real proxy delay is measured separately from endpoint/connect timing.
-- [ ] Users can explicitly update sing-box, xray, or both from CLI and TUI.
-- [ ] Failed updates leave the prior working binary intact.
+- [x] Users can explicitly update sing-box, xray, or both from CLI and TUI.
+- [x] Failed updates leave the prior working binary intact.
 - [ ] `pytest` passes and live verification is recorded without marking blocked
       platform/credential checks as complete.

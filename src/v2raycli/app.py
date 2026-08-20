@@ -43,6 +43,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SCOPE",
         help="test WS/WSS handshake and ping/pong using the same scope syntax as --test",
     )
+    parser.add_argument(
+        "--update",
+        choices=("sing-box", "xray", "both"),
+        metavar="ENGINE",
+        help="explicitly update sing-box, xray, or both; custom paths are protected",
+    )
     parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
     parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
     parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
@@ -117,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.ws_test:
         return _ws_test(store, args.ws_test)
+
+    if args.update:
+        return _update(store, args.update)
 
     if args.backup:
         return _backup(store)
@@ -293,6 +302,23 @@ def _ws_test(store: ConfigStore, scope: str) -> int:
         or (result.handshake_status == "ok" and result.payload_status == "ok")
         for result in results
     ) else 1
+
+
+def _update(store: ConfigStore, selection: str) -> int:
+    from .engines.binary import BinaryError, update_binary
+
+    engines = ["sing-box", "xray"] if selection == "both" else [selection]
+    failed = False
+    for engine in engines:
+        try:
+            info = update_binary(engine, store.config.engines.get(engine, {}))
+        except BinaryError as exc:
+            failed = True
+            print(f"{engine} update failed: {exc}", file=sys.stderr)
+            continue
+        previous = info.previous_version or "not installed"
+        print(f"{engine}: {previous} -> {info.version} ({info.path})")
+    return 1 if failed else 0
 
 
 def _test(store: ConfigStore, scope: str) -> int:

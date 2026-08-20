@@ -8,7 +8,9 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -19,6 +21,14 @@ from .base import get_adapter
 
 class BinaryError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class UpdateInfo:
+    engine: str
+    path: Path
+    version: str
+    previous_version: str | None = None
 
 
 def platform_name() -> str:
@@ -198,6 +208,81 @@ def locate_binary(
     if cached.exists():
         return cached
     return download_binary(engine, options.get("version", "latest"), platform, arch, bin_dir)
+
+
+def update_binary(
+    engine: str,
+    options: dict,
+    bin_dir: Path | None = None,
+    *,
+    running: bool = False,
+    platform: str | None = None,
+    arch: str | None = None,
+) -> UpdateInfo:
+    """Download, verify, and atomically replace an auto-managed engine binary."""
+    if not isinstance(options, dict):
+        raise BinaryError("engine options must be an object")
+    if running:
+        raise BinaryError(f"cannot update {engine} while it is running")
+    binary_path = options.get("binary_path", "auto")
+    if binary_path not in (None, "", "auto"):
+        raise BinaryError(f"custom binary path is protected: {binary_path}")
+
+    platform = platform or platform_name()
+    arch = arch or arch_name()
+    effective = effective_platform(engine, platform)
+    adapter = get_adapter(engine)
+    target_dir = bin_dir or config.BIN_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / adapter.binary_filename(effective, arch)
+    if target.exists() and not target.is_file():
+        raise BinaryError(f"cached binary path is not a file: {target}")
+
+    previous_version: str | None = None
+    if target.is_file():
+        try:
+            previous_version = get_version(engine, target)
+        except BinaryError:
+            previous_version = None
+
+    rollback = target.with_name(target.name + ".previous")
+    try:
+        with tempfile.TemporaryDirectory(prefix=f"{engine}-update-", dir=str(target_dir)) as staging:
+            staged = download_binary(
+                engine,
+                options.get("version", "latest"),
+                platform,
+                arch,
+                bin_dir=Path(staging),
+            )
+            staged_version = get_version(engine, staged)
+            if not staged_version:
+                raise BinaryError(f"downloaded {engine} binary has no detectable version")
+
+            had_previous = target.is_file()
+            if rollback.exists():
+                rollback.unlink()
+            if had_previous:
+                os.replace(target, rollback)
+            try:
+                os.replace(staged, target)
+                target.chmod(0o755)
+                verified_version = get_version(engine, target)
+                if not verified_version:
+                    raise BinaryError(f"replaced {engine} binary has no detectable version")
+            except Exception as exc:
+                target.unlink(missing_ok=True)
+                if had_previous and rollback.exists():
+                    os.replace(rollback, target)
+                if isinstance(exc, BinaryError):
+                    raise
+                raise BinaryError(f"could not replace {engine} binary: {exc}") from exc
+            rollback.unlink(missing_ok=True)
+            return UpdateInfo(engine, target, verified_version, previous_version)
+    except BinaryError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise BinaryError(f"engine update failed: {exc}") from exc
 
 
 def get_version(engine: str, path: Path) -> str:

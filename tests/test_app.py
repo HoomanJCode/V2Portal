@@ -85,6 +85,30 @@ def test_ws_test_parser_option():
     assert args.ws_test == "all"
 
 
+def test_update_parser_option():
+    args = app.build_parser().parse_args(["--update", "both"])
+
+    assert args.update == "both"
+
+
+def test_update_cli_reports_each_engine(tmp_path, monkeypatch, capsys):
+    from v2raycli.engines import binary
+    from v2raycli.engines.binary import UpdateInfo
+
+    store = _store(tmp_path)
+    calls = []
+
+    def fake_update(engine, options):
+        calls.append((engine, options))
+        return UpdateInfo(engine, tmp_path / engine, "2.0.0", "1.0.0")
+
+    monkeypatch.setattr(binary, "update_binary", fake_update)
+
+    assert app._update(store, "both") == 0
+    assert [engine for engine, _ in calls] == ["sing-box", "xray"]
+    assert "sing-box: 1.0.0 -> 2.0.0" in capsys.readouterr().out
+
+
 def test_ws_test_skips_non_websocket_profiles(tmp_path, monkeypatch):
     from v2raycli.test import latency
 
