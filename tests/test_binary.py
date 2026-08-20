@@ -7,6 +7,7 @@ from v2raycli.engines.binary import (
     effective_platform,
     get_version,
     locate_binary,
+    download_binary,
     release_asset,
     update_binary,
 )
@@ -77,6 +78,80 @@ def test_latest_tag_requires_release_metadata(monkeypatch):
     monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", FakeClient)
     with pytest.raises(BinaryError, match="missing tag_name"):
         _latest_tag("example/repo")
+
+
+def test_latest_tag_accepts_explicit_proxy(monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"tag_name": "v1.2.3"}
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, headers):
+            return Response()
+
+    monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", Client)
+
+    assert _latest_tag("example/repo", proxy="socks5://proxy.example:1080") == "v1.2.3"
+    assert captured["proxy"] == "socks5://proxy.example:1080"
+
+
+def test_download_accepts_explicit_proxy(tmp_path, monkeypatch):
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            return [b"archive"]
+
+    class Stream:
+        def __enter__(self):
+            return Response()
+
+        def __exit__(self, *args):
+            return False
+
+    class Client:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def stream(self, method, url):
+            return Stream()
+
+    def fake_extract(archive, dest, kind, binary_name):
+        (dest / binary_name).write_bytes(b"binary")
+
+    monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", Client)
+    monkeypatch.setattr("v2raycli.engines.binary._extract", fake_extract)
+
+    binary = download_binary(
+        "xray", "v1.2.3", "linux", "amd64", bin_dir=tmp_path,
+        proxy="http://proxy.example:8080",
+    )
+
+    assert binary.read_bytes() == b"binary"
+    assert captured["proxy"] == "http://proxy.example:8080"
 
 
 def test_extract_rejects_malformed_archive(tmp_path):

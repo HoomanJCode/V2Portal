@@ -82,10 +82,13 @@ def release_asset(engine: str, version: str, platform: str, arch: str) -> tuple[
     return f"sing-box-{bare}-{platform}-{arch}.tar.gz", "tar.gz"
 
 
-def _latest_tag(repo: str) -> str:
+def _latest_tag(repo: str, proxy: str | None = None) -> str:
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     try:
-        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+        client_options = {"follow_redirects": True, "timeout": 30.0}
+        if proxy:
+            client_options["proxy"] = proxy
+        with httpx.Client(**client_options) as client:
             resp = client.get(
                 url,
                 headers={"Accept": "application/vnd.github+json", "User-Agent": "v2raycli"},
@@ -127,7 +130,12 @@ def _extract(archive: Path, dest: Path, kind: str, binary_name: str) -> None:
 
 
 def download_binary(
-    engine: str, version: str, platform: str, arch: str, bin_dir: Path | None = None
+    engine: str,
+    version: str,
+    platform: str,
+    arch: str,
+    bin_dir: Path | None = None,
+    proxy: str | None = None,
 ) -> Path:
     adapter = get_adapter(engine)
     bin_dir = bin_dir or config.BIN_DIR
@@ -137,7 +145,7 @@ def download_binary(
     repo = "XTLS/Xray-core" if engine == "xray" else "SagerNet/sing-box"
     tag = version or "latest"
     if tag == "latest":
-        tag = _latest_tag(repo)
+        tag = _latest_tag(repo, proxy=proxy)
     if not isinstance(tag, str) or not tag.strip() or any(char in tag for char in ("/", "\\")):
         raise BinaryError("release version must be a safe text tag")
     for label, value in (("platform", platform), ("architecture", arch)):
@@ -150,7 +158,10 @@ def download_binary(
     archive_path = bin_dir / asset
 
     try:
-        with httpx.Client(follow_redirects=True, timeout=60.0) as client:
+        client_options = {"follow_redirects": True, "timeout": 60.0}
+        if proxy:
+            client_options["proxy"] = proxy
+        with httpx.Client(**client_options) as client:
             with client.stream("GET", url) as resp:
                 resp.raise_for_status()
                 with open(archive_path, "wb") as fh:

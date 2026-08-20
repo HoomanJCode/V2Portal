@@ -9,6 +9,10 @@ out to the internet). Run it on any platform to confirm the engine layer works:
 
     pip install -e .          # or: PYTHONPATH=src python scripts/verify_engines.py
     python scripts/verify_engines.py
+    python scripts/verify_engines.py --proxy socks5://127.0.0.1:10808
+
+The optional proxy is used only for GitHub release metadata and binary
+downloads; it is never written to the v2raycli config.
 
 Exit code is non-zero if any check fails.
 """
@@ -444,11 +448,20 @@ def check_traffic_stats(checks: Checks, singbox: Path) -> None:
         stop(upstream)
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
     parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
     parser.add_argument("--skip-download", action="store_true", help="reuse --bin-dir binaries, don't download")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="optional HTTP/SOCKS proxy for GitHub metadata and binary downloads (not stored)",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     checks = Checks()
     bin_dir = args.bin_dir or Path(tempfile.mkdtemp(prefix="v2raycli-verify-"))
@@ -458,7 +471,14 @@ def main() -> int:
         for engine in ("sing-box", "xray"):
             binary = bin_dir / engine if engine == "sing-box" else bin_dir / "xray"
             if not args.skip_download or not binary.exists():
-                binary = download_binary(engine, "latest", platform_name(), arch_name(), bin_dir=bin_dir)
+                binary = download_binary(
+                    engine,
+                    "latest",
+                    platform_name(),
+                    arch_name(),
+                    bin_dir=bin_dir,
+                    proxy=args.proxy,
+                )
             checks.check(f"{engine} binary", binary.exists(), str(binary))
     except Exception as exc:  # pragma: no cover - network dependent
         checks.check("download binaries", False, f"{type(exc).__name__}: {exc}")

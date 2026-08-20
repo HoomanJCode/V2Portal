@@ -51,6 +51,9 @@ xray only when they explicitly request it.
 - [x] Test a credential-free mixed-protocol v2rayN subscription shape with
       configs that fail individually; one bad node does not stop the remaining
       tests. Live supplied credentials remain external to the repository.
+- [x] Allow the live engine verification script to use an explicit, ephemeral
+      HTTP/SOCKS proxy for GitHub metadata and binary downloads without storing
+      the proxy value.
 
 ## Definition of Done
 

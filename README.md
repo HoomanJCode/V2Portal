@@ -261,4 +261,6 @@ checks, and exercises the proxy end-to-end):
 
 ```bash
 python scripts/verify_engines.py
+# If GitHub access requires a local HTTP/SOCKS proxy:
+python scripts/verify_engines.py --proxy socks5://127.0.0.1:10808
 ```
