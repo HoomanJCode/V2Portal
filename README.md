@@ -258,8 +258,9 @@ python scripts/verify_platform.py
 python scripts/verify_platform.py --json
 ```
 
-Credential-free orchestration smoke (does not download engines or contact
-remote nodes):
+Credential-free orchestration smoke (subscription import, split routing,
+connection switching, test dispatch, cleanup, and OpenVPN argv validation;
+does not download engines or contact remote nodes):
 
 ```bash
 python scripts/verify_acceptance.py

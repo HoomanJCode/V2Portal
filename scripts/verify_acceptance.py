@@ -21,6 +21,7 @@ from unittest.mock import patch
 
 from v2raycli import app, connection
 from v2raycli.models import Profile, RoutingConfig
+from v2raycli.outbounds.vpn import add_openvpn
 from v2raycli.routing.rules import add_rule
 from v2raycli.storage import ConfigStore
 from v2raycli.subs.parser import import_subscription
@@ -145,6 +146,27 @@ def run_smoke(checks: Checks | None = None) -> bool:
             checks.check("connection switching", switched.target_name == backup.name, switched.error or "")
             controller.disconnect()
             checks.check("disconnect cleanup", controller.status.state == "idle")
+
+            vpn_config = root / "smoke.ovpn"
+            vpn_config.write_text("client\\n", encoding="utf-8")
+            vpn_profile = add_openvpn(
+                "smoke-openvpn",
+                config_path=str(vpn_config),
+                args=["--verb", "3"],
+            )
+            vpn_argv = controller.vpn_argv(
+                "openvpn", "/fake/openvpn", vpn_profile.vpn, vpn_profile
+            )
+            checks.check(
+                "OpenVPN profile argv",
+                vpn_argv == [
+                    "/fake/openvpn",
+                    "--verb",
+                    "3",
+                    "--config",
+                    str(vpn_config),
+                ],
+            )
 
         with (
             patch.object(
