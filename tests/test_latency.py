@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from v2raycli.engines.binary import BinaryError
 from v2raycli.models import Profile, Subscription
 from v2raycli.storage import ConfigStore
@@ -283,6 +285,73 @@ class FakeWebSocketSocket:
 
     def close(self):
         pass
+
+
+class FakeSocksSocket:
+    """Scripted SOCKS5 reply socket for testing _socks_connect."""
+
+    def __init__(self, greeting=b"\x05\x00", connect_reply=b"\x05\x00\x00\x01" + b"\x00" * 6):
+        self.greeting = greeting
+        self.connect_reply = connect_reply
+        self.buf = b""
+        self.sent = []
+        self.timeout = None
+
+    def sendall(self, data):
+        self.sent.append(data)
+        if data == b"\x05\x01\x00":
+            self.buf = self.greeting
+        elif data.startswith(b"\x05\x01\x00\x03"):
+            self.buf = self.connect_reply
+
+    def recv(self, size):
+        chunk, self.buf = self.buf[:size], self.buf[size:]
+        return chunk
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def close(self):
+        pass
+
+
+def test_socks_connect_encodes_domain_and_parses_ipv4(monkeypatch):
+    reply = b"\x05\x00\x00\x01" + b"\x7f\x00\x00\x01" + (8080).to_bytes(2, "big")
+    fake = FakeSocksSocket(connect_reply=reply)
+    monkeypatch.setattr(latency.socket, "create_connection", lambda *a, **k: fake)
+
+    sock = latency._socks_connect(1080, "example.com", 443, 5.0)
+
+    assert sock is fake
+    assert fake.sent[0] == b"\x05\x01\x00"
+    assert fake.sent[1] == b"\x05\x01\x00\x03" + bytes([11]) + b"example.com" + (443).to_bytes(2, "big")
+
+
+def test_socks_connect_parses_domain_reply(monkeypatch):
+    reply = b"\x05\x00\x00\x03" + bytes([7]) + b"1.2.3.4" + (443).to_bytes(2, "big")
+    fake = FakeSocksSocket(connect_reply=reply)
+    monkeypatch.setattr(latency.socket, "create_connection", lambda *a, **k: fake)
+
+    sock = latency._socks_connect(1080, "example.com", 443, 5.0)
+
+    assert sock is fake
+    assert fake.sent[1].startswith(b"\x05\x01\x00\x03")
+
+
+def test_socks_connect_rejects_bad_greeting(monkeypatch):
+    fake = FakeSocksSocket(greeting=b"\x05\xff")
+    monkeypatch.setattr(latency.socket, "create_connection", lambda *a, **k: fake)
+
+    with pytest.raises(OSError, match="rejected"):
+        latency._socks_connect(1080, "example.com", 443, 5.0)
+
+
+def test_socks_connect_rejects_connect_failure(monkeypatch):
+    fake = FakeSocksSocket(connect_reply=b"\x05\x05\x00\x00")
+    monkeypatch.setattr(latency.socket, "create_connection", lambda *a, **k: fake)
+
+    with pytest.raises(OSError, match="CONNECT failed"):
+        latency._socks_connect(1080, "example.com", 443, 5.0)
 
 
 def test_websocket_transport_detects_ws_and_wss(tmp_path):
