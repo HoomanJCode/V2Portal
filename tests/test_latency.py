@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from v2raycli.engines.binary import BinaryError
@@ -57,6 +58,41 @@ def test_build_test_config_routes_through_profile(tmp_path):
     assert inbound["listen"] == "127.0.0.1"
     assert inbound["listen_port"] == 9999
     assert "socks" in {o.get("type") for o in cfg["outbounds"]}
+
+
+def test_http_latency_performs_full_request(monkeypatch):
+    observed = {}
+
+    class Response:
+        status_code = 204
+
+    class Client:
+        def __init__(self, proxy, timeout, follow_redirects):
+            observed.update(proxy=proxy, timeout=timeout, follow_redirects=follow_redirects)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            observed["url"] = url
+            return Response()
+
+    monkeypatch.setitem(sys.modules, "httpx", type("Httpx", (), {"Client": Client}))
+
+    ok, elapsed, error = latency._http_latency("https://example.test/check", 1080, timeout=2.0)
+
+    assert ok is True
+    assert elapsed >= 0
+    assert error == ""
+    assert observed == {
+        "proxy": "socks5://127.0.0.1:1080",
+        "timeout": 2.0,
+        "follow_redirects": True,
+        "url": "https://example.test/check",
+    }
 
 
 def test_test_profile_success_structured_result(tmp_path, monkeypatch):
@@ -335,6 +371,28 @@ def test_scope_selectors(tmp_path):
     assert [p.id for p in latency.select_profiles(store, ("subscription", sub.id))] == [p1.id]
     assert [p.id for p in latency.select_profiles(store, ("profiles", [p2.id]))] == [p2.id]
     assert latency.select_profiles(store, "bogus") == []
+
+
+def test_test_many_preserves_mixed_success_and_failure_results(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    good = store.add_profile(Profile(name="good", kind="socks", outbound=SOCKS))
+    bad = store.add_profile(Profile(name="bad", kind="socks", outbound=SOCKS))
+
+    def fake(profile, settings, engines=None, bin_dir=None):
+        return latency.TestResult(
+            profile_id=profile.id,
+            name=profile.name,
+            ok=profile is good,
+            latency_ms=20.0 if profile is good else 0.0,
+            error=None if profile is good else "request timeout",
+        )
+
+    monkeypatch.setattr(latency, "test_profile", fake)
+    results = latency.test_many([good, bad], store.config.settings, concurrency=2)
+
+    assert [result.profile_id for result in results] == [good.id, bad.id]
+    assert [result.ok for result in results] == [True, False]
+    assert results[1].error == "request timeout"
 
 
 def test_test_many_returns_in_input_order(tmp_path, monkeypatch):

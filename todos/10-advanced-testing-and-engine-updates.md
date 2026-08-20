@@ -20,10 +20,11 @@ xray only when they explicitly request it.
   - [x] Send a small ping/payload and verify a valid response before cleanup.
   - [x] Report handshake and payload failures per config without aborting the
         remaining test run. Exposed by `--ws-test`.
-- [ ] Add real delay testing through each profile: perform a full HTTP request
+- [x] Add real delay testing through each profile: perform a full HTTP request
       through the proxy, report TCP connect time separately from request time,
-      and preserve per-config errors/timeouts.
-- [ ] Run ICMP/TCP/WS/full-request tests with bounded concurrency and retain
+      and preserve per-config errors/timeouts. The existing `--test` path
+      provides this behavior.
+- [x] Run ICMP/TCP/WS/full-request tests with bounded concurrency and retain
       the existing sorted result table and cached result format.
 
 ## User-requested engine updates
@@ -44,7 +45,7 @@ xray only when they explicitly request it.
 
 - [x] Unit-test ICMP-unavailable and TCP timeout/refused classification.
 - [x] Unit-test WebSocket handshake and payload failure.
-- [ ] Unit-test full-request delay and mixed success/failure reporting.
+- [x] Unit-test full-request delay and mixed success/failure reporting.
 - [x] Test CLI/TUI update confirmation, engine selection, custom binary
       protection, running-engine protection, atomic replacement, and rollback.
 - [ ] Test the supplied mixed-protocol subscription shape with configs that
@@ -54,7 +55,7 @@ xray only when they explicitly request it.
 
 - [x] ICMP and TCP endpoint measurements are visible and distinguishable.
 - [x] WS/WSS profiles complete handshake plus payload checks when applicable.
-- [ ] Real proxy delay is measured separately from endpoint/connect timing.
+- [x] Real proxy delay is measured separately from endpoint/connect timing.
 - [x] Users can explicitly update sing-box, xray, or both from CLI and TUI.
 - [x] Failed updates leave the prior working binary intact.
 - [ ] `pytest` passes and live verification is recorded without marking blocked

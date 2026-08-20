@@ -662,7 +662,8 @@ def test_many(
     bin_dir=None,
 ) -> list[TestResult]:
     results: dict[str, TestResult] = {}
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+    workers = max(1, min(int(concurrency), 32))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(test_profile, p, settings, engines, bin_dir): p.id
             for p in profiles
