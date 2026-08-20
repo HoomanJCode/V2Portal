@@ -6,15 +6,15 @@ order**; each phase ends with "Definition of Done" and lists dependencies.
 
 | # | File | Scope | Depends on |
 |---|---|---|---|
-| 01 | `01-scaffold-and-config.md` | Package skeleton, settings (auth, engines, routing), models & storage | — |
-| 02 | `02-share-link-and-subscription.md` | Share-link decode (incl. hysteria2/tuic/wireguard) + subscription fetch/parse/update | 01 |
-| 03 | `03-outbound-management.md` | Manual outbounds, VPN profiles (openvpn/openconnect), groups, split-routing rules | 01, 02 |
-| 04 | `04-engine-config-generation.md` | Engine adapter (sing-box + xray), binary download, mixed inbound, split routing, chain/balancer | 01, 03 |
-| 05 | `05-runtime-connection.md` | Launch/stop cores + VPN clients, live status, LAN exposure, auth | 04 |
+| 01 | `01-scaffold-and-config-passed.md` | Package skeleton, settings (auth, engines, routing), models & storage | — |
+| 02 | `02-share-link-and-subscription-passed.md` | Share-link decode (incl. hysteria2/tuic/wireguard) + subscription fetch/parse/update | 01 |
+| 03 | `03-outbound-management-passed.md` | Manual outbounds, VPN profiles (openvpn/openconnect), groups, split-routing rules | 01, 02 |
+| 04 | `04-engine-config-generation-passed.md` | Engine adapter (sing-box + xray), binary download, mixed inbound, split routing, chain/balancer | 01, 03 |
+| 05 | `05-runtime-connection-passed.md` | Launch/stop cores + VPN clients, live status, LAN exposure, auth | 04 |
 | 06 | `06-interactive-tui.md` | Interactive menus, connect/switch screen, management + routing UI | 05 |
 | 07 | `07-outbound-testing.md` | Engine-aware latency/reachability test, all or per-subscription | 04 |
 | 08 | `08-cross-platform-packaging.md` | Windows/Termux polish, VPN client detection, README, release | 06, 07 |
-| 09 | `09-backup-export-import.md` | Rolling backups, restore, full-config & share-link export/import | 01, 02 |
+| 09 | `09-backup-export-import-passed.md` | Rolling backups, restore, full-config & share-link export/import | 01, 02 |
 
 ## Conventions for the implementing agent
 
