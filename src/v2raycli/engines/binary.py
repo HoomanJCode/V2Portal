@@ -229,6 +229,7 @@ def update_binary(
     running: bool = False,
     platform: str | None = None,
     arch: str | None = None,
+    proxy: str | None = None,
 ) -> UpdateInfo:
     """Download, verify, and atomically replace an auto-managed engine binary."""
     if not isinstance(options, dict):
@@ -259,12 +260,15 @@ def update_binary(
     rollback = target.with_name(target.name + ".previous")
     try:
         with tempfile.TemporaryDirectory(prefix=f"{engine}-update-", dir=str(target_dir)) as staging:
+            download_options = {"bin_dir": Path(staging)}
+            if proxy:
+                download_options["proxy"] = proxy
             staged = download_binary(
                 engine,
                 options.get("version", "latest"),
                 platform,
                 arch,
-                bin_dir=Path(staging),
+                **download_options,
             )
             staged_version = get_version(engine, staged)
             if not staged_version:

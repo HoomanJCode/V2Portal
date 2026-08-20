@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ENGINE",
         help="explicitly update sing-box, xray, or both; custom paths are protected",
     )
+    parser.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="ephemeral HTTP/SOCKS proxy for explicit engine updates (not stored)",
+    )
     parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
     parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
     parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
@@ -125,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         return _ws_test(store, args.ws_test)
 
     if args.update:
-        return _update(store, args.update)
+        return _update(store, args.update, args.proxy)
 
     if args.backup:
         return _backup(store)
@@ -304,14 +309,18 @@ def _ws_test(store: ConfigStore, scope: str) -> int:
     ) else 1
 
 
-def _update(store: ConfigStore, selection: str) -> int:
+def _update(store: ConfigStore, selection: str, proxy: str | None = None) -> int:
     from .engines.binary import BinaryError, update_binary
 
     engines = ["sing-box", "xray"] if selection == "both" else [selection]
     failed = False
     for engine in engines:
         try:
-            info = update_binary(engine, store.config.engines.get(engine, {}))
+            options = store.config.engines.get(engine, {})
+            if proxy:
+                info = update_binary(engine, options, proxy=proxy)
+            else:
+                info = update_binary(engine, options)
         except BinaryError as exc:
             failed = True
             print(f"{engine} update failed: {exc}", file=sys.stderr)

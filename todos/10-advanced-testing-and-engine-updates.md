@@ -56,6 +56,8 @@ xray only when they explicitly request it.
       the proxy value.
 - [x] Report unavailable engine binaries cleanly and skip dependent live checks
       instead of raising a misleading missing-file traceback.
+- [x] Allow explicit CLI engine updates to use an ephemeral HTTP/SOCKS proxy;
+      never persist the proxy value or apply it to automatic startup updates.
 
 ## Definition of Done
 

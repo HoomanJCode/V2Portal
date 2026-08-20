@@ -86,9 +86,10 @@ def test_ws_test_parser_option():
 
 
 def test_update_parser_option():
-    args = app.build_parser().parse_args(["--update", "both"])
+    args = app.build_parser().parse_args(["--update", "both", "--proxy", "socks5://proxy.example:1080"])
 
     assert args.update == "both"
+    assert args.proxy == "socks5://proxy.example:1080"
 
 
 def test_update_cli_reports_each_engine(tmp_path, monkeypatch, capsys):
@@ -107,6 +108,25 @@ def test_update_cli_reports_each_engine(tmp_path, monkeypatch, capsys):
     assert app._update(store, "both") == 0
     assert [engine for engine, _ in calls] == ["sing-box", "xray"]
     assert "sing-box: 1.0.0 -> 2.0.0" in capsys.readouterr().out
+
+
+def test_update_cli_forwards_ephemeral_proxy(tmp_path, monkeypatch):
+    from v2raycli.engines import binary
+    from v2raycli.engines.binary import UpdateInfo
+
+    store = _store(tmp_path)
+    captured = {}
+
+    def fake_update(engine, options, **kwargs):
+        captured["engine"] = engine
+        captured["options"] = options
+        captured["proxy"] = kwargs.get("proxy")
+        return UpdateInfo(engine, tmp_path / engine, "2.0.0")
+
+    monkeypatch.setattr(binary, "update_binary", fake_update)
+
+    assert app._update(store, "sing-box", "http://proxy.example:8080") == 0
+    assert captured["proxy"] == "http://proxy.example:8080"
 
 
 def test_ws_test_skips_non_websocket_profiles(tmp_path, monkeypatch):

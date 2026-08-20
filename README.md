@@ -107,6 +107,7 @@ v2raycli --test all                           # full proxy delay-test every outb
 v2raycli --update sing-box                    # explicitly update sing-box
 v2raycli --update xray                        # explicitly update xray
 v2raycli --update both                        # explicitly update both engines
+v2raycli --update both --proxy socks5://127.0.0.1:10808  # update through a temporary proxy
 v2raycli --test <subscription-id>            # test one subscription's nodes
 v2raycli --test <id1,id2>                    # test specific profiles
 v2raycli --backup                            # snapshot the config, print its path
@@ -126,7 +127,8 @@ or `--update both`, or choose **Settings/Manage → Update engine binaries**.
 Only binaries configured with `binary_path: "auto"` are replaceable; custom and
 system paths are protected. Downloads are staged, version-checked, atomically
 replaced, and rolled back if verification fails. Updates are blocked for an
-engine currently connected in the TUI.
+engine currently connected in the TUI. For restricted networks, the CLI accepts
+an ephemeral HTTP/SOCKS proxy with `--proxy`; it is never stored.
 
 ### Auto-update
 

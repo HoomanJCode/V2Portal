@@ -192,6 +192,30 @@ def test_update_rejects_custom_and_running_engines(tmp_path):
         update_binary("xray", {"binary_path": "auto"}, bin_dir=tmp_path, running=True)
 
 
+def test_update_forwards_ephemeral_proxy(tmp_path, monkeypatch):
+    from v2raycli.engines import binary
+
+    captured = {}
+
+    def fake_download(engine, version, platform, arch, bin_dir=None, proxy=None):
+        captured["proxy"] = proxy
+        path = bin_dir / "xray"
+        path.write_bytes(b"new")
+        return path
+
+    monkeypatch.setattr(binary, "download_binary", fake_download)
+    monkeypatch.setattr(binary, "get_version", lambda engine, path: "2.0.0")
+
+    update_binary(
+        "xray",
+        {"binary_path": "auto"},
+        bin_dir=tmp_path,
+        proxy="socks5://proxy.example:1080",
+    )
+
+    assert captured["proxy"] == "socks5://proxy.example:1080"
+
+
 def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
     from v2raycli.engines import binary
 
