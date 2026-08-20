@@ -7,7 +7,8 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 - [ ] Verify on **Linux**: full walkthrough (add sub → split-route config →
       connect → LAN curl → switch → test → disconnect; add OpenVPN profile).
       *(deferred — needs real engine binaries; mocked orchestration coverage is
-      in `test_acceptance_flow.py`)*
+      in `test_acceptance_flow.py`; run `scripts/verify_platform.py` first for
+      read-only environment diagnostics)*
 - [ ] Verify on **Windows**:
   - console behavior in `cmd`/PowerShell (colors, keys, Ctrl+C)
   - `CREATE_NO_WINDOW` on engine/VPN subprocesses; no flashing windows
@@ -50,6 +51,7 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 ## Deferred (needs a Windows host / full walkthrough)
 
 - Linux + Windows end-to-end walkthroughs (Termux binaries + config gen + mixed
-  inbound verified; full TUI walkthrough still needs installed TUI deps).
+  inbound verified; full TUI walkthrough still needs installed TUI deps). Run
+  `scripts/verify_platform.py` before the live walkthrough.
 - Windows console + `CREATE_NO_WINDOW` + firewall verification.
 - Termux `0.0.0.0` LAN binding + terminal-size fallback.

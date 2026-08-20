@@ -229,6 +229,14 @@ pip install -e .[dev]
 pytest
 ```
 
+Read-only platform diagnostics (does not load or modify the config, download
+binaries, or start processes):
+
+```bash
+python scripts/verify_platform.py
+python scripts/verify_platform.py --json
+```
+
 Live engine verification (downloads sing-box + xray, runs their own config
 checks, and exercises the proxy end-to-end):
 
