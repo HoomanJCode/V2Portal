@@ -11,11 +11,11 @@ order**; each phase ends with "Definition of Done" and lists dependencies.
 | 03 | *(passed)* | Manual outbounds, VPN profiles (openvpn/openconnect), groups, split-routing rules | 01, 02 |
 | 04 | *(passed)* | Engine adapter (sing-box + xray), binary download, mixed inbound, split routing, chain/balancer | 01, 03 |
 | 05 | *(passed)* | Launch/stop cores + VPN clients, live status, LAN exposure, auth | 04 |
-| 06 | `06-interactive-tui.md` | Interactive menus, connect/switch screen, management + routing UI | 05 |
+| 06 | *(passed)* | Interactive menus, connect/switch screen, management + routing UI | 05 |
 | 07 | `07-outbound-testing.md` | Engine-aware latency/reachability test, all or per-subscription | 04 |
 | 08 | `08-cross-platform-packaging.md` | Windows/Termux polish, VPN client detection, README, release | 06, 07 |
 | 09 | *(passed)* | Rolling backups, restore, full-config & share-link export/import | 01, 02 |
-| 10 | `10-advanced-testing-and-engine-updates.md` | ICMP/TCP/WebSocket/full-delay tests and explicit sing-box/xray updates | 04, 05, 06, 07 |
+| 10 | *(passed)* | ICMP/TCP/WebSocket/full-delay tests and explicit sing-box/xray updates | 04, 05, 06, 07 |
 
 ## Conventions for the implementing agent
 
