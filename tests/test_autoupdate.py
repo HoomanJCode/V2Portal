@@ -54,7 +54,7 @@ def test_auto_update_updates_only_stale(tmp_path, monkeypatch):
     store = _store_with(tmp_path, sub_old, sub_fresh)
 
     calls: list = []
-    monkeypatch.setattr(parser.fetcher, "fetch", lambda url, ua=None: ("socks://u:p@1.2.3.4:1080#n\n", {}))
+    monkeypatch.setattr(parser.fetcher, "fetch", lambda url, ua=None, proxy=None: ("socks://u:p@1.2.3.4:1080#n\n", {}))
 
     results = auto_update_subscriptions(store)
     updated_names = {r["name"] for r in results if r["updated"]}
@@ -66,7 +66,7 @@ def test_auto_update_isolates_failures(tmp_path, monkeypatch):
     sub_good = _sub(name="good", url="file:///tmp/good.txt", auto_update_days=1)
     store = _store_with(tmp_path, sub_bad, sub_good)
 
-    def fake_fetch(url, ua=None):
+    def fake_fetch(url, ua=None, proxy=None):
         if url.startswith("https://"):
             raise parser.fetcher.FetchError("boom")
         return "socks://u:p@1.2.3.4:1080#n\n", {}
@@ -85,7 +85,7 @@ def test_auto_update_saves_profiles(tmp_path, monkeypatch):
     sub = _sub(name="s", auto_update_days=1)
     store = _store_with(tmp_path, sub)
     monkeypatch.setattr(
-        parser.fetcher, "fetch", lambda url, ua=None: ("socks://u:p@1.2.3.4:1080#n\n", {})
+        parser.fetcher, "fetch", lambda url, ua=None, proxy=None: ("socks://u:p@1.2.3.4:1080#n\n", {})
     )
 
     results = auto_update_subscriptions(store)
@@ -116,7 +116,7 @@ def test_app_auto_update_flag(tmp_path, monkeypatch):
     monkeypatch.setattr(
         parser.fetcher,
         "fetch",
-        lambda url, ua=None: fetched.append(url) or ("socks://u:p@1.2.3.4:1080#n\n", {}),
+        lambda url, ua=None, proxy=None: fetched.append(url) or ("socks://u:p@1.2.3.4:1080#n\n", {}),
     )
 
     # --no-auto-update must skip the fetch entirely.

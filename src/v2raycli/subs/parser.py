@@ -152,8 +152,8 @@ def _userinfo(headers: dict) -> tuple[int, str | None]:
     return traffic, expires
 
 
-def _build(sub_id: str, url: str, user_agent: str | None) -> tuple[list[Profile], list[str], int, str | None]:
-    body, headers = fetcher.fetch(url, user_agent)
+def _build(sub_id: str, url: str, user_agent: str | None, proxy: str | None = None) -> tuple[list[Profile], list[str], int, str | None]:
+    body, headers = fetcher.fetch(url, user_agent, proxy=proxy)
     entries = _json_entries(body)
     profiles: list[Profile] = []
     errors: list[str] = []
@@ -192,14 +192,14 @@ def _build(sub_id: str, url: str, user_agent: str | None) -> tuple[list[Profile]
 
 
 def import_subscription(
-    name: str, url: str, user_agent: str | None = None
+    name: str, url: str, user_agent: str | None = None, proxy: str | None = None,
 ) -> tuple[Subscription, list[Profile], list[str]]:
     """Fetch + parse a subscription into a Subscription and Profiles.
 
     Does not mutate storage; the caller adds the returned objects.
     """
     sub = Subscription(name=name, url=url, user_agent=user_agent)
-    profiles, errors, traffic, expires = _build(sub.id, url, user_agent)
+    profiles, errors, traffic, expires = _build(sub.id, url, user_agent, proxy=proxy)
     sub.profile_ids = [p.id for p in profiles]
     sub.last_updated = now_iso()
     sub.traffic_used = traffic
@@ -207,7 +207,7 @@ def import_subscription(
     return sub, profiles, errors
 
 
-def update_subscription(store, sub_id: str) -> tuple[list[Profile], list[str]]:
+def update_subscription(store, sub_id: str, proxy: str | None = None) -> tuple[list[Profile], list[str]]:
     """Re-fetch a subscription and reconcile it in place.
 
     Preserves names of unchanged nodes (matched by share link), deletes nodes
@@ -218,7 +218,7 @@ def update_subscription(store, sub_id: str) -> tuple[list[Profile], list[str]]:
         raise ValueError(f"subscription not found: {sub_id}")
 
     existing = {p.share_link: p for p in store.config.profiles if p.subscription_id == sub_id}
-    profiles, errors, traffic, expires = _build(sub_id, sub.url, sub.user_agent)
+    profiles, errors, traffic, expires = _build(sub_id, sub.url, sub.user_agent, proxy=proxy)
     if existing and errors and not profiles:
         raise ValueError(
             "subscription payload contained no valid profiles; keeping existing nodes"
@@ -281,12 +281,13 @@ def auto_update_subscriptions(store, now: datetime | None = None) -> list[dict]:
     so one failing URL never blocks the others. Callers should ``store.save()``
     if any result has ``updated=True``.
     """
+    proxy = store.config.settings.subscription_proxy or None
     results: list[dict] = []
     for sub in list(store.config.subscriptions):
         if not is_stale(sub, now):
             continue
         try:
-            update_subscription(store, sub.id)
+            update_subscription(store, sub.id, proxy=proxy)
             results.append(
                 {"subscription_id": sub.id, "name": sub.name, "updated": True, "error": None}
             )

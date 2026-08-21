@@ -77,6 +77,7 @@ class Settings:
     backup_keep: int = 10
     traffic_api: bool = False
     traffic_api_port: int = 9090
+    subscription_proxy: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

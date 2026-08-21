@@ -70,8 +70,10 @@ def _add(store) -> None:
 
     if kind == "sub":
         url = widgets.input_text("Subscription URL")
+        default_proxy = store.config.settings.subscription_proxy or ""
+        proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
         try:
-            sub, profiles, errors = import_subscription(name, url)
+            sub, profiles, errors = import_subscription(name, url, proxy=proxy or None)
         except Exception as exc:  # FetchError etc.
             widgets.show_message("Import failed", str(exc))
             return
@@ -264,8 +266,10 @@ def _subscriptions(store) -> None:
 
 
 def _do_update(store, sub_id: str) -> None:
+    default_proxy = store.config.settings.subscription_proxy or ""
+    proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
     try:
-        profiles, errors = update_subscription(store, sub_id)
+        profiles, errors = update_subscription(store, sub_id, proxy=proxy or None)
     except Exception as exc:
         widgets.show_message("Update failed", str(exc))
         return

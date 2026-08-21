@@ -25,6 +25,7 @@ def run(store, controller=None) -> None:
                 ("testurl", f"Test URL: {settings.test_url}"),
                 ("engine", f"Default engine: {settings.default_engine}"),
                 ("traffic", f"Traffic stats: {'on' if settings.traffic_api else 'off'}"),
+                ("subproxy", f"Subscription proxy: {settings.subscription_proxy or '(none)'}"),
                 ("updates", "Update engine binaries"),
                 ("back", "Back"),
             ],
@@ -58,6 +59,11 @@ def run(store, controller=None) -> None:
             settings.traffic_api = widgets.confirm("Enable traffic stats (sing-box Clash API)?")
             if settings.traffic_api:
                 settings.traffic_api_port = widgets.input_int("Traffic API port", settings.traffic_api_port)
+        elif action == "subproxy":
+            settings.subscription_proxy = widgets.input_text(
+                "Subscription proxy (e.g. socks5://127.0.0.1:1080)",
+                settings.subscription_proxy,
+            )
         elif action == "updates":
             run_updates(store, controller)
         store.save()
