@@ -20,6 +20,8 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **Groups** — `balancer` (latency / random / roundRobin / leastLoad), `chain`
   (proxy through proxy), and `single`.
 - **Split routing** — domain/keyword/regex rules, IP CIDR, and geoip/geosite.
+  Rules can target any profile, group, `direct`, or `block`. Stale rules
+  are auto-cleaned when a profile or group is deleted.
 - **LAN proxy inbound** — sing-box serves SOCKS5 *and* HTTP on one port;
   xray exposes SOCKS5 plus HTTP CONNECT on adjacent ports, with optional
   username/password auth.
@@ -101,7 +103,7 @@ backup        create | list | restore
 config        show | set | export | import
 engine        update
 service       install | uninstall
-routing       list | mode | add | remove
+routing       list | mode | add | move | remove
 status        health
 ```
 
@@ -129,6 +131,9 @@ v2raycli profile list --kind socks
 v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
 v2raycli group create chain chained PROFILE_A PROFILE_B
 v2raycli routing add block --domain 'keyword:ads'
+v2raycli routing add direct --geoip cn
+v2raycli routing add proxy --domain netflix.com --target PROFILE_A
+v2raycli routing list
 
 # Run multiple proxy servers on different ports
 v2raycli server add --port 1081 --group GROUP_B --protocol http --name 'Balancer'
@@ -209,15 +214,78 @@ You can add proxies via CLI:
 
 ## Split routing
 
-Switch to split mode and add rules:
+In **split** mode, the first matching rule wins. Rules can target a specific
+profile, group, `direct` (bypass proxy), or `block` (drop traffic).
 
-- domains (`example.com`, `keyword:ads`, `regex:...`, `geosite:category`)
-- IPs (`1.2.3.0/24`, `geoip:cn`)
+### CLI
 
-Each rule targets a profile, a group, `direct`, or `block`. On sing-box,
-`geosite:`/`geoip:` entries compile to rule-sets that auto-download from
-SagerNet/sing-geosite and SagerNet/sing-geoip; on xray they download
-`geoip.dat`/`geosite.dat` to `geo/` (found via `XRAY_LOCATION_ASSET`).
+```bash
+# Switch to split mode
+v2raycli routing mode split
+
+# Block ads
+v2raycli routing add block --domain keyword:ads
+v2raycli routing add block --geosite category-ads-all
+
+# Bypass local and Chinese IPs
+v2raycli routing add direct --ip 192.168.0.0/16
+v2raycli routing add direct --geoip cn --geoip private
+
+# Route specific sites through a profile
+v2raycli routing add proxy --domain netflix.com --target PROFILE_ID
+v2raycli routing add proxy --geosite gfw --target GROUP_ID
+
+# List all rules
+v2raycli routing list
+v2raycli routing list --json
+
+# Reorder rules (first match wins)
+v2raycli routing move RULE_ID up
+v2raycli routing move RULE_ID down
+
+# Remove a rule
+v2raycli routing remove RULE_ID
+```
+
+### Match types
+
+| Matcher | Syntax | Example |
+|---|---|---|
+| Domain (exact) | `--domain example.com` | `--domain netflix.com` |
+| Domain (keyword) | `--domain keyword:ads` | `--domain keyword:ads` |
+| Domain (regex) | `--domain regex:^x\\.` | `--domain regex:^ads\\.` |
+| Domain (geosite) | `--domain geosite:category` | `--domain geosite:gfw` |
+| IP/CIDR | `--ip 10.0.0.0/8` | `--ip 192.168.0.0/16` |
+| GeoIP | `--geoip cn` | `--geoip cn --geoip private` |
+| GeoSite | `--geosite category-ads-all` | `--geosite gfw` |
+
+### Target profiles and groups
+
+Proxy rules can target any profile or group by ID — not just the currently
+connected target. This lets you route different traffic through different
+outbounds:
+
+```bash
+# Route Netflix through a US profile
+v2raycli routing add proxy --domain netflix.com --target US_PROFILE_ID
+
+# Route streaming through a low-latency balancer group
+v2raycli routing add proxy --geosite streaming --target BALANCER_GROUP_ID
+
+# Route all traffic through the connected target (default)
+v2raycli routing add proxy --domain example.com
+```
+
+### Automatic cleanup
+
+When you delete a profile or group, any routing rules targeting it are
+automatically removed — no broken configs.
+
+### Geo assets
+
+On sing-box, `geosite:`/`geoip:` entries compile to rule-sets that
+auto-download from SagerNet/sing-geosite and SagerNet/sing-geoip. On xray,
+`geoip.dat`/`geosite.dat` download to `geo/` (found via `XRAY_LOCATION_ASSET`).
 
 ## LAN sharing
 
