@@ -968,6 +968,109 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     routing_remove.add_argument("id", help="routing rule ID to remove")
 
+    # -- server ---------------------------------------------------------------
+    server_cmd = commands.add_parser(
+        "server",
+        help="manage inbound proxy servers (multiple ports, each with its own outbound)",
+        description=(
+            "A server is a persistent inbound proxy that listens on a dedicated port\n"
+            "and forwards traffic to a specific profile or group. Multiple servers\n"
+            "can run simultaneously, each on its own port.\n\n"
+            "Examples:\n"
+            "  v2raycli server add --port 1080 --profile abc --name 'US proxy'\n"
+            "  v2raycli server add --port 1081 --group def --protocol http\n"
+            "  v2raycli server list\n"
+            "  v2raycli server start SERVER_ID\n"
+            "  v2raycli server stop SERVER_ID\n"
+            "  v2raycli server stop --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_commands = server_cmd.add_subparsers(dest="server_command", metavar="ACTION")
+
+    server_list = server_commands.add_parser(
+        "list",
+        help="list configured servers with port, protocol, and outbound",
+        description=(
+            "List all saved servers with their ports and outbound targets.\n\n"
+            "Examples:\n"
+            "  v2raycli server list\n"
+            "  v2raycli server list --running\n"
+            "  v2raycli server list --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_list.add_argument("--json", action="store_true", help="emit servers as JSON")
+    server_list.add_argument("--running", action="store_true", help="show only running servers")
+
+    server_add = server_commands.add_parser(
+        "add",
+        help="add a new server (port + outbound)",
+        description=(
+            "Create a persistent server that binds a port to an outbound.\n"
+            "The server is saved in config and can be started later.\n\n"
+            "Protocol options:\n"
+            "  mixed  — SOCKS5 + HTTP on one port (default)\n"
+            "  socks  — SOCKS5 only\n"
+            "  http   — HTTP only\n\n"
+            "Examples:\n"
+            "  v2raycli server add --port 1080 --profile abc --name 'US proxy'\n"
+            "  v2raycli server add --port 1081 --group def --protocol http\n"
+            "  v2raycli server add --port 1082 --profile abc --protocol socks"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_add.add_argument("--port", type=int, required=True, help="port to listen on")
+    server_outbound = server_add.add_mutually_exclusive_group(required=True)
+    server_outbound.add_argument("--profile", help="profile ID to forward to")
+    server_outbound.add_argument("--group", help="group ID to forward to")
+    server_add.add_argument("--name", default="", help="display name for this server")
+    server_add.add_argument("--protocol", choices=("mixed", "socks", "http"), default="mixed",
+                           help="inbound protocol (default: mixed)")
+    server_add.add_argument("--listen", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
+
+    server_start = server_commands.add_parser(
+        "start",
+        help="start a server (or --all)",
+        description=(
+            "Start a server's engine process. The server must be added first.\n\n"
+            "Examples:\n"
+            "  v2raycli server start SERVER_ID\n"
+            "  v2raycli server start --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_start.add_argument("id", nargs="?", help="server ID to start (or use --all)")
+    server_start.add_argument("--all", action="store_true", dest="start_all",
+                             help="start all enabled servers")
+
+    server_stop = server_commands.add_parser(
+        "stop",
+        help="stop a running server (or --all)",
+        description=(
+            "Stop a running server's engine process.\n\n"
+            "Examples:\n"
+            "  v2raycli server stop SERVER_ID\n"
+            "  v2raycli server stop --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_stop.add_argument("id", nargs="?", help="server ID to stop (or use --all)")
+    server_stop.add_argument("--all", action="store_true", dest="stop_all",
+                            help="stop all running servers")
+
+    server_remove = server_commands.add_parser(
+        "remove",
+        help="remove a server from config",
+        description=(
+            "Remove a server. Stops it first if running.\n\n"
+            "Example:\n"
+            "  v2raycli server remove SERVER_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_remove.add_argument("id", help="server ID to remove")
+
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
@@ -1084,6 +1187,8 @@ def _command(store: ConfigStore, args) -> int:
             return _command_help(args, "service")
         if command == "routing":
             return _routing_command(store, args)
+        if command == "server":
+            return _server_command(store, args)
         if command == "health":
             return _health_command(store, args.json)
         if command == "status":
@@ -1419,6 +1524,132 @@ def _routing_command(store: ConfigStore, args) -> int:
         print(f"removed rule {args.id}")
         return 0
     return _command_help(args, "routing")
+
+
+def _server_command(store: ConfigStore, args) -> int:
+    from .models import Server
+
+    action = args.server_command
+    if action == "list":
+        from .servers import ServerManager
+
+        mgr = ServerManager(store)
+        servers = store.list_servers()
+        if args.running:
+            running_ids = set(mgr.list_running())
+            servers = [s for s in servers if s.id in running_ids]
+        rows = []
+        for s in servers:
+            state = mgr.get_state(s.id)
+            rows.append({
+                "id": s.id, "name": s.name, "port": s.port,
+                "protocol": s.protocol, "outbound_type": s.outbound_type,
+                "outbound_id": s.outbound_id, "enabled": s.enabled,
+                "running": state.is_running() if state else False,
+            })
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False))
+        elif rows:
+            for row in rows:
+                status = "running" if row["running"] else "stopped"
+                print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {row['outbound_type']:<8} {status:<8} {row['name']}")
+        else:
+            print("no servers")
+        return 0
+
+    if action == "add":
+        server = Server(
+            name=args.name,
+            port=args.port,
+            protocol=args.protocol,
+            listen=args.listen,
+        )
+        if args.profile:
+            profile = store.get_profile(args.profile)
+            if profile is None:
+                print(f"unknown profile id: {args.profile}", file=sys.stderr)
+                return 1
+            server.outbound_id = args.profile
+            server.outbound_type = "profile"
+        else:
+            group = store.get_group(args.group)
+            if group is None:
+                print(f"unknown group id: {args.group}", file=sys.stderr)
+                return 1
+            server.outbound_id = args.group
+            server.outbound_type = "group"
+        store.add_server(server)
+        store.save()
+        print(server.id)
+        return 0
+
+    if action == "start":
+        from .servers import ServerManager
+
+        mgr = ServerManager(store)
+        if args.start_all:
+            servers = [s for s in store.list_servers() if s.enabled]
+            if not servers:
+                print("no enabled servers")
+                return 0
+            failed = False
+            for s in servers:
+                try:
+                    state = mgr.start(s.id)
+                    if state.error:
+                        failed = True
+                        print(f"{s.id}  failed: {state.error}", file=sys.stderr)
+                    else:
+                        print(f"{s.id}  started on :{s.port}")
+                except (ValueError, OSError) as exc:
+                    failed = True
+                    print(f"{s.id}  failed: {exc}", file=sys.stderr)
+            return 1 if failed else 0
+        if not args.id:
+            print("server start requires ID or --all", file=sys.stderr)
+            return 2
+        try:
+            state = mgr.start(args.id)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if state.error:
+            print(f"failed: {state.error}", file=sys.stderr)
+            return 1
+        server = store.get_server(args.id)
+        print(f"{state.server_id}  started on :{server.port}")
+        return 0
+
+    if action == "stop":
+        from .servers import ServerManager
+
+        mgr = ServerManager(store)
+        if args.stop_all:
+            count = mgr.stop_all()
+            print(f"stopped {count} server(s)")
+            return 0
+        if not args.id:
+            print("server stop requires ID or --all", file=sys.stderr)
+            return 2
+        if mgr.stop(args.id):
+            print(f"stopped {args.id}")
+        else:
+            print(f"{args.id} is not running")
+        return 0
+
+    if action == "remove":
+        from .servers import ServerManager
+
+        mgr = ServerManager(store)
+        mgr.stop(args.id)  # stop if running (ignore result)
+        if not store.remove_server(args.id):
+            print(f"unknown server id: {args.id}", file=sys.stderr)
+            return 1
+        store.save()
+        print(f"removed server {args.id}")
+        return 0
+
+    return _command_help(args, "server")
 
 
 def _health_command(store: ConfigStore, as_json: bool = False) -> int:

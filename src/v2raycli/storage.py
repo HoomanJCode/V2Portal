@@ -150,6 +150,31 @@ def _validate_persisted_shape(raw: dict) -> None:
             ):
                 raise ValueError(f"config groups[{index}].{key} must be an integer")
 
+    servers = _require_list(raw.get("servers", []), "config servers")
+    for index, server in enumerate(servers):
+        server = _require_dict(server, f"config servers[{index}]")
+        for key in ("id", "name", "protocol", "outbound_id", "outbound_type", "listen"):
+            if key in server and not isinstance(server[key], str):
+                raise ValueError(f"config servers[{index}].{key} must be text")
+        if "port" in server and (
+            isinstance(server["port"], bool) or not isinstance(server["port"], int)
+        ):
+            raise ValueError(f"config servers[{index}].port must be an integer")
+        if "enabled" in server and not isinstance(server["enabled"], bool):
+            raise ValueError(f"config servers[{index}].enabled must be boolean")
+        for key in ("traffic_up", "traffic_down"):
+            if key in server and (
+                isinstance(server[key], bool) or not isinstance(server[key], int)
+            ):
+                raise ValueError(f"config servers[{index}].{key} must be an integer")
+        if "auth" in server:
+            auth = _require_dict(server["auth"], f"config servers[{index}].auth")
+            if "enabled" in auth and not isinstance(auth["enabled"], bool):
+                raise ValueError(f"config servers[{index}].auth.enabled must be boolean")
+            for key in ("username", "password"):
+                if key in auth and not isinstance(auth[key], str):
+                    raise ValueError(f"config servers[{index}].auth.{key} must be text")
+
 
 class ConfigStore:
     """Load/save the config file and expose CRUD helpers.
@@ -287,6 +312,26 @@ class ConfigStore:
             return False
         self.notify_destructive("remove-group")
         self.config.groups.remove(group)
+        return True
+
+    # -- servers -------------------------------------------------------------
+
+    def add_server(self, server: Server) -> Server:
+        self.config.servers.append(server)
+        return server
+
+    def get_server(self, server_id: str) -> Server | None:
+        return next((s for s in self.config.servers if s.id == server_id), None)
+
+    def list_servers(self) -> list[Server]:
+        return list(self.config.servers)
+
+    def remove_server(self, server_id: str) -> bool:
+        server = self.get_server(server_id)
+        if server is None:
+            return False
+        self.notify_destructive("remove-server")
+        self.config.servers.remove(server)
         return True
 
     # -- routing -------------------------------------------------------------

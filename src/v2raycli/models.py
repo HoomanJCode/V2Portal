@@ -189,6 +189,32 @@ class Group:
 
 
 @dataclass
+class Server:
+    """A persistent inbound proxy bound to a port, forwarding to an outbound."""
+
+    id: str = field(default_factory=new_id)
+    name: str = ""
+    port: int = 1080
+    protocol: str = "mixed"  # mixed | socks | http
+    outbound_id: str = ""  # profile or group ID
+    outbound_type: str = "profile"  # profile | group
+    listen: str = "0.0.0.0"
+    auth: dict[str, Any] = field(
+        default_factory=lambda: {"enabled": False, "username": "", "password": ""}
+    )
+    enabled: bool = True
+    traffic_up: int = 0
+    traffic_down: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Server":
+        return cls(**_pick(data, cls))
+
+
+@dataclass
 class Config:
     schema_version: int = 2
     settings: Settings = field(default_factory=Settings)
@@ -197,6 +223,7 @@ class Config:
     profiles: list[Profile] = field(default_factory=list)
     subscriptions: list[Subscription] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
+    servers: list[Server] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -207,6 +234,7 @@ class Config:
             "profiles": [p.to_dict() for p in self.profiles],
             "subscriptions": [s.to_dict() for s in self.subscriptions],
             "groups": [g.to_dict() for g in self.groups],
+            "servers": [s.to_dict() for s in self.servers],
         }
 
     @classmethod
@@ -219,4 +247,5 @@ class Config:
             profiles=[Profile.from_dict(p) for p in data.get("profiles", [])],
             subscriptions=[Subscription.from_dict(s) for s in data.get("subscriptions", [])],
             groups=[Group.from_dict(g) for g in data.get("groups", [])],
+            servers=[Server.from_dict(s) for s in data.get("servers", [])],
         )
