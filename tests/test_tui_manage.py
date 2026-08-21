@@ -28,7 +28,7 @@ def test_manage_adds_subscription_from_ui(tmp_path, monkeypatch):
     monkeypatch.setattr(
         manage,
         "import_subscription",
-        lambda name, url: (subscription, [profile], []),
+        lambda name, url, proxy=None: (subscription, [profile], []),
     )
     monkeypatch.setattr(
         manage.widgets,

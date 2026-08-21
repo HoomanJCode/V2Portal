@@ -100,7 +100,7 @@ def test_mocked_full_flow_from_subscription_to_disconnect(tmp_path, monkeypatch)
     monkeypatch.setattr(
         manage,
         "import_subscription",
-        lambda name, url: (subscription, [imported], []),
+        lambda name, url, proxy=None: (subscription, [imported], []),
     )
 
     manage._add(store)
