@@ -42,11 +42,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="[deprecated] print a summary and exit (legacy alias for 'status')",
     )
     parser.add_argument(
-        "--connect",
-        metavar="ID",
-        help="[deprecated] connect to a profile/group id (use 'connect' command)",
-    )
-    parser.add_argument(
         "--test",
         metavar="SCOPE",
         help="[deprecated] latency-test outbounds (use 'test latency' command)",
@@ -1094,9 +1089,6 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_auto_update:
         _auto_update(store)
         _health_check(store)
-
-    if args.connect:
-        return _connect(store, args.connect)
 
     if args.test:
         return _test(store, args.test)
