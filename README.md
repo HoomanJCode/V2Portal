@@ -108,11 +108,21 @@ status        health
 Examples:
 
 ```bash
+# Add a manual proxy
 v2raycli profile add socks office-proxy 127.0.0.1 1080
 v2raycli profile add share us-node 'vless://...'
 v2raycli profile rename PROFILE_ID 'Office proxy'
+
+# Import a subscription and connect to one of its nodes
 v2raycli subscription add my-provider https://example.com/sub --proxy socks5://127.0.0.1:1080
+v2raycli profile list --subscription SUB_ID
+v2raycli connect PROFILE_ID
+
+# Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
+v2raycli profile list --kind socks
+
+# Create groups and routing rules
 v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
 v2raycli group create chain chained PROFILE_A PROFILE_B
 v2raycli routing add block --domain 'keyword:ads'
