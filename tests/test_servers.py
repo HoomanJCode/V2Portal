@@ -121,3 +121,65 @@ def test_server_state_tracking(tmp_path):
     state = ServerState(server_id="test", pid=None)
     mgr._states["test"] = state
     assert mgr.get_state("test") is not None
+
+
+def test_server_config_includes_split_routing_targets(tmp_path):
+    """Server config generation enriches the target with routing extras."""
+    from v2raycli.models import Group, RoutingConfig, RoutingRule
+
+    store = _store(tmp_path)
+    main = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
+    extra = store.add_profile(Profile(name="netflix", kind="socks", outbound=SOCKS))
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="proxy", target_id=extra.id, match={"domains": ["netflix.com"]}),
+        ],
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=main.id, outbound_type="profile")
+    )
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config = mgr._generate_server_config(server)
+
+    # The extra profile's outbound should be in the config.
+    all_outbound_tags = [o.get("tag") for o in config.get("outbounds", [])]
+    assert extra.id in all_outbound_tags
+    # The routing rule should reference the extra profile.
+    rules = config.get("route", {}).get("rules", []) + config.get("routing", {}).get("rules", [])
+    assert any(
+        r.get("outbound") == extra.id or r.get("outboundTag") == extra.id
+        for r in rules
+    )
+
+
+def test_server_config_with_balancer_routing_target(tmp_path):
+    """Server config includes balancer group constructs from routing rules."""
+    from v2raycli.models import Group, RoutingConfig, RoutingRule
+
+    store = _store(tmp_path)
+    main = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
+    b = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+    c = store.add_profile(Profile(name="c", kind="socks", outbound=SOCKS))
+    bal = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[b.id, c.id])
+    )
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=bal.id, match={"domains": ["streaming.com"]})],
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=main.id, outbound_type="profile")
+    )
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config = mgr._generate_server_config(server)
+
+    all_outbound_tags = [o.get("tag") for o in config.get("outbounds", [])]
+    # Both member profiles and the balancer group should be in the config.
+    assert b.id in all_outbound_tags
+    assert c.id in all_outbound_tags
+    # The group should have a urltest or selector construct.
+    assert any(
+        o.get("tag") == bal.id and o.get("type") in ("urltest", "selector")
+        for o in config.get("outbounds", [])
+    )

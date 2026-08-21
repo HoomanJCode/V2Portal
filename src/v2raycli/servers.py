@@ -100,7 +100,7 @@ class ServerManager:
         """Generate engine config for a single server."""
         from .engines import get_adapter, resolve_engine
         from .models import Profile, Group
-        from .outbounds.groups import resolve_target
+        from .outbounds.groups import enrich_target_with_routing, resolve_target
 
         # Resolve the outbound
         if server.outbound_type == "profile":
@@ -115,6 +115,8 @@ class ServerManager:
             target = resolve_target(self.store, group, self.store.config.settings.default_engine)
         else:
             raise ValueError(f"unknown outbound type: {server.outbound_type}")
+
+        target = enrich_target_with_routing(target, self.store.config.routing, self.store)
 
         # Build settings for this server
         from .models import Settings
