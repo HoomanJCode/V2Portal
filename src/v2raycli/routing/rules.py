@@ -94,6 +94,8 @@ def normalize_rules(
 
     normalized: list[RoutingRule] = []
     for rule in routing.rules:
+        if not rule.enabled:
+            continue
         validate_rule(rule)
         target_id = rule.target_id if rule.target_id is not None else selected_target_id
         if rule.action == "proxy" and target_id is None:

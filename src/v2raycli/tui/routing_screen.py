@@ -51,7 +51,8 @@ def _rule_label(store, rule) -> str:
     if geosite:
         parts.append(f"geosite={','.join(geosite)}")
     match_str = " ".join(parts) if parts else "(empty match)"
-    return f"{rule.action} -> {target}  [{match_str}]"
+    state = " [disabled]" if not rule.enabled else ""
+    return f"{rule.action} -> {target}  [{match_str}]{state}"
 
 
 def _pick_target(store):
@@ -78,6 +79,7 @@ def run(store) -> None:
                 ("toggle", "Toggle mode (all/split)"),
                 ("add", "Add rule"),
                 ("edit", "Edit rule"),
+                ("enable_disable", "Enable/disable rule"),
                 ("remove", "Remove rule"),
                 ("move", "Move rule up/down"),
                 ("back", "Back"),
@@ -91,6 +93,8 @@ def run(store) -> None:
             _add_rule(store)
         elif action == "edit":
             _edit_rule(store)
+        elif action == "enable_disable":
+            _toggle_rule(store)
         elif action == "remove":
             _remove_rule(store)
         elif action == "move":
@@ -192,6 +196,25 @@ def _edit_rule(store) -> None:
         validate_rule(rule)
     except ValueError as exc:
         widgets.show_message("Invalid rule", str(exc))
+
+
+def _toggle_rule(store) -> None:
+    """Enable or disable a routing rule."""
+    routing = store.config.routing
+    if not routing.rules:
+        widgets.show_message("No rules", "Nothing to toggle.")
+        return
+    choice = widgets.menu(
+        "Toggle rule",
+        [
+            (r.id, f"{'[ON] ' if r.enabled else '[OFF] '}{_rule_label(store, r)}")
+            for r in routing.rules
+        ],
+    )
+    if choice is None:
+        return
+    rule = next(r for r in routing.rules if r.id == choice)
+    rule.enabled = not rule.enabled
 
 
 def _remove_rule(store) -> None:

@@ -94,6 +94,7 @@ class RoutingRule:
     id: str = field(default_factory=new_id)
     action: str = "proxy"  # proxy | direct | block
     target_id: str | None = None
+    enabled: bool = True
     match: dict[str, Any] = field(
         default_factory=lambda: {"domains": [], "ips": [], "geoip": [], "geosite": []}
     )

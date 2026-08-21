@@ -226,3 +226,46 @@ def test_routing_move_unknown_id(tmp_path, capsys):
     args = app.build_parser().parse_args(["routing", "move", "no-such", "up"])
     assert app._routing_command(store, args) == 1
     assert "unknown" in capsys.readouterr().err
+
+
+def test_routing_enable_and_disable(tmp_path, capsys):
+    from v2raycli.models import RoutingRule
+
+    store = _store(tmp_path)
+    r = RoutingRule(action="block", match={"domains": ["ads.dev"]})
+    store.config.routing.rules.append(r)
+
+    # Disable it
+    args = app.build_parser().parse_args(["routing", "disable", r.id])
+    assert app._routing_command(store, args) == 0
+    assert r.enabled is False
+    assert "disabled" in capsys.readouterr().out
+
+    # Enable it
+    args = app.build_parser().parse_args(["routing", "enable", r.id])
+    assert app._routing_command(store, args) == 0
+    assert r.enabled is True
+    assert "enabled" in capsys.readouterr().out
+
+
+def test_routing_enable_unknown_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["routing", "enable", "no-such"])
+    assert app._routing_command(store, args) == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_routing_list_shows_disabled(tmp_path, capsys):
+    from v2raycli.models import RoutingRule
+
+    store = _store(tmp_path)
+    store.config.routing.mode = "split"
+    store.config.routing.rules = [
+        RoutingRule(action="block", enabled=True, match={"domains": ["a.com"]}),
+        RoutingRule(action="direct", enabled=False, match={"domains": ["b.com"]}),
+    ]
+    args = app.build_parser().parse_args(["routing", "list"])
+    assert app._routing_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert "[disabled]" in out
+    assert "b.com" in out

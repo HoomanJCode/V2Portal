@@ -132,3 +132,34 @@ def test_normalize_null_target_resolves_to_selected_then_checked():
     # But 'ok-id' is in known, so it passes.
     out = normalize_rules(cfg, selected_target_id="ok-id", known_target_ids=known)
     assert out[0].target_id == "ok-id"
+
+
+def test_normalize_skips_disabled_rules():
+    """Disabled rules are excluded from normalized output."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="direct", enabled=True, match={"domains": ["a.com"]}),
+            RoutingRule(action="block", enabled=False, match={"domains": ["b.com"]}),
+            RoutingRule(action="direct", enabled=True, match={"domains": ["c.com"]}),
+        ],
+    )
+    out = normalize_rules(cfg, selected_target_id=None)
+    assert len(out) == 2
+    assert out[0].match["domains"] == ["a.com"]
+    assert out[1].match["domains"] == ["c.com"]
+
+
+def test_disabled_rule_default_enabled():
+    """New rules default to enabled=True."""
+    rule = RoutingRule(action="direct", match={"domains": ["x.com"]})
+    assert rule.enabled is True
+
+
+def test_disabled_rule_in_config():
+    """A rule with enabled=False persists correctly."""
+    rule = RoutingRule(action="block", enabled=False, match={"domains": ["ads.dev"]})
+    data = rule.to_dict()
+    assert data["enabled"] is False
+    restored = RoutingRule.from_dict(data)
+    assert restored.enabled is False

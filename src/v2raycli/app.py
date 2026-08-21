@@ -964,6 +964,31 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     routing_move.add_argument("direction", choices=("up", "down"),
                              help="move the rule up (higher priority) or down")
 
+    routing_enable = routing_commands.add_parser(
+        "enable",
+        help="enable a routing rule",
+        description=(
+            "Re-enable a disabled routing rule.\n\n"
+            "Example:\n"
+            "  v2raycli routing enable RULE_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_enable.add_argument("id", help="routing rule ID to enable")
+
+    routing_disable = routing_commands.add_parser(
+        "disable",
+        help="disable a routing rule without deleting it",
+        description=(
+            "Disable a routing rule so it is skipped during routing.\n"
+            "The rule is kept in the config and can be re-enabled later.\n\n"
+            "Example:\n"
+            "  v2raycli routing disable RULE_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_disable.add_argument("id", help="routing rule ID to disable")
+
     # -- server ---------------------------------------------------------------
     server_cmd = commands.add_parser(
         "server",
@@ -1484,7 +1509,8 @@ def _routing_command(store: ConfigStore, args) -> int:
                 values = ", ".join(
                     f"{key}={','.join(value)}" for key, value in match.items() if value
                 )
-                print(f"{row['id']}  {row['action']:<6} {target:<36} {values}")
+                state = "" if row.get("enabled", True) else " [disabled]"
+                print(f"{row['id']}  {row['action']:<6} {target:<36} {values}{state}")
         return 0
     if action == "mode":
         store.config.routing.mode = args.mode
@@ -1527,6 +1553,16 @@ def _routing_command(store: ConfigStore, args) -> int:
         rules[index], rules[swap] = rules[swap], rules[index]
         store.save()
         print(f"moved rule {args.id} {args.direction}")
+        return 0
+    if action in ("enable", "disable"):
+        rule = next((r for r in store.config.routing.rules if r.id == args.id), None)
+        if rule is None:
+            print(f"unknown rule id: {args.id}", file=sys.stderr)
+            return 1
+        rule.enabled = action == "enable"
+        store.save()
+        state = "enabled" if rule.enabled else "disabled"
+        print(f"{state} rule {args.id}")
         return 0
     return _command_help(args, "routing")
 
