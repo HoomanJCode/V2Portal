@@ -43,6 +43,8 @@ def run(store, controller, selection) -> None:
                 from .test_screen import run as run_test
 
                 run_test(store)
+            if command == "r":
+                status = controller.status
             _render(status, _read_traffic(controller))
     except (EOFError, KeyboardInterrupt):
         controller.disconnect()

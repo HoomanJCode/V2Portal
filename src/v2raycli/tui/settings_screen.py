@@ -35,7 +35,11 @@ def run(store, controller=None) -> None:
         if action == "listen":
             settings.listen = widgets.input_text("Listen address", settings.listen)
         elif action == "port":
-            settings.mixed_port = widgets.input_int("Mixed port", settings.mixed_port)
+            value = widgets.input_int("Mixed port (1-65534)", settings.mixed_port)
+            if value is not None and 1 <= value <= 65534:
+                settings.mixed_port = value
+            elif value is not None:
+                widgets.show_message("Invalid port", "Must be between 1 and 65534.")
         elif action == "lan":
             settings.allow_lan = widgets.confirm("Allow LAN sharing?")
         elif action == "auth":
@@ -58,7 +62,11 @@ def run(store, controller=None) -> None:
         elif action == "traffic":
             settings.traffic_api = widgets.confirm("Enable traffic stats (sing-box Clash API)?")
             if settings.traffic_api:
-                settings.traffic_api_port = widgets.input_int("Traffic API port", settings.traffic_api_port)
+                value = widgets.input_int("Traffic API port (1-65535)", settings.traffic_api_port)
+                if value is not None and 1 <= value <= 65535:
+                    settings.traffic_api_port = value
+                elif value is not None:
+                    widgets.show_message("Invalid port", "Must be between 1 and 65535.")
         elif action == "subproxy":
             settings.subscription_proxy = widgets.input_text(
                 "Subscription proxy (e.g. socks5://127.0.0.1:1080)",

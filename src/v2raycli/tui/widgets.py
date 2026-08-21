@@ -47,12 +47,19 @@ def _simple_menu(title: str, values, text: str = ""):
         print(text)
     for index, (_, label) in enumerate(values, 1):
         print(f"  {index}) {label}")
-    raw = _prompt("Select: ").strip()
-    try:
-        index = int(raw)
-    except ValueError:
-        return None
-    return values[index - 1][0] if 1 <= index <= len(values) else None
+    for _attempt in range(3):
+        raw = _prompt("Select: ").strip()
+        try:
+            index = int(raw)
+        except ValueError:
+            if not raw:
+                return None
+            print("  Invalid selection, try again.")
+            continue
+        if 1 <= index <= len(values):
+            return values[index - 1][0]
+        print(f"  Number must be 1-{len(values)}.")
+    return None
 
 
 def _simple_multi_select(title: str, values, text: str = "") -> list:
