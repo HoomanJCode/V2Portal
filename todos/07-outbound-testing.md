@@ -49,7 +49,10 @@ table.
       `test_windows_no_leaked_processes` confirms stop + tasklist check)*
 - [x] TCP-connect vs full-request timing split (stretch) — implemented as
       `connect_ms` in `TestResult`, shown as a `Connect` column.
-- [ ] Live test of a real remote v2ray/ss/trojan node (needs credentials).
+- [x] Live test of a real remote v2ray/ss/trojan node (needs credentials).
+      *(verified live: 17 VLESS+WS+TLS profiles from a real subscription,
+      11/17 working through sing-box with 841–2095ms latency; 2 bugs fixed:
+      Windows .zip asset name, DNS circular dependency in test config)*
 
 ## Planned follow-up
 

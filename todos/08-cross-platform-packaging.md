@@ -4,7 +4,7 @@ Goal: verify and harden on Linux, Windows, and Termux; ship an easy install.
 
 ## Tasks
 
-- [~] Verify on **Linux**: live engine layer verified via
+- [x] Verify on **Linux**: live engine layer verified via
       `scripts/verify_engines.py` (both binaries downloaded; config-gen for
       single/balancer/chain/vmess/wireguard; mixed inbound HTTP+SOCKS5;
       outbound routing, 2-hop chain + dead-hop control, split routing, LAN
