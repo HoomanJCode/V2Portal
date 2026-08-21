@@ -186,3 +186,43 @@ def test_routing_parser_parsing(tmp_path):
     assert args.geoip == ["cn"]
     assert args.geosite == ["gfw"]
     assert args.target == "abc-123"
+
+
+def test_routing_move_up_and_down(tmp_path, capsys):
+    from v2raycli.models import RoutingRule
+
+    store = _store(tmp_path)
+    r1 = RoutingRule(action="block", match={"domains": ["a.com"]})
+    r2 = RoutingRule(action="direct", match={"domains": ["b.com"]})
+    r3 = RoutingRule(action="proxy", target_id="x", match={"domains": ["c.com"]})
+    store.config.routing.rules = [r1, r2, r3]
+
+    # Move r3 up
+    args = app.build_parser().parse_args(["routing", "move", r3.id, "up"])
+    assert app._routing_command(store, args) == 0
+    assert [r.id for r in store.config.routing.rules] == [r1.id, r3.id, r2.id]
+    assert "up" in capsys.readouterr().out
+
+    # Move r3 back down
+    args = app.build_parser().parse_args(["routing", "move", r3.id, "down"])
+    assert app._routing_command(store, args) == 0
+    assert [r.id for r in store.config.routing.rules] == [r1.id, r2.id, r3.id]
+
+
+def test_routing_move_edge_rejected(tmp_path, capsys):
+    from v2raycli.models import RoutingRule
+
+    store = _store(tmp_path)
+    r1 = RoutingRule(action="block", match={"domains": ["a.com"]})
+    store.config.routing.rules = [r1]
+
+    args = app.build_parser().parse_args(["routing", "move", r1.id, "up"])
+    assert app._routing_command(store, args) == 1
+    assert "edge" in capsys.readouterr().err
+
+
+def test_routing_move_unknown_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["routing", "move", "no-such", "up"])
+    assert app._routing_command(store, args) == 1
+    assert "unknown" in capsys.readouterr().err

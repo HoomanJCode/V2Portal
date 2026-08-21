@@ -948,6 +948,22 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     routing_remove.add_argument("id", help="routing rule ID to remove")
 
+    routing_move = routing_commands.add_parser(
+        "move",
+        help="reorder a routing rule (up or down in priority)",
+        description=(
+            "Move a routing rule up (higher priority) or down (lower priority).\n"
+            "Rules are applied in order; the first match wins.\n\n"
+            "Example:\n"
+            "  v2raycli routing move RULE_ID up\n"
+            "  v2raycli routing move RULE_ID down"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_move.add_argument("id", help="routing rule ID to move")
+    routing_move.add_argument("direction", choices=("up", "down"),
+                             help="move the rule up (higher priority) or down")
+
     # -- server ---------------------------------------------------------------
     server_cmd = commands.add_parser(
         "server",
@@ -1497,6 +1513,20 @@ def _routing_command(store: ConfigStore, args) -> int:
             return 1
         store.save()
         print(f"removed rule {args.id}")
+        return 0
+    if action == "move":
+        rules = store.config.routing.rules
+        index = next((i for i, r in enumerate(rules) if r.id == args.id), None)
+        if index is None:
+            print(f"unknown rule id: {args.id}", file=sys.stderr)
+            return 1
+        swap = index - 1 if args.direction == "up" else index + 1
+        if swap < 0 or swap >= len(rules):
+            print(f"rule is already at the {args.direction} edge", file=sys.stderr)
+            return 1
+        rules[index], rules[swap] = rules[swap], rules[index]
+        store.save()
+        print(f"moved rule {args.id} {args.direction}")
         return 0
     return _command_help(args, "routing")
 
