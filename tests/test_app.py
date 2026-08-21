@@ -319,39 +319,21 @@ def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):
     assert "no service" in capsys.readouterr().out
 
 
-def test_connect_runs_and_disconnects(tmp_path, monkeypatch, capsys):
+def test_connect_creates_server_and_starts(tmp_path, monkeypatch, capsys):
+    from v2raycli.servers import ServerManager, ServerState
+
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="t", kind="socks", outbound=SOCKS))
 
-    class FakeProc:
-        def is_running(self):
-            return False
+    def fake_start(self, server_id):
+        return ServerState(server_id=server_id, pid=99999)
 
-    class FakeStatus:
-        state = "connected"
-        target_name = "t"
-        engine = "sing-box"
-        inbound = {"urls": ["socks5://0.0.0.0:1080"], "lan": []}
-
-    class FakeController:
-        proc = FakeProc()
-
-        def __init__(self, store):
-            self.store = store
-            self.disconnected = False
-
-        def connect(self, selection):
-            return FakeStatus()
-
-        def disconnect(self):
-            self.disconnected = True
-
-        def traffic(self):
-            return None
-
-    monkeypatch.setattr("v2raycli.connection.ConnectionController", FakeController)
+    monkeypatch.setattr(ServerManager, "start", fake_start)
 
     assert app._connect(store, profile.id) == 0
     out = capsys.readouterr().out
     assert "connected to t" in out
-    assert "socks5://" in out
+    assert "server id:" in out
+    # Server entry was created
+    assert len(store.list_servers()) == 1
+    assert store.list_servers()[0].outbound_id == profile.id
