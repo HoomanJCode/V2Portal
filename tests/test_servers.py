@@ -183,3 +183,91 @@ def test_server_config_with_balancer_routing_target(tmp_path):
         o.get("tag") == bal.id and o.get("type") in ("urltest", "selector")
         for o in config.get("outbounds", [])
     )
+
+
+def test_server_spawn_uses_args_kwarg(tmp_path, monkeypatch):
+    """ServerManager._spawn must pass 'args' (not 'argv') to Popen."""
+    import subprocess
+
+    store = _store(tmp_path)
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+
+    captured_kwargs = {}
+    fake_proc = type("FakeProc", (), {"pid": 12345})()
+
+    def fake_popen(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return fake_proc
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    argv = ["/usr/bin/sing-box", "run", "-c", "/tmp/cfg.json"]
+    result = mgr._spawn(argv, tmp_path)
+
+    assert result is fake_proc
+    assert "args" in captured_kwargs, (
+        f"Expected Popen to receive 'args' kwarg, got keys: {list(captured_kwargs.keys())}"
+    )
+    assert captured_kwargs["args"] == argv
+    assert "argv" not in captured_kwargs, (
+        "Popen received old 'argv' kwarg — the fix was not applied"
+    )
+
+
+def test_server_spawn_sets_start_new_session(tmp_path, monkeypatch):
+    """ServerManager._spawn uses start_new_session on non-Windows."""
+    import subprocess
+
+    store = _store(tmp_path)
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+
+    captured_kwargs = {}
+    fake_proc = type("FakeProc", (), {"pid": 12345})()
+
+    def fake_popen(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return fake_proc
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    monkeypatch.setattr("os.name", "posix")
+
+    mgr._spawn(["/usr/bin/sing-box"], tmp_path)
+    assert captured_kwargs.get("start_new_session") is True
+
+
+def test_server_stale_states_pruned_on_load(tmp_path):
+    """ServerManager prunes states for servers no longer in config."""
+    store = _store(tmp_path)
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id="abc", outbound_type="profile")
+    )
+    store.save()
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    mgr._states[server.id] = ServerState(server_id=server.id, pid=999999)
+    mgr._save_states()
+
+    # Remove the server from config
+    store.remove_server(server.id)
+    store.save()
+
+    # Reload — stale state should be pruned
+    mgr2 = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    assert server.id not in mgr2._states
+
+
+def test_server_active_states_survive_load(tmp_path):
+    """ServerManager keeps states for servers that still exist in config."""
+    store = _store(tmp_path)
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id="abc", outbound_type="profile")
+    )
+    store.save()
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    mgr._states[server.id] = ServerState(server_id=server.id, pid=None)
+    mgr._save_states()
+
+    mgr2 = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    assert server.id in mgr2._states
+    assert mgr2._states[server.id].pid is None

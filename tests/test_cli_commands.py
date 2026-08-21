@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from v2raycli import app
 from v2raycli.models import Profile, Subscription
 from v2raycli.storage import ConfigStore
@@ -253,6 +255,76 @@ def test_routing_enable_unknown_id(tmp_path, capsys):
     args = app.build_parser().parse_args(["routing", "enable", "no-such"])
     assert app._routing_command(store, args) == 1
     assert "unknown" in capsys.readouterr().err
+
+
+def test_config_set_port_validation(tmp_path, capsys):
+    """config set rejects port 65535 (xray HTTP overflow) but accepts 65534."""
+    store = _store(tmp_path)
+
+    # 65534 should be accepted
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.mixed_port", "65534"]
+    )
+    assert app._config_command(store, args) == 0
+    assert store.config.settings.mixed_port == 65534
+
+    # 65535 should be rejected (raises ValueError, caught by _command)
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.mixed_port", "65535"]
+    )
+    with pytest.raises(ValueError, match="65534"):
+        app._config_command(store, args)
+    assert store.config.settings.mixed_port == 65534  # unchanged
+
+
+def test_config_set_port_zero_accepted(tmp_path, capsys):
+    """config set accepts port 0 (disabled) for socks_port and http_port."""
+    store = _store(tmp_path)
+
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.socks_port", "0"]
+    )
+    assert app._config_command(store, args) == 0
+    assert store.config.settings.socks_port == 0
+
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.http_port", "0"]
+    )
+    assert app._config_command(store, args) == 0
+    assert store.config.settings.http_port == 0
+
+
+def test_config_set_port_negative_rejected(tmp_path, capsys):
+    """config set rejects negative port values."""
+    store = _store(tmp_path)
+
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.mixed_port", "-1"]
+    )
+    with pytest.raises(ValueError, match="65534"):
+        app._config_command(store, args)
+
+
+def test_config_set_port_string_rejected(tmp_path, capsys):
+    """config set rejects non-integer port values."""
+    store = _store(tmp_path)
+
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.mixed_port", "abc"]
+    )
+    with pytest.raises(ValueError, match="integer"):
+        app._config_command(store, args)
+
+
+def test_config_set_port_bool_rejected(tmp_path, capsys):
+    """config set rejects boolean port values."""
+    store = _store(tmp_path)
+
+    args = app.build_parser().parse_args(
+        ["config", "set", "settings.mixed_port", "true"]
+    )
+    with pytest.raises(ValueError, match="integer"):
+        app._config_command(store, args)
 
 
 def test_routing_list_shows_disabled(tmp_path, capsys):
