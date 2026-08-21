@@ -21,9 +21,14 @@ def test_platform_report_is_read_only_and_structured(monkeypatch, tmp_path):
 
 
 def test_platform_report_maps_windows_process_mode(monkeypatch):
-    monkeypatch.setattr(runner.os, "name", "nt")
-    monkeypatch.setattr(runner.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
-    monkeypatch.setattr(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200, raising=False)
+    # Patch _process_kwargs directly instead of os.name to avoid changing
+    # the global os module (which would break pathlib.Path on Linux if a
+    # test fails while os.name == "nt").
+    monkeypatch.setattr(
+        runner,
+        "_process_kwargs",
+        lambda: {"creationflags": 0x08000000 | 0x00000200},
+    )
     monkeypatch.setattr(diagnostics, "tui_available", lambda: True)
     monkeypatch.setattr(diagnostics, "detect_clients", lambda: {})
 

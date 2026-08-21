@@ -8,14 +8,20 @@ def _script(tmp_path, body):
     return make_fake_script(tmp_path, "fake", body)
 
 
-def test_windows_process_flags(monkeypatch):
-    monkeypatch.setattr(runner.os, "name", "nt")
-    monkeypatch.setattr(runner.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
-    monkeypatch.setattr(runner.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200, raising=False)
+def test_windows_process_flags():
+    # Save and restore os.name manually so it's always restored even if
+    # the assertion fails — patching os.name globally can break
+    # pathlib.Path on Linux if a concurrent/next test fails.
+    import os as _os
 
-    assert runner._process_kwargs() == {
-        "creationflags": 0x08000000 | 0x00000200,
-    }
+    saved = _os.name
+    try:
+        _os.name = "nt"
+        assert runner._process_kwargs() == {
+            "creationflags": 0x08000000 | 0x00000200,
+        }
+    finally:
+        _os.name = saved
 
 
 def test_non_windows_process_flags(monkeypatch):
