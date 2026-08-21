@@ -92,7 +92,7 @@ def test_mocked_full_flow_from_subscription_to_disconnect(tmp_path, monkeypatch)
         subscription_id=subscription.id,
         source="subscription",
     )
-    inputs = iter(["provider", subscription.url])
+    inputs = iter(["provider", subscription.url, ""])
 
     monkeypatch.setattr(manage.widgets, "menu", lambda *args: "sub")
     monkeypatch.setattr(manage.widgets, "input_text", lambda *args: next(inputs))

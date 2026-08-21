@@ -13,15 +13,30 @@ def test_windows_process_flags():
     # the assertion fails — patching os.name globally can break
     # pathlib.Path on Linux if a concurrent/next test fails.
     import os as _os
+    import subprocess as _sp
 
-    saved = _os.name
+    saved_name = _os.name
+    saved_cnw = getattr(_sp, "CREATE_NO_WINDOW", None)
+    saved_cnp = getattr(_sp, "CREATE_NEW_PROCESS_GROUP", None)
     try:
         _os.name = "nt"
+        if not hasattr(_sp, "CREATE_NO_WINDOW"):
+            _sp.CREATE_NO_WINDOW = 0x08000000
+        if not hasattr(_sp, "CREATE_NEW_PROCESS_GROUP"):
+            _sp.CREATE_NEW_PROCESS_GROUP = 0x00000200
         assert runner._process_kwargs() == {
             "creationflags": 0x08000000 | 0x00000200,
         }
     finally:
-        _os.name = saved
+        _os.name = saved_name
+        if saved_cnw is None:
+            _sp.CREATE_NO_WINDOW = saved_cnw
+        else:
+            _sp.CREATE_NO_WINDOW = saved_cnw
+        if saved_cnp is None:
+            del _sp.CREATE_NEW_PROCESS_GROUP
+        else:
+            _sp.CREATE_NEW_PROCESS_GROUP = saved_cnp
 
 
 def test_non_windows_process_flags(monkeypatch):

@@ -20,7 +20,7 @@ def test_manage_adds_subscription_from_ui(tmp_path, monkeypatch):
     store = _store(tmp_path)
     profile = Profile(name="node", kind="socks", outbound=SOCKS)
     subscription = Subscription(name="provider")
-    inputs = iter(["provider", "paste://socks://user:pass@1.2.3.4:1080"])
+    inputs = iter(["provider", "paste://socks://user:pass@1.2.3.4:1080", ""])
     messages = []
 
     monkeypatch.setattr(manage.widgets, "menu", lambda *args: "sub")
