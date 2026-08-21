@@ -96,6 +96,7 @@ remain supported for compatibility. The full command layout is:
 profile       list | add | rename | remove | export
 subscription  list | add | update | remove
 group          list | create balancer | create chain | remove
+server        list | add | start | stop | remove
 test          latency | endpoint | websocket
 backup        create | list | restore
 config        show | set | export | import
@@ -126,6 +127,12 @@ v2raycli profile list --kind socks
 v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
 v2raycli group create chain chained PROFILE_A PROFILE_B
 v2raycli routing add block --domain 'keyword:ads'
+
+# Run multiple proxy servers on different ports
+v2raycli server add --port 1080 --profile PROFILE_A --name 'US proxy'
+v2raycli server add --port 1081 --group GROUP_B --protocol http --name 'Balancer'
+v2raycli server list
+v2raycli server start --all
 ```
 
 The TUI is retained as a library module for users who explicitly embed it; the
