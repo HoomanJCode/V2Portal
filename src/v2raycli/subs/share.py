@@ -160,6 +160,8 @@ def _split_authority(rest: str) -> tuple[str, str, str, str, str]:
     host, port = hostport, ""
     if hostport.startswith("["):  # IPv6 [::1]:443
         end = hostport.find("]")
+        if end < 0:
+            raise ShareLinkError("malformed IPv6 address (missing closing bracket)")
         host = hostport[1:end]
         after = hostport[end + 1 :]
         if after.startswith(":"):
@@ -274,6 +276,8 @@ def parse_vless(raw: str) -> Profile:
             tls_settings["alpn"] = [a for a in alpn.split(",") if a]
         stream["tlsSettings"] = tls_settings
     elif security == "reality":
+        if not isinstance(pbk, str) or not pbk.strip():
+            raise ShareLinkError("vless reality requires a publicKey (pbk)")
         stream["security"] = "reality"
         stream["realitySettings"] = {
             "serverName": sni or host,
@@ -462,9 +466,21 @@ def parse_hysteria2(raw: str) -> Profile:
     up = q.get("up", "")
     down = q.get("down", "")
     if up:
-        outbound["up_mbps"] = int(up)
+        try:
+            up_val = int(up)
+        except (TypeError, ValueError) as exc:
+            raise ShareLinkError(f"hysteria2 up rate must be a positive integer") from exc
+        if up_val <= 0:
+            raise ShareLinkError("hysteria2 up rate must be a positive integer")
+        outbound["up_mbps"] = up_val
     if down:
-        outbound["down_mbps"] = int(down)
+        try:
+            down_val = int(down)
+        except (TypeError, ValueError) as exc:
+            raise ShareLinkError(f"hysteria2 down rate must be a positive integer") from exc
+        if down_val <= 0:
+            raise ShareLinkError("hysteria2 down rate must be a positive integer")
+        outbound["down_mbps"] = down_val
     return _make_profile(raw, "hysteria2", name or f"{host}:{port}", outbound)
 
 
@@ -599,6 +615,11 @@ def _encode_vmess(p: Profile) -> str:
         data["host"] = (ws.get("headers") or {}).get("Host", "")
     elif net == "grpc":
         data["path"] = ss.get("grpcSettings", {}).get("serviceName", "")
+    elif net == "h2":
+        h2 = ss.get("httpSettings", {})
+        data["path"] = h2.get("path", "")
+        hosts = h2.get("host", [])
+        data["host"] = hosts[0] if isinstance(hosts, list) and hosts else ""
     if ss.get("security") == "tls":
         data["tls"] = "tls"
         tls = ss.get("tlsSettings", {})

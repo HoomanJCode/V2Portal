@@ -58,7 +58,10 @@ class ServerManager:
             return
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            known_ids = {s.id for s in self.store.config.servers}
             for server_id, state_data in data.items():
+                if server_id not in known_ids:
+                    continue  # server was removed; skip stale state
                 self._states[server_id] = ServerState(**state_data)
         except (json.JSONDecodeError, TypeError):
             pass
