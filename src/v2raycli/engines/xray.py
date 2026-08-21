@@ -237,6 +237,43 @@ class XrayAdapter(EngineAdapter):
             )
             selected = BALANCER_TAG
 
+        # Emit outbounds and constructs for profiles/groups referenced by
+        # split-routing rules that aren't part of the main target.
+        main_ids = {p.id for p in target.profiles}
+        extra_added: set[str] = set()
+        for profile in target.extra_profiles:
+            if profile.id in main_ids or profile.id in extra_added:
+                continue
+            outbound = self._outbound_for(profile)
+            outbound["tag"] = profile.id
+            outbounds.append(outbound)
+            extra_added.add(profile.id)
+        for group in target.extra_groups:
+            if group.id in extra_added:
+                continue
+            member_ids = [pid for pid in group.profile_ids if pid in main_ids or pid in extra_added]
+            if not member_ids:
+                continue
+            if group.type == "balancer":
+                strategy_type = _STRATEGY.get(group.strategy, "random")
+                balancers.append(
+                    {
+                        "tag": group.id,
+                        "selector": member_ids,
+                        "strategy": {"type": strategy_type},
+                    }
+                )
+            elif group.type == "chain":
+                for idx, pid in enumerate(member_ids):
+                    if idx > 0:
+                        ob = next((o for o in outbounds if o.get("tag") == pid), None)
+                        if ob is not None:
+                            ob["proxySettings"] = {
+                                "tag": member_ids[idx - 1],
+                                "transportLayer": False,
+                            }
+            extra_added.add(group.id)
+
         listen = settings.listen if settings.allow_lan else "127.0.0.1"
         http_port = settings.mixed_port + 1
         if http_port > 65535:

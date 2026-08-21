@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..engines import AUTO, SINGBOX, XRAY, get_adapter, resolve_engine, strategy_supported
-from ..models import Group, Profile
+from ..models import Group, Profile, RoutingConfig
 from .vpn import is_vpn
 
 VALID_STRATEGIES = {"latency", "random", "roundRobin", "leastLoad"}
@@ -21,6 +21,8 @@ class Target:
     strategy: str = ""
     profile_ids: list[str] = field(default_factory=list)
     profiles: list[Profile] = field(default_factory=list)
+    extra_profiles: list[Profile] = field(default_factory=list)
+    extra_groups: list[Group] = field(default_factory=list)
 
 
 def _resolve_members(store, profile_ids) -> list[Profile]:
@@ -159,3 +161,59 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             profiles=profiles,
         )
     raise TypeError("selection must be a Profile or Group")
+
+
+def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) -> Target:
+    """Enrich a target with profiles/groups referenced by split-routing rules.
+
+    This ensures the engine config includes outbounds for every profile and
+    group that a split-routing rule routes to, even if they aren't part of
+    the main connection target.  Group members are also resolved so the
+    engine can emit the required outbounds for balancers/chains.
+    """
+    if routing.mode != "split" or not routing.rules:
+        return target
+
+    main_ids = set(target.profile_ids)
+    extra_profiles_by_id: dict[str, Profile] = {
+        p.id: p for p in target.extra_profiles
+    }
+    extra_groups_by_id: dict[str, Group] = {
+        g.id: g for g in target.extra_groups
+    }
+
+    for rule in routing.rules:
+        if rule.action != "proxy" or not rule.target_id:
+            continue
+        tid = rule.target_id
+        if tid in main_ids:
+            continue
+        if tid in extra_profiles_by_id or tid in extra_groups_by_id:
+            continue
+        profile = store.get_profile(tid)
+        if profile is not None:
+            extra_profiles_by_id[tid] = profile
+            continue
+        group = store.get_group(tid)
+        if group is not None:
+            extra_groups_by_id[tid] = group
+
+    # Resolve members of referenced groups so their outbounds are available.
+    for group in list(extra_groups_by_id.values()):
+        for pid in group.profile_ids:
+            if pid in main_ids or pid in extra_profiles_by_id:
+                continue
+            profile = store.get_profile(pid)
+            if profile is not None:
+                extra_profiles_by_id[pid] = profile
+
+    return Target(
+        type=target.type,
+        name=target.name,
+        engine=target.engine,
+        strategy=target.strategy,
+        profile_ids=target.profile_ids,
+        profiles=target.profiles,
+        extra_profiles=list(extra_profiles_by_id.values()),
+        extra_groups=list(extra_groups_by_id.values()),
+    )

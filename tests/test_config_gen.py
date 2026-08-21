@@ -779,3 +779,228 @@ def test_manual_xray_outbound(tmp_path):
     cfg = _generate(store, p, default="xray")
     outbound = next(o for o in cfg["outbounds"] if o.get("tag") == p.id)
     assert outbound["protocol"] == "vmess"
+
+
+# ---------------------------------------------------------------------------
+# Split-routing to specific profiles / groups
+# ---------------------------------------------------------------------------
+
+from v2raycli.outbounds.groups import enrich_target_with_routing
+from v2raycli.models import RoutingConfig, RoutingRule
+
+
+def _generate_with_extras(store, selection, routing, default="sing-box"):
+    """Generate a config with extra profiles/groups resolved from routing."""
+    target = resolve_target(store, selection, default_engine=default)
+    target = enrich_target_with_routing(target, routing, store)
+    adapter = get_adapter(target.engine)
+    return adapter.generate(store.config.settings, routing, target)
+
+
+def test_enrich_target_adds_extra_profile(tmp_path):
+    """enrich_target_with_routing adds a profile referenced by a routing rule."""
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("main"))
+    b = store.add_profile(_vmess("extra"))
+    target = resolve_target(store, a, default_engine="sing-box")
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=b.id, match={"domains": ["netflix.com"]})],
+    )
+    enriched = enrich_target_with_routing(target, routing, store)
+    assert len(enriched.extra_profiles) == 1
+    assert enriched.extra_profiles[0].id == b.id
+    # Main profiles are unchanged.
+    assert enriched.profile_ids == [a.id]
+
+
+def test_enrich_target_adds_extra_group_and_members(tmp_path):
+    """enrich_target_with_routing resolves group members as extra profiles."""
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("main"))
+    b = store.add_profile(_vmess("b"))
+    c = store.add_profile(_vmess("c"))
+    bal = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[b.id, c.id])
+    )
+    target = resolve_target(store, a, default_engine="sing-box")
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=bal.id, match={"domains": ["streaming.com"]})],
+    )
+    enriched = enrich_target_with_routing(target, routing, store)
+    assert len(enriched.extra_groups) == 1
+    assert enriched.extra_groups[0].id == bal.id
+    extra_pids = {p.id for p in enriched.extra_profiles}
+    assert b.id in extra_pids
+    assert c.id in extra_pids
+
+
+def test_enrich_target_ignores_non_split_routing(tmp_path):
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("a"))
+    b = store.add_profile(_vmess("b"))
+    target = resolve_target(store, a, default_engine="sing-box")
+    routing = RoutingConfig(mode="all", rules=[])  # not split
+    enriched = enrich_target_with_routing(target, routing, store)
+    assert enriched.extra_profiles == []
+    assert enriched.extra_groups == []
+
+
+def test_enrich_target_deduplicates_main_profiles(tmp_path):
+    """A rule targeting a profile already in the main target adds no extras."""
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("a"))
+    target = resolve_target(store, a, default_engine="sing-box")
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=a.id, match={"domains": ["x.com"]})],
+    )
+    enriched = enrich_target_with_routing(target, routing, store)
+    assert enriched.extra_profiles == []
+    assert enriched.extra_groups == []
+
+
+def test_singbox_split_route_to_specific_profile(tmp_path):
+    """sing-box: a routing rule targeting a different profile emits its outbound."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    extra = store.add_profile(_vmess("netflix"))
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=extra.id, match={"domains": ["netflix.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="sing-box")
+    # The extra profile's outbound must exist.
+    ob = next((o for o in cfg["outbounds"] if o.get("tag") == extra.id), None)
+    assert ob is not None, "extra outbound should be in the config"
+    assert ob["type"] == "vmess"
+    assert ob["server"] == "1.2.3.4"
+    # The routing rule references the extra profile's tag.
+    rule = cfg["route"]["rules"][0]
+    assert rule["outbound"] == extra.id
+    assert rule["domain_suffix"] == ["netflix.com"]
+    # Route.final still points to the main target.
+    assert cfg["route"]["final"] == main.id
+
+
+def test_xray_split_route_to_specific_profile(tmp_path):
+    """xray: a routing rule targeting a different profile emits its outbound."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    extra = store.add_profile(_vmess("netflix"))
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=extra.id, match={"domains": ["netflix.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="xray")
+    ob = next((o for o in cfg["outbounds"] if o.get("tag") == extra.id), None)
+    assert ob is not None, "extra outbound should be in the config"
+    assert ob["protocol"] == "vmess"
+    # The routing rule references the extra profile's tag.
+    rule = cfg["routing"]["rules"][0]
+    assert rule["outboundTag"] == extra.id
+    assert rule["domain"] == ["netflix.com"]
+
+
+def test_singbox_split_route_to_balancer_group(tmp_path):
+    """sing-box: a routing rule targeting a balancer group emits a selector/urltest."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    b = store.add_profile(_vmess("b"))
+    c = store.add_profile(_vmess("c"))
+    bal = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[b.id, c.id])
+    )
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=bal.id, match={"domains": ["streaming.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="sing-box")
+    # The group's urltest outbound must exist.
+    urltest = next(
+        (o for o in cfg["outbounds"] if o.get("type") == "urltest" and o.get("tag") == bal.id),
+        None,
+    )
+    assert urltest is not None, "urltest for the extra group should exist"
+    assert set(urltest["outbounds"]) == {b.id, c.id}
+    # The rule should reference the group's tag.
+    rule = cfg["route"]["rules"][0]
+    assert rule["outbound"] == bal.id
+    # The member profiles' outbounds must also exist.
+    for pid in (b.id, c.id):
+        assert any(o.get("tag") == pid for o in cfg["outbounds"])
+
+
+def test_singbox_split_route_to_chain_group(tmp_path):
+    """sing-box: a routing rule targeting a chain group emits chained detours."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    a = store.add_profile(_vmess("a"))
+    b = store.add_profile(_vmess("b"))
+    chain = store.add_group(Group(name="chain", type="chain", profile_ids=[a.id, b.id]))
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=chain.id, match={"domains": ["secure.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="sing-box")
+    # The member profiles' outbounds must exist.
+    ob_a = next((o for o in cfg["outbounds"] if o.get("tag") == a.id), None)
+    ob_b = next((o for o in cfg["outbounds"] if o.get("tag") == b.id), None)
+    assert ob_a is not None and ob_b is not None
+    # The second hop detours through the first.
+    assert ob_b["detour"] == a.id
+
+
+def test_xray_split_route_to_balancer_group(tmp_path):
+    """xray: a routing rule targeting a balancer group emits a balancer + rule."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    b = store.add_profile(_vmess("b"))
+    c = store.add_profile(_vmess("c"))
+    bal = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[b.id, c.id])
+    )
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=bal.id, match={"domains": ["streaming.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="xray")
+    # The balancer must exist.
+    assert any(ba["tag"] == bal.id for ba in cfg["routing"]["balancers"])
+    # The member outbounds must exist.
+    for pid in (b.id, c.id):
+        assert any(o.get("tag") == pid for o in cfg["outbounds"])
+
+
+def test_xray_split_route_to_chain_group(tmp_path):
+    """xray: a routing rule targeting a chain group emits chained proxySettings."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    a = store.add_profile(_vmess("a"))
+    b = store.add_profile(_vmess("b"))
+    chain = store.add_group(Group(name="chain", type="chain", profile_ids=[a.id, b.id]))
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=chain.id, match={"domains": ["secure.com"]})],
+    )
+    cfg = _generate_with_extras(store, main, routing, default="xray")
+    ob_b = next((o for o in cfg["outbounds"] if o.get("tag") == b.id), None)
+    assert ob_b is not None
+    assert ob_b["proxySettings"]["tag"] == a.id
+
+
+def test_split_route_direct_and_block_with_target(tmp_path):
+    """A proxy rule with target_id=direct or block is treated as direct/block."""
+    store = _store(tmp_path)
+    main = store.add_profile(_vmess("main"))
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="direct", match={"domains": ["local.dev"]}),
+            RoutingRule(action="block", match={"domains": ["ads.dev"]}),
+        ],
+    )
+    cfg = _generate(store, main, default="sing-box")
+    assert cfg["route"]["rules"][0]["outbound"] == "direct"
+    assert cfg["route"]["rules"][1]["outbound"] == "block"

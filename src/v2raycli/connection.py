@@ -14,7 +14,7 @@ from .engines import get_adapter
 from .engines.base import validate_config, write_runtime_config
 from .engines.binary import BinaryError, locate_binary
 from .geo import GeoError, ensure_geo_assets
-from .outbounds.groups import resolve_target
+from .outbounds.groups import enrich_target_with_routing, resolve_target
 from .outbounds.vpn import VPN_KINDS, client_install_hint, detect_clients, validate_vpn_profile
 from .routing.rules import uses_geo
 from .runner import Proc
@@ -82,6 +82,9 @@ class ConnectionController:
         try:
             target = resolve_target(
                 self.store, selection, default_engine=self.store.config.settings.default_engine
+            )
+            target = enrich_target_with_routing(
+                target, self.store.config.routing, self.store
             )
             is_vpn = target.type == "single" and target.profiles and target.profiles[0].kind in VPN_KINDS
             engine_label = target.profiles[0].kind if is_vpn else target.engine

@@ -278,10 +278,6 @@ class SingBoxAdapter(EngineAdapter):
         endpoints: list[dict] = []
         for idx, profile in enumerate(target.profiles):
             if profile.kind == "wireguard":
-                # Since sing-box 1.13 WireGuard is an endpoint, not an
-                # outbound. Its tag is a first-class route target: it can be
-                # referenced by route.final, selector/urltest groups, rules
-                # and detour in either direction.
                 endpoint = self._endpoint_for(profile)
                 endpoint["tag"] = profile.id
                 if target.type == "chain" and idx > 0:
@@ -304,6 +300,47 @@ class SingBoxAdapter(EngineAdapter):
                     {"type": "selector", "tag": BALANCER_TAG, "outbounds": tags, "default": tags[0]}
                 )
             selected = BALANCER_TAG
+
+        # Emit outbounds and constructs for profiles/groups referenced by
+        # split-routing rules that aren't part of the main target.
+        main_ids = {p.id for p in target.profiles}
+        extra_added: set[str] = set()
+        for profile in target.extra_profiles:
+            if profile.id in main_ids or profile.id in extra_added:
+                continue
+            if profile.kind == "wireguard":
+                endpoint = self._endpoint_for(profile)
+                endpoint["tag"] = profile.id
+                endpoints.append(endpoint)
+            else:
+                outbound = self._outbound_for(profile)
+                outbound["tag"] = profile.id
+                outbounds.append(outbound)
+            extra_added.add(profile.id)
+        for group in target.extra_groups:
+            if group.id in extra_added:
+                continue
+            profiles = []
+            for pid in group.profile_ids:
+                if pid not in main_ids and pid not in extra_added:
+                    continue
+                profiles.append(pid)
+            if not profiles:
+                continue
+            if group.type == "balancer":
+                if group.strategy == "latency":
+                    outbounds.append({"type": "urltest", "tag": group.id, "outbounds": profiles})
+                else:
+                    outbounds.append(
+                        {"type": "selector", "tag": group.id, "outbounds": profiles, "default": profiles[0]}
+                    )
+            elif group.type == "chain":
+                for idx, pid in enumerate(profiles):
+                    if idx > 0:
+                        ob = next((o for o in outbounds if o.get("tag") == pid), None)
+                        if ob is not None:
+                            ob["detour"] = profiles[idx - 1]
+            extra_added.add(group.id)
 
         listen = settings.listen if settings.allow_lan else "127.0.0.1"
         inbounds: list[dict] = []
