@@ -580,16 +580,17 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="measure real proxy request delay (connects through the engine)",
         description=(
             "Connect through the engine and measure response time for each\n"
-            "profile. Scope: 'all', a subscription ID, or profile IDs.\n\n"
+            "profile. Scope: 'all', 'routing', a subscription ID, or profile IDs.\n\n"
             "Examples:\n"
             "  v2raycli test latency all\n"
+            "  v2raycli test latency routing\n"
             "  v2raycli test latency SUB_ID\n"
             "  v2raycli test request ID_A,ID_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     latency.add_argument("scope", nargs="?", default="all",
-                        help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
+                        help="'all', 'routing', a subscription ID, or comma-separated profile IDs (default: all)")
 
     endpoint = test_commands.add_parser(
         "endpoint", aliases=["probe"],
@@ -1799,6 +1800,8 @@ def _resolve_test_scope(store: ConfigStore, scope: str):
     ids = [part.strip() for part in scope.split(",") if part.strip()]
     if scope.strip() == "all":
         return select_profiles(store, "all")
+    if scope.strip() == "routing":
+        return select_profiles(store, "routing_targets")
     if len(ids) == 1 and store.get_subscription(ids[0]) is not None:
         return select_profiles(store, ("subscription", ids[0]))
     return select_profiles(store, ("profiles", ids))

@@ -685,8 +685,8 @@ def test_many(
 def select_profiles(store, scope) -> list[Profile]:
     """Resolve a scope to a list of profiles.
 
-    ``scope`` is ``"all"``, ``("subscription", sub_id)``, or
-    ``("profiles", [ids])``.
+    ``scope`` is ``"all"``, ``("subscription", sub_id)``,
+    ``("profiles", [ids])``, or ``"routing_targets"``.
     """
     if scope == "all":
         return store.list_profiles()
@@ -695,7 +695,47 @@ def select_profiles(store, scope) -> list[Profile]:
     if isinstance(scope, tuple) and scope and scope[0] == "profiles":
         ids = set(scope[1])
         return [p for p in store.list_profiles() if p.id in ids]
+    if scope == "routing_targets":
+        return collect_routing_target_profiles(store)
     return []
+
+
+def collect_routing_target_profiles(store) -> list[Profile]:
+    """Collect profiles referenced by split-routing rules.
+
+    Returns profiles that are targets of proxy routing rules, including
+    members of any referenced groups.  Deduplicates and preserves order.
+    """
+    routing = store.config.routing
+    if routing.mode != "split" or not routing.rules:
+        return []
+
+    seen_ids: set[str] = set()
+    result: list[Profile] = []
+
+    def _add(profile_id: str) -> None:
+        if profile_id in seen_ids:
+            return
+        seen_ids.add(profile_id)
+        profile = store.get_profile(profile_id)
+        if profile is not None:
+            result.append(profile)
+
+    for rule in routing.rules:
+        if not rule.enabled or rule.action != "proxy" or not rule.target_id:
+            continue
+        # Check if it's a profile directly.
+        profile = store.get_profile(rule.target_id)
+        if profile is not None:
+            _add(rule.target_id)
+            continue
+        # Check if it's a group — add its member profiles.
+        group = store.get_group(rule.target_id)
+        if group is not None:
+            for pid in group.profile_ids:
+                _add(pid)
+
+    return result
 
 
 def render_table(results: list[TestResult]) -> None:

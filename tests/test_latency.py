@@ -444,6 +444,72 @@ def test_scope_selectors(tmp_path):
     assert latency.select_profiles(store, "bogus") == []
 
 
+def test_collect_routing_target_profiles(tmp_path):
+    from v2raycli.models import Group, RoutingConfig, RoutingRule
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="netflix", kind="socks", outbound=SOCKS))
+    p3 = store.add_profile(Profile(name="extra", kind="socks", outbound=SOCKS))
+    bal = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[p2.id, p3.id])
+    )
+
+    # No routing — empty
+    assert latency.collect_routing_target_profiles(store) == []
+
+    # Split mode with a profile target
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=p2.id, match={"domains": ["netflix.com"]})],
+    )
+    result = latency.collect_routing_target_profiles(store)
+    assert [p.id for p in result] == [p2.id]
+
+    # Group target resolves member profiles
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=bal.id, match={"domains": ["streaming.com"]})],
+    )
+    result = latency.collect_routing_target_profiles(store)
+    result_ids = [p.id for p in result]
+    assert p2.id in result_ids
+    assert p3.id in result_ids
+
+    # Disabled rules are skipped
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="proxy", enabled=False, target_id=p2.id, match={"domains": ["a.com"]}),
+            RoutingRule(action="proxy", enabled=True, target_id=p3.id, match={"domains": ["b.com"]}),
+        ],
+    )
+    result = latency.collect_routing_target_profiles(store)
+    assert [p.id for p in result] == [p3.id]
+
+    # Direct/block rules don't add profiles
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="direct", match={"domains": ["local.dev"]})],
+    )
+    assert latency.collect_routing_target_profiles(store) == []
+
+
+def test_scope_routing_targets(tmp_path):
+    from v2raycli.models import RoutingConfig, RoutingRule
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=p2.id, match={"domains": ["x.com"]})],
+    )
+
+    result = latency.select_profiles(store, "routing_targets")
+    assert [p.id for p in result] == [p2.id]
+
+
 def test_test_many_preserves_mixed_success_and_failure_results(tmp_path, monkeypatch):
     store = _store(tmp_path)
     good = store.add_profile(Profile(name="good", kind="socks", outbound=SOCKS))

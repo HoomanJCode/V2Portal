@@ -23,6 +23,7 @@ def _select_profiles(store):
             ("all", "All outbounds"),
             ("sub", "One subscription"),
             ("profiles", "Selected profiles"),
+            ("routing_targets", "Routing targets (profiles in split rules)"),
             ("back", "Back"),
         ],
     )
@@ -34,6 +35,8 @@ def _select_profiles(store):
         subs = store.list_subscriptions()
         choice = widgets.menu("Subscription", [(s.id, s.name) for s in subs])
         return select_profiles(store, ("subscription", choice)) if choice else []
+    if scope == "routing_targets":
+        return select_profiles(store, "routing_targets")
     members = widgets.multi_select(
         "Profiles", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
     )
