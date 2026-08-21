@@ -89,3 +89,100 @@ def test_profile_list_filter_by_kind(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "a-socks" in out
     assert "a-vless" not in out
+
+
+# -- routing CLI commands --------------------------------------------------
+
+
+def test_routing_list_empty(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["routing", "list"])
+    assert app._routing_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert "mode=all" in out
+
+
+def test_routing_list_json(tmp_path, capsys):
+    from v2raycli.models import RoutingRule
+
+    store = _store(tmp_path)
+    store.config.routing.mode = "split"
+    store.config.routing.rules.append(
+        RoutingRule(action="block", match={"domains": ["ads.dev"]})
+    )
+    args = app.build_parser().parse_args(["routing", "list", "--json"])
+    assert app._routing_command(store, args) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert len(data) == 1
+    assert data[0]["action"] == "block"
+
+
+def test_routing_mode_switch(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["routing", "mode", "split"])
+    assert app._routing_command(store, args) == 0
+    assert store.config.routing.mode == "split"
+    assert "split" in capsys.readouterr().out
+
+
+def test_routing_add_and_remove(tmp_path, capsys):
+    store = _store(tmp_path)
+
+    # Add a block rule
+    args = app.build_parser().parse_args(
+        ["routing", "add", "block", "--domain", "keyword:ads", "--domain", "ads.dev"]
+    )
+    assert app._routing_command(store, args) == 0
+    rule_id = capsys.readouterr().out.strip()
+    assert len(store.config.routing.rules) == 1
+    assert store.config.routing.mode == "split"  # auto-switched
+
+    # Add a direct rule with geoip
+    args = app.build_parser().parse_args(
+        ["routing", "add", "direct", "--ip", "192.168.0.0/16", "--geoip", "cn"]
+    )
+    assert app._routing_command(store, args) == 0
+    assert len(store.config.routing.rules) == 2
+
+    # Add a proxy rule with --target
+    p = store.add_profile(Profile(name="US", kind="socks", outbound=SOCKS))
+    store.save()
+    args = app.build_parser().parse_args(
+        ["routing", "add", "proxy", "--domain", "netflix.com", "--target", p.id]
+    )
+    assert app._routing_command(store, args) == 0
+    assert len(store.config.routing.rules) == 3
+
+    # Remove the first rule
+    args = app.build_parser().parse_args(["routing", "remove", rule_id])
+    assert app._routing_command(store, args) == 0
+    assert len(store.config.routing.rules) == 2
+
+    # Remove unknown rule
+    args = app.build_parser().parse_args(["routing", "remove", "no-such-id"])
+    assert app._routing_command(store, args) == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_routing_add_geosite(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(
+        ["routing", "add", "block", "--geosite", "category-ads-all", "--geosite", "gfw"]
+    )
+    assert app._routing_command(store, args) == 0
+    rule = store.config.routing.rules[0]
+    assert rule.match["geosite"] == ["category-ads-all", "gfw"]
+
+
+def test_routing_parser_parsing(tmp_path):
+    args = app.build_parser().parse_args(
+        ["routing", "add", "proxy", "--domain", "example.com", "--ip", "10.0.0.0/8",
+         "--geoip", "cn", "--geosite", "gfw", "--target", "abc-123"]
+    )
+    assert args.routing_command == "add"
+    assert args.action == "proxy"
+    assert args.domain == ["example.com"]
+    assert args.ip == ["10.0.0.0/8"]
+    assert args.geoip == ["cn"]
+    assert args.geosite == ["gfw"]
+    assert args.target == "abc-123"
