@@ -339,7 +339,11 @@ class XrayAdapter(EngineAdapter):
 
         rules: list[dict] = []
         if routing.mode == "split":
-            for rule in normalize_rules(routing, selected):
+            known_ids: set[str] = {"direct", "block"}
+            known_ids.update(p.id for p in target.profiles)
+            known_ids.update(p.id for p in target.extra_profiles)
+            known_ids.update(g.id for g in target.extra_groups)
+            for rule in normalize_rules(routing, selected, known_target_ids=known_ids):
                 rules.append(self._rule(rule))
         rules.append(
             {

@@ -68,3 +68,67 @@ def test_normalize_validates_persisted_rules():
 
     with pytest.raises(ValueError, match="selected target id"):
         normalize_rules(cfg, selected_target_id=123)
+
+
+def test_normalize_rejects_unknown_target_id():
+    """Proxy rule targeting a non-existent profile/group is rejected."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id="dead-id", match={"domains": ["x.com"]})],
+    )
+    known = {"direct", "block", "live-profile"}
+    with pytest.raises(ValueError, match="unknown id"):
+        normalize_rules(cfg, selected_target_id=None, known_target_ids=known)
+
+
+def test_normalize_accepts_known_target_id():
+    """Proxy rule targeting a known ID passes validation."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id="live-profile", match={"domains": ["x.com"]})],
+    )
+    known = {"direct", "block", "live-profile"}
+    out = normalize_rules(cfg, selected_target_id=None, known_target_ids=known)
+    assert out[0].target_id == "live-profile"
+
+
+def test_normalize_known_ids_includes_direct_block():
+    """Direct/block actions are always valid even with known_target_ids set."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[
+            RoutingRule(action="direct", match={"domains": ["local.dev"]}),
+            RoutingRule(action="block", match={"domains": ["ads.dev"]}),
+        ],
+    )
+    known = {"direct", "block"}
+    out = normalize_rules(cfg, selected_target_id=None, known_target_ids=known)
+    assert len(out) == 2
+    assert out[0].action == "direct"
+    assert out[1].action == "block"
+
+
+def test_normalize_skips_unknown_check_when_none():
+    """known_target_ids=None disables the unknown-id check (backward compat)."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id="any-id", match={"domains": ["x.com"]})],
+    )
+    # Should not raise even though 'any-id' is not a known profile.
+    out = normalize_rules(cfg, selected_target_id=None, known_target_ids=None)
+    assert out[0].target_id == "any-id"
+
+
+def test_normalize_null_target_resolves_to_selected_then_checked():
+    """Null target resolves to selected_target_id, then is checked against known."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=None, match={"domains": ["x.com"]})],
+    )
+    known = {"direct", "block", "ok-id"}
+    # selected_target_id resolves to 'missing-id', which is not in known.
+    with pytest.raises(ValueError, match="unknown id"):
+        normalize_rules(cfg, selected_target_id="missing-id", known_target_ids=known)
+    # But 'ok-id' is in known, so it passes.
+    out = normalize_rules(cfg, selected_target_id="ok-id", known_target_ids=known)
+    assert out[0].target_id == "ok-id"

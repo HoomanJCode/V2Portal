@@ -72,8 +72,17 @@ def uses_geo(routing: RoutingConfig) -> bool:
     return False
 
 
-def normalize_rules(routing: RoutingConfig, selected_target_id: str | None) -> list[RoutingRule]:
-    """Return a validated copy of rules with null targets resolved."""
+def normalize_rules(
+    routing: RoutingConfig,
+    selected_target_id: str | None,
+    known_target_ids: set[str] | None = None,
+) -> list[RoutingRule]:
+    """Return a validated copy of rules with null targets resolved.
+
+    When *known_target_ids* is provided, every proxy rule's target_id must
+    be present in that set.  This catches rules that reference profiles or
+    groups that were deleted or never existed.
+    """
     if not isinstance(routing, RoutingConfig):
         raise ValueError("routing config must be a RoutingConfig")
     if not isinstance(routing.rules, list):
@@ -89,6 +98,16 @@ def normalize_rules(routing: RoutingConfig, selected_target_id: str | None) -> l
         target_id = rule.target_id if rule.target_id is not None else selected_target_id
         if rule.action == "proxy" and target_id is None:
             raise ValueError("proxy rule requires a target")
+        if (
+            known_target_ids is not None
+            and rule.action == "proxy"
+            and target_id is not None
+            and target_id not in known_target_ids
+        ):
+            raise ValueError(
+                f"rule targets unknown id {target_id!r}; "
+                f"the profile or group may have been removed"
+            )
         normalized.append(
             RoutingRule(
                 id=rule.id,
