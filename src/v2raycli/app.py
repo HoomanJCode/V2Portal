@@ -16,58 +16,21 @@ from .storage import ConfigStore
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2raycli",
-        description="Interactive v2ray CLI client (sing-box + xray-core).",
+        description=(
+            "v2raycli — manage and connect proxy profiles (sing-box + xray-core).\n\n"
+            "Use 'v2raycli COMMAND --help' for detailed usage of any command.\n\n"
+            "Examples:\n"
+            "  v2raycli profile list\n"
+            "  v2raycli connect PROFILE_ID\n"
+            "  v2raycli subscription add myprovider https://example.com/sub\n"
+            "  v2raycli test latency all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="store_true", help="print version and exit")
     parser.add_argument(
-        "--config-dir", metavar="PATH", help="use an alternate config directory"
-    )
-    parser.add_argument(
-        "--headless", action="store_true", help="print a summary and exit (no TUI)"
-    )
-    parser.add_argument(
-        "--connect",
-        metavar="ID",
-        help="connect to a profile/group id and keep running until Ctrl+C",
-    )
-    parser.add_argument(
-        "--test",
-        metavar="SCOPE",
-        help="latency-test outbounds and exit: 'all', a subscription id, or comma-separated profile ids",
-    )
-    parser.add_argument(
-        "--probe",
-        metavar="SCOPE",
-        help="probe remote endpoints with ICMP/TCP and exit using the same scope syntax as --test",
-    )
-    parser.add_argument(
-        "--ws-test",
-        metavar="SCOPE",
-        help="test WS/WSS handshake and ping/pong using the same scope syntax as --test",
-    )
-    parser.add_argument(
-        "--update",
-        choices=("sing-box", "xray", "both"),
-        metavar="ENGINE",
-        help="explicitly update sing-box, xray, or both; custom paths are protected",
-    )
-    parser.add_argument(
-        "--proxy",
-        metavar="URL",
-        help="ephemeral HTTP/SOCKS proxy for explicit engine updates (not stored)",
-    )
-    parser.add_argument("--backup", action="store_true", help="create a config backup and exit")
-    parser.add_argument("--list-backups", action="store_true", help="list config backups and exit")
-    parser.add_argument("--restore", metavar="PATH", help="restore a config backup")
-    parser.add_argument("--export", metavar="PATH", help="export the full config to a file")
-    parser.add_argument(
-        "--redact", action="store_true", help="mask credentials/keys when used with --export"
-    )
-    parser.add_argument(
-        "--import", dest="import_path", metavar="PATH", help="import a full config export"
-    )
-    parser.add_argument(
-        "--replace", action="store_true", help="replace (not merge) when used with --import"
+        "--config-dir", metavar="PATH",
+        help="use an alternate config directory (default: platform config dir)",
     )
     parser.add_argument(
         "--no-auto-update",
@@ -75,15 +38,72 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip auto-updating stale subscriptions on startup",
     )
     parser.add_argument(
+        "--headless", action="store_true",
+        help="[deprecated] print a summary and exit (legacy alias for 'status')",
+    )
+    parser.add_argument(
+        "--connect",
+        metavar="ID",
+        help="[deprecated] connect to a profile/group id (use 'connect' command)",
+    )
+    parser.add_argument(
+        "--test",
+        metavar="SCOPE",
+        help="[deprecated] latency-test outbounds (use 'test latency' command)",
+    )
+    parser.add_argument(
+        "--probe",
+        metavar="SCOPE",
+        help="[deprecated] probe endpoints (use 'test endpoint' command)",
+    )
+    parser.add_argument(
+        "--ws-test",
+        metavar="SCOPE",
+        help="[deprecated] websocket test (use 'test websocket' command)",
+    )
+    parser.add_argument(
+        "--update",
+        choices=("sing-box", "xray", "both"),
+        metavar="ENGINE",
+        help="[deprecated] update engines (use 'engine update' command)",
+    )
+    parser.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="ephemeral HTTP/SOCKS proxy for engine updates (not stored)",
+    )
+    parser.add_argument("--backup", action="store_true",
+                        help="[deprecated] create a backup (use 'backup create')")
+    parser.add_argument("--list-backups", action="store_true",
+                        help="[deprecated] list backups (use 'backup list')")
+    parser.add_argument("--restore", metavar="PATH",
+                        help="[deprecated] restore backup (use 'backup restore')")
+    parser.add_argument("--export", metavar="PATH",
+                        help="[deprecated] export config (use 'config export')")
+    parser.add_argument(
+        "--redact", action="store_true",
+        help="[deprecated] mask credentials (use with 'config export')",
+    )
+    parser.add_argument(
+        "--import", dest="import_path", metavar="PATH",
+        help="[deprecated] import config (use 'config import')",
+    )
+    parser.add_argument(
+        "--replace", action="store_true",
+        help="[deprecated] replace on import (use 'config import --replace')",
+    )
+    parser.add_argument(
         "--install-service",
         metavar="ID",
-        help="install a service that connects to ID on boot (systemd/Termux)",
+        help="[deprecated] install boot service (use 'service install')",
     )
     parser.add_argument(
-        "--uninstall-service", action="store_true", help="remove the installed service"
+        "--uninstall-service", action="store_true",
+        help="[deprecated] remove boot service (use 'service uninstall')",
     )
     parser.add_argument(
-        "--health", action="store_true", help="print subscription expiry/traffic and exit"
+        "--health", action="store_true",
+        help="[deprecated] show subscription health (use 'health' command)",
     )
     _add_command_parser(parser)
     return parser
@@ -97,166 +117,851 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     """
     commands = parser.add_subparsers(dest="command", title="commands", metavar="COMMAND")
 
-    status = commands.add_parser("status", help="show a concise config summary")
-    status.add_argument("--json", action="store_true", help="emit JSON")
+    # -- status ---------------------------------------------------------------
+    status = commands.add_parser(
+        "status",
+        help="show config summary (profiles, subscriptions, groups, routing mode)",
+        description=(
+            "Print a one-line summary of the loaded config, or emit JSON.\n\n"
+            "Examples:\n"
+            "  v2raycli status\n"
+            "  v2raycli status --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    status.add_argument("--json", action="store_true", help="emit summary as JSON")
 
-    connect = commands.add_parser("connect", help="connect to a profile or group")
-    connect.add_argument("id", metavar="ID")
+    # -- connect --------------------------------------------------------------
+    connect = commands.add_parser(
+        "connect",
+        help="start a proxy and keep running until Ctrl+C",
+        description=(
+            "Connect to a profile or group. Downloads the engine binary if needed,\n"
+            "generates the engine config, validates it, and starts the proxy.\n"
+            "The mixed inbound (SOCKS5 + HTTP) is exposed on the configured port.\n\n"
+            "Examples:\n"
+            "  v2raycli connect abc-123\n"
+            "  v2raycli connect abc-123 --config-dir /tmp/cfg"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    connect.add_argument("id", metavar="ID", help="profile or group ID to connect to")
 
-    health = commands.add_parser("health", help="show subscription health")
-    health.add_argument("--json", action="store_true", help="emit JSON")
+    # -- health ---------------------------------------------------------------
+    health = commands.add_parser(
+        "health",
+        help="show subscription expiry dates and traffic usage",
+        description=(
+            "Print expiry status and traffic used for every enabled subscription.\n\n"
+            "Examples:\n"
+            "  v2raycli health\n"
+            "  v2raycli health --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    health.add_argument("--json", action="store_true", help="emit health data as JSON")
 
-    profile = commands.add_parser("profile", aliases=["profiles"], help="manage proxy profiles")
+    # -- profile --------------------------------------------------------------
+    profile = commands.add_parser(
+        "profile", aliases=["profiles"],
+        help="manage proxy profiles",
+        description=(
+            "A profile is a single proxy configuration (SOCKS5, HTTP, VLESS, VMess,\n"
+            "Trojan, Shadowsocks, WireGuard, Hysteria2, TUIC, OpenVPN, OpenConnect).\n"
+            "Profiles are what you connect to. They can be added manually or\n"
+            "imported from a subscription.\n\n"
+            "Examples:\n"
+            "  v2raycli profile list\n"
+            "  v2raycli profile list --subscription SUB_ID\n"
+            "  v2raycli profile list --kind socks\n"
+            "  v2raycli profile add socks office 127.0.0.1 1080\n"
+            "  v2raycli profile add share us 'vless://...'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     profile_commands = profile.add_subparsers(dest="profile_command", metavar="ACTION")
-    profile_list = profile_commands.add_parser("list", help="list profiles")
-    profile_list.add_argument("--json", action="store_true", help="emit JSON")
-    profile_list.add_argument("--subscription", metavar="ID", help="show only profiles from a subscription")
-    profile_list.add_argument("--kind", help="show only profiles of this protocol kind")
-    profile_add = profile_commands.add_parser("add", help="add a profile")
-    profile_add_commands = profile_add.add_subparsers(dest="profile_add_command", metavar="TYPE")
-    share = profile_add_commands.add_parser("share", help="add a v2ray share link")
-    share.add_argument("name")
-    share.add_argument("link")
-    raw = profile_add_commands.add_parser("raw", help="add a raw xray outbound JSON object or file")
-    raw.add_argument("name")
-    raw.add_argument("source", metavar="JSON_OR_PATH")
-    for kind in ("socks", "http"):
-        plain = profile_add_commands.add_parser(kind, help=f"add a {kind.upper()} proxy")
-        plain.add_argument("name")
-        plain.add_argument("host")
-        plain.add_argument("port", type=int)
-        plain.add_argument("--username")
-        plain.add_argument("--password")
-    wg = profile_add_commands.add_parser("wireguard", help="add a WireGuard profile")
-    wg.add_argument("name")
-    wg.add_argument("--private-key", required=True)
-    wg.add_argument("--address", action="append", required=True)
-    wg.add_argument("--peer-public-key", required=True)
-    wg.add_argument("--peer-endpoint", required=True)
-    wg.add_argument("--allowed-ip", action="append", required=True)
-    h2 = profile_add_commands.add_parser("hysteria2", help="add a Hysteria2 profile")
-    h2.add_argument("name")
-    h2.add_argument("server")
-    h2.add_argument("port", type=int)
-    h2.add_argument("password")
-    h2.add_argument("--sni")
-    h2.add_argument("--insecure", action="store_true")
-    tuic = profile_add_commands.add_parser("tuic", help="add a TUIC profile")
-    tuic.add_argument("name")
-    tuic.add_argument("server")
-    tuic.add_argument("port", type=int)
-    tuic.add_argument("uuid")
-    tuic.add_argument("password")
-    tuic.add_argument("--sni")
-    tuic.add_argument("--alpn")
-    openvpn = profile_add_commands.add_parser("openvpn", help="add an OpenVPN profile")
-    openvpn.add_argument("name")
-    openvpn.add_argument("--config-path")
-    openvpn.add_argument("--inline")
-    openconnect = profile_add_commands.add_parser("openconnect", help="add an OpenConnect profile")
-    openconnect.add_argument("name")
-    openconnect.add_argument("server")
-    profile_remove = profile_commands.add_parser("remove", help="remove a profile")
-    profile_remove.add_argument("id")
-    profile_rename = profile_commands.add_parser("rename", help="rename a profile")
-    profile_rename.add_argument("id")
-    profile_rename.add_argument("name")
-    profile_export = profile_commands.add_parser("export", help="export a profile share link")
-    profile_export.add_argument("id")
 
+    profile_list = profile_commands.add_parser(
+        "list",
+        help="list profiles with ID, kind, engine, and name",
+        description=(
+            "List all saved profiles. Use --subscription or --kind to filter.\n\n"
+            "Examples:\n"
+            "  v2raycli profile list\n"
+            "  v2raycli profile list --subscription abc-123\n"
+            "  v2raycli profile list --kind socks --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_list.add_argument("--json", action="store_true", help="emit profiles as JSON array")
+    profile_list.add_argument("--subscription", metavar="ID",
+                             help="show only profiles imported from this subscription")
+    profile_list.add_argument("--kind",
+                             help="show only profiles of this protocol kind (socks, http, vless, ...)")
+
+    profile_add = profile_commands.add_parser(
+        "add",
+        help="add a new profile (pick a type below)",
+        description=(
+            "Add a profile by type. Each type has its own required arguments.\n\n"
+            "Supported types: share, raw, socks, http, wireguard, hysteria2,\n"
+            "tuic, openvpn, openconnect.\n\n"
+            "Examples:\n"
+            "  v2raycli profile add socks office 127.0.0.1 1080\n"
+            "  v2raycli profile add socks office 127.0.0.1 1080 --username u --password p\n"
+            "  v2raycli profile add share us 'vless://...'\n"
+            "  v2raycli profile add http proxy 10.0.0.1 8080"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_add_commands = profile_add.add_subparsers(dest="profile_add_command", metavar="TYPE")
+
+    share = profile_add_commands.add_parser(
+        "share",
+        help="add a v2ray share link (vmess://, vless://, trojan://, ss://, ...)",
+        description=(
+            "Decode a share link and add the resulting profile.\n"
+            "Supported schemes: vmess, vless, trojan, ss, hysteria2, tuic,\n"
+            "wireguard, socks, http.\n\n"
+            "Example:\n"
+            "  v2raycli profile add share my-node 'vless://uuid@host:443?...'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    share.add_argument("name", help="display name for this profile")
+    share.add_argument("link", help="the full share link string")
+
+    raw = profile_add_commands.add_parser(
+        "raw",
+        help="add a raw xray/v2ray outbound JSON object (uses xray engine)",
+        description=(
+            "Paste a raw xray outbound JSON object or provide a file path\n"
+            "containing one. The JSON must have a 'protocol' field.\n\n"
+            "Example:\n"
+            "  v2raycli profile add raw my-outbound '{\"protocol\":\"vmess\",\"settings\":{...}}'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    raw.add_argument("name", help="display name for this profile")
+    raw.add_argument("source", metavar="JSON_OR_PATH",
+                     help="raw JSON string or path to a file containing the outbound JSON")
+
+    for kind in ("socks", "http"):
+        plain = profile_add_commands.add_parser(
+            kind,
+            help=f"add a {kind.upper()} proxy (host + port, optional auth)",
+            description=(
+                f"Add a {kind.upper()} proxy profile.\n\n"
+                "Example:\n"
+                f"  v2raycli profile add {kind} my-proxy 127.0.0.1 1080"
+            ),
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        plain.add_argument("name", help="display name for this profile")
+        plain.add_argument("host", help="proxy server address")
+        plain.add_argument("port", type=int, help="proxy server port")
+        plain.add_argument("--username", help="authenticate with this username (optional)")
+        plain.add_argument("--password", help="authenticate with this password (optional)")
+
+    wg = profile_add_commands.add_parser(
+        "wireguard",
+        help="add a WireGuard profile",
+        description=(
+            "Add a WireGuard endpoint. Requires private key, address CIDR,\n"
+            "and at least one peer with public key, endpoint, and allowed IPs.\n\n"
+            "Example:\n"
+            "  v2raycli profile add wireguard wg0 \\\n"
+            "    --private-key 'key' --address 10.0.0.2/32 \\\n"
+            "    --peer-public-key 'peer-key' --peer-endpoint 1.2.3.4:51820 \\\n"
+            "    --allowed-ip 0.0.0.0/0"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    wg.add_argument("name", help="display name for this profile")
+    wg.add_argument("--private-key", required=True, help="WireGuard private key")
+    wg.add_argument("--address", action="append", required=True,
+                    help="interface CIDR (repeatable, e.g. --address 10.0.0.2/32)")
+    wg.add_argument("--peer-public-key", required=True, help="peer public key")
+    wg.add_argument("--peer-endpoint", required=True, help="peer endpoint as host:port")
+    wg.add_argument("--allowed-ip", action="append", required=True,
+                    help="peer allowed CIDR (repeatable, e.g. --allowed-ip 0.0.0.0/0)")
+
+    h2 = profile_add_commands.add_parser(
+        "hysteria2",
+        help="add a Hysteria2 profile",
+        description=(
+            "Add a Hysteria2 proxy profile. Requires server, port, and password.\n\n"
+            "Example:\n"
+            "  v2raycli profile add hysteria2 h2 1.2.3.4 443 mypassword"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    h2.add_argument("name", help="display name for this profile")
+    h2.add_argument("server", help="server address")
+    h2.add_argument("port", type=int, help="server port")
+    h2.add_argument("password", help="authentication password")
+    h2.add_argument("--sni", help="TLS server name (defaults to server address)")
+    h2.add_argument("--insecure", action="store_true",
+                    help="allow insecure TLS connections")
+
+    tuic = profile_add_commands.add_parser(
+        "tuic",
+        help="add a TUIC profile",
+        description=(
+            "Add a TUIC proxy profile. Requires server, port, UUID, and password.\n\n"
+            "Example:\n"
+            "  v2raycli profile add tuic tuic 1.2.3.4 443 uuid-here password-here"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    tuic.add_argument("name", help="display name for this profile")
+    tuic.add_argument("server", help="server address")
+    tuic.add_argument("port", type=int, help="server port")
+    tuic.add_argument("uuid", help="UUID for authentication")
+    tuic.add_argument("password", help="authentication password")
+    tuic.add_argument("--sni", help="TLS server name (defaults to server address)")
+    tuic.add_argument("--alpn", help="ALPN protocols, comma-separated")
+
+    openvpn = profile_add_commands.add_parser(
+        "openvpn",
+        help="add an OpenVPN profile",
+        description=(
+            "Add an OpenVPN profile. Provide --config-path to an .ovpn file\n"
+            "or --inline with the config content. VPN profiles cannot be\n"
+            "chained or balanced with proxy profiles.\n\n"
+            "Examples:\n"
+            "  v2raycli profile add openvpn vpn --config-path /etc/openvpn/client.ovpn\n"
+            "  v2raycli profile add openvpn vpn --inline 'client\\n...'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    openvpn.add_argument("name", help="display name for this profile")
+    openvpn.add_argument("--config-path", help="path to an .ovpn config file")
+    openvpn.add_argument("--inline", help="paste the .ovpn config content inline")
+
+    openconnect = profile_add_commands.add_parser(
+        "openconnect",
+        help="add an OpenConnect / Cisco AnyConnect profile",
+        description=(
+            "Add an OpenConnect profile. Requires a server address.\n"
+            "Uses the system openconnect client.\n\n"
+            "Example:\n"
+            "  v2raycli profile add openconnect ac vpn.example.com"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    openconnect.add_argument("name", help="display name for this profile")
+    openconnect.add_argument("server", help="VPN server address")
+
+    profile_remove = profile_commands.add_parser(
+        "remove",
+        help="delete a profile by ID",
+        description=(
+            "Remove a profile and prune it from all subscriptions and groups.\n\n"
+            "Example:\n"
+            "  v2raycli profile remove abc-123"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_remove.add_argument("id", help="profile ID to remove")
+
+    profile_rename = profile_commands.add_parser(
+        "rename",
+        help="give a profile a new display name",
+        description=(
+            "Rename an existing profile.\n\n"
+            "Example:\n"
+            "  v2raycli profile rename abc-123 'US Node 01'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_rename.add_argument("id", help="profile ID to rename")
+    profile_rename.add_argument("name", help="new display name")
+
+    profile_export = profile_commands.add_parser(
+        "export",
+        help="print a share link for a profile",
+        description=(
+            "Export a profile as a share link (vmess://, vless://, etc.).\n"
+            "Only encodable kinds can be exported.\n\n"
+            "Example:\n"
+            "  v2raycli profile export abc-123"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_export.add_argument("id", help="profile ID to export")
+
+    # -- subscription ---------------------------------------------------------
     subscription = commands.add_parser(
-        "subscription", aliases=["subscriptions"], help="manage subscriptions"
+        "subscription", aliases=["subscriptions"],
+        help="manage proxy subscriptions",
+        description=(
+            "A subscription is a URL that returns a list of proxy nodes.\n"
+            "When you add or update one, v2raycli fetches the URL, decodes\n"
+            "share links, and stores them as profiles. Stale nodes are pruned.\n\n"
+            "Examples:\n"
+            "  v2raycli subscription list\n"
+            "  v2raycli subscription add myprovider https://example.com/sub\n"
+            "  v2raycli subscription update abc-123\n"
+            "  v2raycli subscription update --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subscription_commands = subscription.add_subparsers(dest="subscription_command", metavar="ACTION")
-    subscription_list = subscription_commands.add_parser("list", help="list subscriptions")
-    subscription_list.add_argument("--json", action="store_true", help="emit JSON")
-    subscription_add = subscription_commands.add_parser("add", help="fetch and add a subscription")
-    subscription_add.add_argument("name")
-    subscription_add.add_argument("url")
-    subscription_add.add_argument("--user-agent")
-    subscription_add.add_argument("--proxy")
-    subscription_update = subscription_commands.add_parser("update", help="refresh a subscription")
-    subscription_update.add_argument("id", nargs="?")
-    subscription_update.add_argument("--all", action="store_true", dest="update_all")
-    subscription_update.add_argument("--proxy")
-    subscription_remove = subscription_commands.add_parser("remove", help="remove a subscription and its profiles")
-    subscription_remove.add_argument("id")
 
-    group = commands.add_parser("group", aliases=["groups"], help="manage profile groups")
+    subscription_list = subscription_commands.add_parser(
+        "list",
+        help="list subscriptions with ID, name, profile count, and URL",
+        description=(
+            "List all saved subscriptions.\n\n"
+            "Example:\n"
+            "  v2raycli subscription list --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subscription_list.add_argument("--json", action="store_true", help="emit subscriptions as JSON")
+
+    subscription_add = subscription_commands.add_parser(
+        "add",
+        help="fetch a subscription URL and import its profiles",
+        description=(
+            "Fetch a subscription URL, decode all share links, and store\n"
+            "them as profiles linked to this subscription.\n\n"
+            "Accepted URL schemes: https://, http://, file://, paste://\n\n"
+            "Examples:\n"
+            "  v2raycli subscription add myprovider https://example.com/sub\n"
+            "  v2raycli subscription add local paste://vmess://...\n"
+            "  v2raycli subscription add proxied https://example.com/sub --proxy socks5://127.0.0.1:1080"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subscription_add.add_argument("name", help="display name for this subscription")
+    subscription_add.add_argument("url", help="subscription URL (https, http, file, or paste)")
+    subscription_add.add_argument("--user-agent", help="custom User-Agent header for HTTP requests")
+    subscription_add.add_argument("--proxy",
+                                 help="HTTP/SOCKS proxy for this request (e.g. socks5://127.0.0.1:1080)")
+
+    subscription_update = subscription_commands.add_parser(
+        "update",
+        help="re-fetch a subscription and reconcile its profiles",
+        description=(
+            "Re-fetch a subscription URL and update its profiles.\n"
+            "Unchanged nodes keep their names; nodes that disappeared\n"
+            "upstream are deleted.\n\n"
+            "Examples:\n"
+            "  v2raycli subscription update abc-123\n"
+            "  v2raycli subscription update --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subscription_update.add_argument("id", nargs="?",
+                                     help="subscription ID to update (or use --all)")
+    subscription_update.add_argument("--all", action="store_true", dest="update_all",
+                                     help="update all enabled subscriptions")
+    subscription_update.add_argument("--proxy",
+                                     help="HTTP/SOCKS proxy for the request")
+
+    subscription_remove = subscription_commands.add_parser(
+        "remove",
+        help="delete a subscription and all its linked profiles",
+        description=(
+            "Remove a subscription and unlink/remove all profiles that\n"
+            "were imported from it.\n\n"
+            "Example:\n"
+            "  v2raycli subscription remove abc-123"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subscription_remove.add_argument("id", help="subscription ID to remove")
+
+    # -- group ----------------------------------------------------------------
+    group = commands.add_parser(
+        "group", aliases=["groups"],
+        help="manage profile groups (balancers, chains, singles)",
+        description=(
+            "A group lets you connect to multiple profiles at once.\n\n"
+            "  balancer  — pick the fastest/random/round-robin from a set\n"
+            "  chain     — route traffic through proxies in order\n"
+            "  single    — wrap one profile as a named group\n\n"
+            "VPN profiles (OpenVPN, OpenConnect) cannot join groups.\n\n"
+            "Examples:\n"
+            "  v2raycli group list\n"
+            "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
+            "  v2raycli group create chain tunnel ID_A ID_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     group_commands = group.add_subparsers(dest="group_command", metavar="ACTION")
-    group_list = group_commands.add_parser("list", help="list groups")
-    group_list.add_argument("--json", action="store_true", help="emit JSON")
-    group_create = group_commands.add_parser("create", help="create a group")
+
+    group_list = group_commands.add_parser(
+        "list",
+        help="list groups with ID, type, strategy, and member count",
+        description=(
+            "List all saved groups.\n\n"
+            "Example:\n"
+            "  v2raycli group list --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_list.add_argument("--json", action="store_true", help="emit groups as JSON")
+
+    group_create = group_commands.add_parser(
+        "create",
+        help="create a group (pick balancer or chain)",
+        description=(
+            "Create a group. Use 'balancer' or 'chain' as the next argument.\n\n"
+            "Examples:\n"
+            "  v2raycli group create balancer fast ID_A ID_B\n"
+            "  v2raycli group create chain tunnel ID_A ID_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     group_create_commands = group_create.add_subparsers(dest="group_create_command", metavar="TYPE")
-    balancer = group_create_commands.add_parser("balancer", help="create a balanced group")
-    balancer.add_argument("name")
-    balancer.add_argument("profile_ids", nargs="+")
-    balancer.add_argument("--strategy", choices=("latency", "random", "roundRobin", "leastLoad"), default="latency")
-    balancer.add_argument("--engine", choices=("auto", "sing-box", "xray"), default="auto")
-    chain = group_create_commands.add_parser("chain", help="create a proxy chain")
-    chain.add_argument("name")
-    chain.add_argument("profile_ids", nargs="+")
-    chain.add_argument("--engine", choices=("auto", "sing-box", "xray"), default="auto")
-    group_remove = group_commands.add_parser("remove", help="remove a group")
-    group_remove.add_argument("id")
 
-    test = commands.add_parser("test", help="test proxy outbounds")
+    balancer = group_create_commands.add_parser(
+        "balancer",
+        help="create a balanced group (strategy: latency|random|roundRobin|leastLoad)",
+        description=(
+            "Create a balancer group. Requires a name and 2+ profile IDs.\n\n"
+            "  latency      — pick the lowest-latency profile (sing-box urltest)\n"
+            "  random       — pick a random profile\n"
+            "  roundRobin   — rotate through profiles in order\n"
+            "  leastLoad    — pick the least-loaded (forces xray engine)\n\n"
+            "Examples:\n"
+            "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
+            "  v2raycli group create balancer pool ID_A ID_B ID_C --strategy random"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    balancer.add_argument("name", help="display name for this group")
+    balancer.add_argument("profile_ids", nargs="+",
+                         help="2+ profile IDs that are candidates for this balancer")
+    balancer.add_argument("--strategy",
+                         choices=("latency", "random", "roundRobin", "leastLoad"),
+                         default="latency",
+                         help="balancing strategy (default: latency)")
+    balancer.add_argument("--engine",
+                         choices=("auto", "sing-box", "xray"),
+                         default="auto",
+                         help="force a specific engine (default: auto)")
+
+    chain = group_create_commands.add_parser(
+        "chain",
+        help="create a proxy chain (traffic flows through each hop in order)",
+        description=(
+            "Create a chain group. Requires a name and 2+ profile IDs\n"
+            "listed in hop order. Traffic flows through the first proxy,\n"
+            "then the second, and so on.\n\n"
+            "Example:\n"
+            "  v2raycli group create chain tunnel ID_A ID_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    chain.add_argument("name", help="display name for this group")
+    chain.add_argument("profile_ids", nargs="+",
+                      help="ordered list of profile IDs forming the chain")
+    chain.add_argument("--engine",
+                      choices=("auto", "sing-box", "xray"),
+                      default="auto",
+                      help="force a specific engine (default: auto)")
+
+    group_remove = group_commands.add_parser(
+        "remove",
+        help="delete a group by ID",
+        description=(
+            "Remove a group. Profiles are not deleted.\n\n"
+            "Example:\n"
+            "  v2raycli group remove abc-123"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_remove.add_argument("id", help="group ID to remove")
+
+    # -- test -----------------------------------------------------------------
+    test = commands.add_parser(
+        "test",
+        help="test proxy outbounds (latency, reachability, websocket)",
+        description=(
+            "Test profiles to measure latency, check endpoint reachability,\n"
+            "or validate WebSocket handshakes. Scope can be 'all', a\n"
+            "subscription ID, or a comma-separated list of profile IDs.\n\n"
+            "Examples:\n"
+            "  v2raycli test latency all\n"
+            "  v2raycli test latency SUB_ID\n"
+            "  v2raycli test endpoint all\n"
+            "  v2raycli test websocket ID_A,ID_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     test_commands = test.add_subparsers(dest="test_command", metavar="TYPE")
-    latency = test_commands.add_parser("latency", aliases=["request"], help="test real proxy request delay")
-    latency.add_argument("scope", nargs="?", default="all")
-    endpoint = test_commands.add_parser("endpoint", aliases=["probe"], help="probe endpoint reachability")
-    endpoint.add_argument("scope", nargs="?", default="all")
-    websocket = test_commands.add_parser("websocket", aliases=["ws"], help="test WebSocket handshake/payload")
-    websocket.add_argument("scope", nargs="?", default="all")
 
-    backup_command = commands.add_parser("backup", help="manage config backups")
+    latency = test_commands.add_parser(
+        "latency", aliases=["request"],
+        help="measure real proxy request delay (connects through the engine)",
+        description=(
+            "Connect through the engine and measure response time for each\n"
+            "profile. Scope: 'all', a subscription ID, or profile IDs.\n\n"
+            "Examples:\n"
+            "  v2raycli test latency all\n"
+            "  v2raycli test latency SUB_ID\n"
+            "  v2raycli test request ID_A,ID_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    latency.add_argument("scope", nargs="?", default="all",
+                        help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
+
+    endpoint = test_commands.add_parser(
+        "endpoint", aliases=["probe"],
+        help="probe endpoint reachability with ICMP/TCP (no engine needed)",
+        description=(
+            "Check if remote endpoints are reachable via ICMP ping or\n"
+            "TCP connect. Reports ok / refused / timeout / not_testable.\n\n"
+            "Examples:\n"
+            "  v2raycli test endpoint all\n"
+            "  v2raycli test probe SUB_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    endpoint.add_argument("scope", nargs="?", default="all",
+                         help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
+
+    websocket = test_commands.add_parser(
+        "websocket", aliases=["ws"],
+        help="validate WebSocket/WSS handshake and ping/pong",
+        description=(
+            "Start the engine, connect to WebSocket-based profiles, and\n"
+            "verify the WS/WSS upgrade, handshake, and ping/pong exchange.\n\n"
+            "Examples:\n"
+            "  v2raycli test websocket all\n"
+            "  v2raycli test ws SUB_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    websocket.add_argument("scope", nargs="?", default="all",
+                          help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
+
+    # -- backup ----------------------------------------------------------------
+    backup_command = commands.add_parser(
+        "backup",
+        help="manage config backups (create, list, restore)",
+        description=(
+            "Automatic backups are created before destructive operations.\n"
+            "Use these commands to create, browse, or restore backups.\n\n"
+            "Examples:\n"
+            "  v2raycli backup create\n"
+            "  v2raycli backup list\n"
+            "  v2raycli backup restore /path/to/backup.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     backup_commands = backup_command.add_subparsers(dest="backup_command", metavar="ACTION")
-    backup_commands.add_parser("create", help="create a backup")
-    backup_commands.add_parser("list", help="list backups")
-    restore = backup_commands.add_parser("restore", help="restore a backup")
-    restore.add_argument("path")
 
-    config_command = commands.add_parser("config", help="inspect or transfer config")
+    backup_commands.add_parser(
+        "create",
+        help="snapshot the current config to a timestamped backup file",
+        description=(
+            "Create a manual backup of the current config.\n"
+            "Old backups beyond 'backup_keep' (default 10) are pruned.\n\n"
+            "Example:\n"
+            "  v2raycli backup create"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    backup_commands.add_parser(
+        "list",
+        help="list available backups (newest first)",
+        description=(
+            "List all backup files with timestamp, reason, and size.\n\n"
+            "Example:\n"
+            "  v2raycli backup list"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    restore = backup_commands.add_parser(
+        "restore",
+        help="replace the current config with a backup file",
+        description=(
+            "Restore the config from a backup file. The current config\n"
+            "is backed up first as a safety measure.\n\n"
+            "Example:\n"
+            "  v2raycli backup restore /path/to/backup.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    restore.add_argument("path", help="path to the backup file to restore")
+
+    # -- config ----------------------------------------------------------------
+    config_command = commands.add_parser(
+        "config",
+        help="inspect or transfer the complete config",
+        description=(
+            "Show, export, import, or change individual settings.\n\n"
+            "Examples:\n"
+            "  v2raycli config show\n"
+            "  v2raycli config show --redact\n"
+            "  v2raycli config set settings.mixed_port 1081\n"
+            "  v2raycli config set settings.allow_lan true\n"
+            "  v2raycli config export /tmp/config.json\n"
+            "  v2raycli config import /tmp/config.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     config_commands = config_command.add_subparsers(dest="config_command", metavar="ACTION")
-    config_show = config_commands.add_parser("show", help="print the complete config as JSON")
-    config_show.add_argument("--redact", action="store_true")
-    config_export = config_commands.add_parser("export", help="export the complete config")
-    config_export.add_argument("path")
-    config_export.add_argument("--redact", action="store_true")
-    config_import = config_commands.add_parser("import", help="import a complete config")
-    config_import.add_argument("path")
-    config_import.add_argument("--replace", action="store_true")
-    config_set = config_commands.add_parser("set", help="set a supported setting")
-    config_set.add_argument("key", choices=("settings.listen", "settings.mixed_port", "settings.allow_lan", "settings.default_engine", "settings.test_url", "settings.subscription_proxy"))
-    config_set.add_argument("value")
 
-    engine = commands.add_parser("engine", help="manage engine binaries")
+    config_show = config_commands.add_parser(
+        "show",
+        help="print the complete config as formatted JSON",
+        description=(
+            "Dumps the full config.json content. Use --redact to mask\n"
+            "credentials and keys (safe for sharing).\n\n"
+            "Examples:\n"
+            "  v2raycli config show\n"
+            "  v2raycli config show --redact"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_show.add_argument("--redact", action="store_true",
+                            help="mask passwords, keys, and secrets with 'REDACTED'")
+
+    config_export = config_commands.add_parser(
+        "export",
+        help="write the complete config to a file",
+        description=(
+            "Export the full config to a JSON file. Use --redact to\n"
+            "mask credentials.\n\n"
+            "Example:\n"
+            "  v2raycli config export /tmp/config.json --redact"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_export.add_argument("path", help="output file path")
+    config_export.add_argument("--redact", action="store_true",
+                             help="mask credentials and keys")
+
+    config_import = config_commands.add_parser(
+        "import",
+        help="import a complete config (merge by default, or replace)",
+        description=(
+            "Import a previously exported config. By default new items\n"
+            "are merged with the existing config. Use --replace to swap\n"
+            "the entire config.\n\n"
+            "Examples:\n"
+            "  v2raycli config import /tmp/config.json\n"
+            "  v2raycli config import /tmp/config.json --replace"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_import.add_argument("path", help="path to the exported config file")
+    config_import.add_argument("--replace", action="store_true",
+                             help="replace the entire config (not merge)")
+
+    config_set = config_commands.add_parser(
+        "set",
+        help="change a single setting",
+        description=(
+            "Set a specific config value. The key must be a dotted path\n"
+            "like 'settings.mixed_port'. Boolean values use true/false.\n\n"
+            "Available keys:\n"
+            "  settings.listen              listen address (default: 0.0.0.0)\n"
+            "  settings.mixed_port          inbound port (default: 1080)\n"
+            "  settings.allow_lan            allow LAN sharing (true/false)\n"
+            "  settings.default_engine       default engine: sing-box or xray\n"
+            "  settings.test_url             URL used for latency tests\n"
+            "  settings.subscription_proxy   proxy for subscription fetches\n\n"
+            "Examples:\n"
+            "  v2raycli config set settings.mixed_port 1081\n"
+            "  v2raycli config set settings.allow_lan false\n"
+            "  v2raycli config set settings.default_engine xray"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_set.add_argument("key",
+                           choices=("settings.listen", "settings.mixed_port",
+                                    "settings.allow_lan", "settings.default_engine",
+                                    "settings.test_url", "settings.subscription_proxy"),
+                           help="dotted setting key to change")
+    config_set.add_argument("value", help="new value (use true/false for booleans, numbers for ports)")
+
+    # -- engine ----------------------------------------------------------------
+    engine = commands.add_parser(
+        "engine",
+        help="manage sing-box / xray engine binaries",
+        description=(
+            "Download or update the proxy engine binaries. Only binaries\n"
+            "with binary_path='auto' are replaceable; custom paths are\n"
+            "never overwritten. Updates are staged, verified, and rolled\n"
+            "back if verification fails.\n\n"
+            "Examples:\n"
+            "  v2raycli engine update sing-box\n"
+            "  v2raycli engine update xray\n"
+            "  v2raycli engine update both\n"
+            "  v2raycli engine update both --proxy socks5://127.0.0.1:10808"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     engine_commands = engine.add_subparsers(dest="engine_command", metavar="ACTION")
-    engine_update = engine_commands.add_parser("update", help="explicitly update engine binaries")
-    engine_update.add_argument("engine", choices=("sing-box", "xray", "both"))
-    engine_update.add_argument("--proxy")
 
-    service_command = commands.add_parser("service", help="manage boot services")
+    engine_update = engine_commands.add_parser(
+        "update",
+        help="download and replace engine binaries",
+        description=(
+            "Explicitly update the sing-box, xray, or both engine\n"
+            "binaries. Downloads are verified and atomic.\n\n"
+            "Examples:\n"
+            "  v2raycli engine update sing-box\n"
+            "  v2raycli engine update both --proxy socks5://127.0.0.1:10808"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    engine_update.add_argument("engine", choices=("sing-box", "xray", "both"),
+                             help="which engine to update")
+    engine_update.add_argument("--proxy",
+                             help="HTTP/SOCKS proxy for the download (not stored)")
+
+    # -- service ---------------------------------------------------------------
+    service_command = commands.add_parser(
+        "service",
+        help="install or uninstall a boot service (Linux systemd / Termux)",
+        description=(
+            "Keep a chosen profile connected across reboots by installing\n"
+            "a system service. Supported platforms: Linux (systemd user unit),\n"
+            "Termux (termux-services).\n\n"
+            "Examples:\n"
+            "  v2raycli service install PROFILE_ID\n"
+            "  v2raycli service uninstall"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     service_commands = service_command.add_subparsers(dest="service_command", metavar="ACTION")
-    service_install = service_commands.add_parser("install", help="install a boot service")
-    service_install.add_argument("id")
-    service_uninstall = service_commands.add_parser("uninstall", help="remove the boot service")
 
-    routing = commands.add_parser("routing", help="manage split-routing")
+    service_install = service_commands.add_parser(
+        "install",
+        help="create a boot service that connects to a profile",
+        description=(
+            "Write a systemd user unit (Linux) or termux-services script\n"
+            "(Termux) that launches 'v2raycli connect ID' on boot.\n\n"
+            "After install, enable with:\n"
+            "  systemctl --user enable --now v2raycli    (Linux)\n"
+            "  sv-enable v2raycli                        (Termux)\n\n"
+            "Example:\n"
+            "  v2raycli service install abc-123"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    service_install.add_argument("id", help="profile or group ID to connect on boot")
+
+    service_uninstall = service_commands.add_parser(
+        "uninstall",
+        help="remove the installed boot service",
+        description=(
+            "Remove the systemd unit or termux-services script.\n\n"
+            "Example:\n"
+            "  v2raycli service uninstall"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # -- routing ---------------------------------------------------------------
+    routing = commands.add_parser(
+        "routing",
+        help="manage split-routing rules (proxy / direct / block)",
+        description=(
+            "Control which traffic goes through the proxy, goes direct,\n"
+            "or is blocked. In 'all' mode everything is proxied. In 'split'\n"
+            "mode the first matching rule wins.\n\n"
+            "Rule matchers:\n"
+            "  --domain example.com           exact domain match\n"
+            "  --domain keyword:ads           substring match\n"
+            "  --domain regex:^x\\.            regex match\n"
+            "  --domain geosite:category-ads  sing-box/xray geo-site list\n"
+            "  --ip 10.0.0.0/8                CIDR match\n"
+            "  --ip geoip:cn                  sing-box/xray geo-IP list\n\n"
+            "Examples:\n"
+            "  v2raycli routing list\n"
+            "  v2raycli routing mode split\n"
+            "  v2raycli routing add block --domain keyword:ads\n"
+            "  v2raycli routing add direct --ip 192.168.0.0/16\n"
+            "  v2raycli routing add proxy --domain example.com --target PROFILE_ID\n"
+            "  v2raycli routing remove RULE_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     routing_commands = routing.add_subparsers(dest="routing_command", metavar="ACTION")
-    routing_list = routing_commands.add_parser("list", help="list routing rules")
-    routing_list.add_argument("--json", action="store_true")
-    routing_mode = routing_commands.add_parser("mode", help="set routing mode")
-    routing_mode.add_argument("mode", choices=("all", "split"))
-    routing_add = routing_commands.add_parser("add", help="add a routing rule")
-    routing_add.add_argument("action", choices=("proxy", "direct", "block"))
-    routing_add.add_argument("--target")
-    routing_add.add_argument("--domain", action="append", default=[])
-    routing_add.add_argument("--ip", action="append", default=[])
-    routing_add.add_argument("--geoip", action="append", default=[])
-    routing_add.add_argument("--geosite", action="append", default=[])
-    routing_remove = routing_commands.add_parser("remove", help="remove a routing rule")
-    routing_remove.add_argument("id")
+
+    routing_list = routing_commands.add_parser(
+        "list",
+        help="list routing mode and all rules",
+        description=(
+            "Show the current routing mode and ordered rule list.\n\n"
+            "Examples:\n"
+            "  v2raycli routing list\n"
+            "  v2raycli routing list --json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_list.add_argument("--json", action="store_true",
+                             help="emit routing rules as JSON")
+
+    routing_mode = routing_commands.add_parser(
+        "mode",
+        help="switch between 'all' (everything proxied) and 'split' (rule-based)",
+        description=(
+            "Set the routing mode. 'all' sends everything through the\n"
+            "connected proxy. 'split' applies the rule list in order.\n\n"
+            "Examples:\n"
+            "  v2raycli routing mode all\n"
+            "  v2raycli routing mode split"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_mode.add_argument("mode", choices=("all", "split"),
+                             help="routing mode: 'all' or 'split'")
+
+    routing_add = routing_commands.add_parser(
+        "add",
+        help="add a routing rule (proxy / direct / block)",
+        description=(
+            "Add an ordered routing rule. The first matching rule wins.\n"
+            "Use --domain, --ip, --geoip, and --geosite to build the\n"
+            "match criteria. Add at least one matcher.\n\n"
+            "Actions:\n"
+            "  proxy   — route matching traffic through the connected proxy\n"
+            "  direct  — let matching traffic bypass the proxy\n"
+            "  block   — drop matching traffic\n\n"
+            "Examples:\n"
+            "  v2raycli routing add block --domain keyword:ads\n"
+            "  v2raycli routing add direct --ip 192.168.0.0/16\n"
+            "  v2raycli routing add proxy --domain example.com --target PROFILE_ID\n"
+            "  v2raycli routing add block --geosite category-ads-all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_add.add_argument("action", choices=("proxy", "direct", "block"),
+                            help="what to do with matching traffic")
+    routing_add.add_argument("--target",
+                            help="profile/group ID (required for proxy action)")
+    routing_add.add_argument("--domain", action="append", default=[],
+                            help="domain to match (repeatable; prefix with keyword: or regex:)")
+    routing_add.add_argument("--ip", action="append", default=[],
+                            help="IP/CIDR to match (repeatable; prefix with geoip:)")
+    routing_add.add_argument("--geoip", action="append", default=[],
+                            help="geoip list name (repeatable, e.g. --geoip cn private)")
+    routing_add.add_argument("--geosite", action="append", default=[],
+                            help="geosite list name (repeatable, e.g. --geosite category-ads-all)")
+
+    routing_remove = routing_commands.add_parser(
+        "remove",
+        help="delete a routing rule by ID",
+        description=(
+            "Remove a routing rule. Rules are shown with their IDs\n"
+            "in 'routing list'.\n\n"
+            "Example:\n"
+            "  v2raycli routing remove RULE_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    routing_remove.add_argument("id", help="routing rule ID to remove")
 
 
 def main(argv: list[str] | None = None) -> int:
