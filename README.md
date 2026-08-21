@@ -89,8 +89,7 @@ v2raycli test latency all
 ```
 
 Every mutating command uses explicit arguments and writes the config only after
-validation. The old one-shot flags (`--test`, `--connect`, `--export`, etc.)
-remain supported for compatibility. The full command layout is:
+validation. The full command layout is:
 
 ```text
 profile       list | add | rename | remove | export
