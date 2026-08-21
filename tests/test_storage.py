@@ -115,3 +115,64 @@ def test_update_settings_and_engine(tmp_path):
 
     assert store.config.settings.mixed_port == 9999
     assert store.config.engines["sing-box"]["binary_path"] == "/usr/bin/sing-box"
+
+
+def test_remove_profile_cleans_routing_rules(tmp_path):
+    """Routing rules targeting a deleted profile are removed."""
+    from v2raycli.models import RoutingRule
+
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    p1 = store.add_profile(Profile(name="A"))
+    p2 = store.add_profile(Profile(name="B"))
+    store.config.routing.rules = [
+        RoutingRule(action="proxy", target_id=p1.id, match={"domains": ["a.com"]}),
+        RoutingRule(action="proxy", target_id=p2.id, match={"domains": ["b.com"]}),
+        RoutingRule(action="direct", match={"domains": ["local.dev"]}),
+    ]
+
+    store.remove_profile(p1.id)
+
+    remaining = store.config.routing.rules
+    assert len(remaining) == 2
+    assert all(r.target_id != p1.id for r in remaining)
+    # p2's rule and the direct rule are untouched.
+    assert any(r.target_id == p2.id for r in remaining)
+    assert any(r.action == "direct" for r in remaining)
+
+
+def test_remove_group_cleans_routing_rules(tmp_path):
+    """Routing rules targeting a deleted group are removed."""
+    from v2raycli.models import RoutingRule
+
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    g = store.add_group(Group(name="G", profile_ids=[]))
+    store.config.routing.rules = [
+        RoutingRule(action="proxy", target_id=g.id, match={"domains": ["x.com"]}),
+        RoutingRule(action="direct", match={"domains": ["y.com"]}),
+    ]
+
+    store.remove_group(g.id)
+
+    remaining = store.config.routing.rules
+    assert len(remaining) == 1
+    assert remaining[0].action == "direct"
+
+
+def test_remove_profile_cleans_group_profile_ids_and_routing(tmp_path):
+    """Removing a profile cleans it from groups and routing rules."""
+    from v2raycli.models import RoutingRule
+
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    p = store.add_profile(Profile(name="P"))
+    g = store.add_group(Group(name="G", profile_ids=[p.id, "other-id"]))
+    store.config.routing.rules = [
+        RoutingRule(action="proxy", target_id=p.id, match={"domains": ["p.com"]}),
+    ]
+
+    store.remove_profile(p.id)
+
+    assert g.profile_ids == ["other-id"]
+    assert store.config.routing.rules == []

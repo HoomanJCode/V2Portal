@@ -270,6 +270,9 @@ class ConfigStore:
         for group in self.config.groups:
             if profile_id in group.profile_ids:
                 group.profile_ids.remove(profile_id)
+        self.config.routing.rules = [
+            r for r in self.config.routing.rules if r.target_id != profile_id
+        ]
         return True
 
     # -- subscriptions -------------------------------------------------------
@@ -312,6 +315,9 @@ class ConfigStore:
             return False
         self.notify_destructive("remove-group")
         self.config.groups.remove(group)
+        self.config.routing.rules = [
+            r for r in self.config.routing.rules if r.target_id != group_id
+        ]
         return True
 
     # -- servers -------------------------------------------------------------
