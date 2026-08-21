@@ -114,10 +114,13 @@ v2raycli profile add socks office-proxy 127.0.0.1 1080
 v2raycli profile add share us-node 'vless://...'
 v2raycli profile rename PROFILE_ID 'Office proxy'
 
-# Import a subscription and connect to one of its nodes
+# Import a subscription
 v2raycli subscription add my-provider https://example.com/sub --proxy socks5://127.0.0.1:1080
 v2raycli profile list --subscription SUB_ID
-v2raycli connect PROFILE_ID
+
+# Start a proxy server on a port
+v2raycli server add --port 1080 --profile PROFILE_ID --name 'US proxy'
+v2raycli server start SERVER_ID
 
 # Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
@@ -129,26 +132,10 @@ v2raycli group create chain chained PROFILE_A PROFILE_B
 v2raycli routing add block --domain 'keyword:ads'
 
 # Run multiple proxy servers on different ports
-v2raycli server add --port 1080 --profile PROFILE_A --name 'US proxy'
 v2raycli server add --port 1081 --group GROUP_B --protocol http --name 'Balancer'
 v2raycli server list
 v2raycli server start --all
 ```
-
-The TUI is retained as a library module for users who explicitly embed it; the
-installed command never opens an interactive prompt implicitly.
-
-Start screen (legacy TUI documentation):
-
-- **Connect** — pick a config (subscription node, manual proxy, or group) and
-  start the proxy.
-- **Manage** — add subscriptions, share links, manual proxies, VPN profiles, and
-  groups.
-- **Test** — run full proxy delay, ICMP/TCP endpoint, or WS/WSS tests for all
-  outbounds, one subscription, or selected profiles.
-- **Routing** — edit split-routing rules.
-- **Settings** — port, LAN sharing, inbound auth, default engine, test URL,
-  and confirmed engine updates.
 
 ### Legacy flags / scripting
 
@@ -156,7 +143,6 @@ Start screen (legacy TUI documentation):
 v2raycli --version
 v2raycli --config-dir /path/to/dir          # alternate config location
 v2raycli --headless                          # print a summary (compatibility alias)
-v2raycli --connect <profile-or-group-id>     # connect and stay running (Ctrl+C to stop)
 v2raycli --probe all                         # ICMP/TCP probe every endpoint
 v2raycli --probe <subscription-id>           # probe one subscription's endpoints
 v2raycli --ws-test all                        # validate WS/WSS profiles
@@ -179,13 +165,12 @@ v2raycli --health                            # show subscription expiry/traffic 
 
 ### Engine updates
 
-Engine updates are never automatic. Use `--update sing-box`, `--update xray`,
-or `--update both`, or choose **Settings/Manage → Update engine binaries**.
-Only binaries configured with `binary_path: "auto"` are replaceable; custom and
-system paths are protected. Downloads are staged, version-checked, atomically
-replaced, and rolled back if verification fails. Updates are blocked for an
-engine currently connected in the TUI. For restricted networks, the CLI accepts
-an ephemeral HTTP/SOCKS proxy with `--proxy`; it is never stored.
+Engine updates are never automatic. Use `v2raycli engine update sing-box`,
+`v2raycli engine update xray`, or `v2raycli engine update both`. Only binaries
+configured with `binary_path: "auto"` are replaceable; custom and system paths
+are protected. Downloads are staged, version-checked, atomically replaced, and
+rolled back if verification fails. For restricted networks, the CLI accepts an
+ephemeral HTTP/SOCKS proxy with `--proxy`; it is never stored.
 
 ### Auto-update
 
@@ -203,7 +188,7 @@ traffic used for every enabled subscription.
 
 ## Adding proxies
 
-In **Manage → Add**, you can add:
+You can add proxies via CLI:
 
 | Type | What it asks for |
 |---|---|
@@ -225,7 +210,7 @@ In **Manage → Add**, you can add:
 
 ## Split routing
 
-Switch `routing.mode` to `split` (Routing screen) and add rules with:
+Switch to split mode and add rules:
 
 - domains (`example.com`, `keyword:ads`, `regex:...`, `geosite:category`)
 - IPs (`1.2.3.0/24`, `geoip:cn`)
@@ -237,26 +222,27 @@ SagerNet/sing-geosite and SagerNet/sing-geoip; on xray they download
 
 ## LAN sharing
 
-In Settings, enable `allow_lan` (default on) — the inbound listens on
-`0.0.0.0` so other devices on your network can use `socks5://<your-ip>:1080` /
-`http://<your-ip>:1080` (xray uses port `1081` for HTTP). Optionally enable
-inbound auth (username/password).
+By default `allow_lan` is enabled — the inbound listens on `0.0.0.0` so other
+devices on your network can use `socks5://<your-ip>:1080` /
+`http://<your-ip>:1080`. Optionally enable inbound auth (username/password).
 
 ## Traffic stats
 
 Enable **Settings → Traffic stats** (or set `settings.traffic_api: true` in the
 config) to have sing-box expose its Clash API on `127.0.0.1`
 (`traffic_api_port`, default 9090). The CLI polls cumulative up/down bytes and
-adds them to the connected profile or group on disconnect; `--connect` prints
-the session totals. Works with sing-box (the default engine); xray has no
-Clash-compatible HTTP API so its traffic is not counted.
+adds them to the connected profile or group on disconnect. Works with sing-box
+(the default engine); xray has no Clash-compatible HTTP API so its traffic is
+not counted.
 
 ## Run as a service
 
-Keep a chosen config connected across reboots:
+Keep a server running across reboots:
 
 ```bash
-v2raycli --install-service <profile-or-group-id>
+v2raycli server add --port 1080 --profile PROFILE_ID
+v2raycli server start SERVER_ID
+v2raycli service install SERVER_ID
 ```
 
 - **Linux** — writes a systemd *user* unit to
@@ -265,7 +251,7 @@ v2raycli --install-service <profile-or-group-id>
 - **Termux** — writes a `termux-services` run script to
   `~/.termux/sv/v2raycli/run`; enable with `sv-enable v2raycli`.
 
-Remove it with `v2raycli --uninstall-service`.
+Remove it with `v2raycli service uninstall`.
 
 ## Engine selection
 
@@ -278,7 +264,7 @@ Remove it with `v2raycli --uninstall-service`.
 
 ## Troubleshooting
 
-- **Port in use** — change `mixed_port` in Settings.
+- **Port in use** — change the port with `v2raycli config set settings.mixed_port <port>`.
 - **"binary not found"** — binaries download on first use; if download fails,
   set `engines.<name>.binary_path` in the config to a local binary, or
   `"system"` to use one on `PATH`.
