@@ -17,11 +17,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2raycli",
         description=(
-            "v2raycli — manage and connect proxy profiles (sing-box + xray-core).\n\n"
+            "v2raycli — manage proxy profiles and run inbound servers (sing-box + xray-core).\n\n"
             "Use 'v2raycli COMMAND --help' for detailed usage of any command.\n\n"
             "Examples:\n"
             "  v2raycli profile list\n"
-            "  v2raycli connect PROFILE_ID\n"
+            "  v2raycli server add --port 1080 --profile PROFILE_ID\n"
+            "  v2raycli server start SERVER_ID\n"
             "  v2raycli subscription add myprovider https://example.com/sub\n"
             "  v2raycli test latency all"
         ),
