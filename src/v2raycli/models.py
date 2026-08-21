@@ -66,6 +66,8 @@ def _pick(data: dict, cls: type) -> dict[str, Any]:
 class Settings:
     listen: str = "0.0.0.0"
     mixed_port: int = 1080
+    socks_port: int = 0  # 0 = disabled; when set, a dedicated SOCKS-only inbound
+    http_port: int = 0  # 0 = disabled; when set, a dedicated HTTP-only inbound
     allow_lan: bool = True
     inbound_auth: dict[str, Any] = field(
         default_factory=lambda: {"enabled": False, "username": "", "password": ""}

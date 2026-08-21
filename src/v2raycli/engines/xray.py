@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 INBOUND_TAG = "mixed-in"
 HTTP_INBOUND_TAG = "http-in"
+SOCKS_INBOUND_TAG = "socks-in"
+DEDICATED_HTTP_INBOUND_TAG = "http-dedicated-in"
 BALANCER_TAG = "balancer"
 
 _KIND_PROTOCOL = {
@@ -267,6 +269,37 @@ class XrayAdapter(EngineAdapter):
             }
             http_inbound["settings"] = {"accounts": accounts}
 
+        inbounds = [inbound, http_inbound]
+        inbound_tags = [INBOUND_TAG, HTTP_INBOUND_TAG]
+        if getattr(settings, "socks_port", 0):
+            extra_socks = {
+                "tag": SOCKS_INBOUND_TAG,
+                "listen": listen,
+                "port": settings.socks_port,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+            }
+            if settings.inbound_auth.get("enabled"):
+                extra_socks["settings"] = {
+                    "auth": "password",
+                    "udp": True,
+                    "accounts": accounts,
+                }
+            inbounds.append(extra_socks)
+            inbound_tags.append(SOCKS_INBOUND_TAG)
+        if getattr(settings, "http_port", 0):
+            extra_http = {
+                "tag": DEDICATED_HTTP_INBOUND_TAG,
+                "listen": listen,
+                "port": settings.http_port,
+                "protocol": "http",
+                "settings": {},
+            }
+            if settings.inbound_auth.get("enabled"):
+                extra_http["settings"] = {"accounts": accounts}
+            inbounds.append(extra_http)
+            inbound_tags.append(DEDICATED_HTTP_INBOUND_TAG)
+
         rules: list[dict] = []
         if routing.mode == "split":
             for rule in normalize_rules(routing, selected):
@@ -274,14 +307,14 @@ class XrayAdapter(EngineAdapter):
         rules.append(
             {
                 "type": "field",
-                "inboundTag": [INBOUND_TAG, HTTP_INBOUND_TAG],
+                "inboundTag": inbound_tags,
                 "outboundTag": selected,
             }
         )
 
         config: dict = {
             "log": {"loglevel": settings.log_level},
-            "inbounds": [inbound, http_inbound],
+            "inbounds": inbounds,
             "outbounds": outbounds,
             "routing": {"rules": rules, "balancers": balancers},
         }

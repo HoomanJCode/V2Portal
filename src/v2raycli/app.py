@@ -764,13 +764,17 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "like 'settings.mixed_port'. Boolean values use true/false.\n\n"
             "Available keys:\n"
             "  settings.listen              listen address (default: 0.0.0.0)\n"
-            "  settings.mixed_port          inbound port (default: 1080)\n"
+            "  settings.mixed_port          mixed SOCKS5+HTTP port (default: 1080)\n"
+            "  settings.socks_port          dedicated SOCKS-only port (0 = disabled)\n"
+            "  settings.http_port           dedicated HTTP-only port (0 = disabled)\n"
             "  settings.allow_lan            allow LAN sharing (true/false)\n"
             "  settings.default_engine       default engine: sing-box or xray\n"
             "  settings.test_url             URL used for latency tests\n"
             "  settings.subscription_proxy   proxy for subscription fetches\n\n"
             "Examples:\n"
             "  v2raycli config set settings.mixed_port 1081\n"
+            "  v2raycli config set settings.socks_port 1081\n"
+            "  v2raycli config set settings.http_port 1082\n"
             "  v2raycli config set settings.allow_lan false\n"
             "  v2raycli config set settings.default_engine xray"
         ),
@@ -778,6 +782,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     config_set.add_argument("key",
                            choices=("settings.listen", "settings.mixed_port",
+                                    "settings.socks_port", "settings.http_port",
                                     "settings.allow_lan", "settings.default_engine",
                                     "settings.test_url", "settings.subscription_proxy"),
                            help="dotted setting key to change")
@@ -1352,8 +1357,10 @@ def _config_command(store: ConfigStore, args) -> int:
         except json.JSONDecodeError:
             value = args.value
         key = args.key.split(".", 1)[1]
-        if key == "mixed_port" and (isinstance(value, bool) or not isinstance(value, int)):
-            raise ValueError("settings.mixed_port must be an integer")
+        if key in ("mixed_port", "socks_port", "http_port") and (isinstance(value, bool) or not isinstance(value, int)):
+            raise ValueError(f"settings.{key} must be an integer")
+        if key in ("mixed_port", "socks_port", "http_port") and isinstance(value, int) and not (0 <= value <= 65535):
+            raise ValueError(f"settings.{key} must be between 0 and 65535 (0 = disabled)")
         if key == "allow_lan" and not isinstance(value, bool):
             raise ValueError("settings.allow_lan must be boolean (use true or false)")
         if key == "default_engine" and value not in ("sing-box", "xray"):

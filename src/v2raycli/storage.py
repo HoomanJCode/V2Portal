@@ -48,7 +48,7 @@ def _validate_persisted_shape(raw: dict) -> None:
     for key in ("listen", "log_level", "test_url", "default_engine"):
         if key in settings and not isinstance(settings[key], str):
             raise ValueError(f"settings.{key} must be text")
-    for key in ("mixed_port", "backup_keep", "traffic_api_port"):
+    for key in ("mixed_port", "socks_port", "http_port", "backup_keep", "traffic_api_port"):
         if key in settings and (
             isinstance(settings[key], bool) or not isinstance(settings[key], int)
         ):

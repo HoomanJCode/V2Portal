@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from ..outbounds.groups import Target
 
 INBOUND_TAG = "mixed-in"
+SOCKS_INBOUND_TAG = "socks-in"
+HTTP_INBOUND_TAG = "http-in"
 BALANCER_TAG = "balancer"
 
 
@@ -303,16 +305,51 @@ class SingBoxAdapter(EngineAdapter):
                 )
             selected = BALANCER_TAG
 
-        inbound: dict = {
+        listen = settings.listen if settings.allow_lan else "127.0.0.1"
+        inbounds: list[dict] = []
+        inbound_tags: list[str] = []
+
+        mixed_inbound: dict = {
             "type": "mixed",
             "tag": INBOUND_TAG,
-            "listen": settings.listen if settings.allow_lan else "127.0.0.1",
+            "listen": listen,
             "listen_port": settings.mixed_port,
         }
         if settings.inbound_auth.get("enabled"):
-            inbound["users"] = [
+            mixed_inbound["users"] = [
                 {"username": settings.inbound_auth["username"], "password": settings.inbound_auth["password"]}
             ]
+        inbounds.append(mixed_inbound)
+        inbound_tags.append(INBOUND_TAG)
+
+        socks_inbound: dict | None = None
+        http_inbound: dict | None = None
+        if getattr(settings, "socks_port", 0):
+            socks_inbound = {
+                "type": "socks",
+                "tag": SOCKS_INBOUND_TAG,
+                "listen": listen,
+                "listen_port": settings.socks_port,
+            }
+            if settings.inbound_auth.get("enabled"):
+                socks_inbound["users"] = [
+                    {"username": settings.inbound_auth["username"], "password": settings.inbound_auth["password"]}
+                ]
+            inbounds.append(socks_inbound)
+            inbound_tags.append(SOCKS_INBOUND_TAG)
+        if getattr(settings, "http_port", 0):
+            http_inbound = {
+                "type": "http",
+                "tag": HTTP_INBOUND_TAG,
+                "listen": listen,
+                "listen_port": settings.http_port,
+            }
+            if settings.inbound_auth.get("enabled"):
+                http_inbound["users"] = [
+                    {"username": settings.inbound_auth["username"], "password": settings.inbound_auth["password"]}
+                ]
+            inbounds.append(http_inbound)
+            inbound_tags.append(HTTP_INBOUND_TAG)
 
         rules: list[dict] = []
         rule_sets: dict[str, dict] = {}
@@ -324,7 +361,7 @@ class SingBoxAdapter(EngineAdapter):
 
         config: dict = {
             "log": {"level": settings.log_level},
-            "inbounds": [inbound],
+            "inbounds": inbounds,
             "outbounds": outbounds,
             "route": {"rules": rules, "final": selected},
         }
