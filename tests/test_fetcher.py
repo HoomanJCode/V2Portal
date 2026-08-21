@@ -65,3 +65,41 @@ def test_http_fetch_mocked(monkeypatch):
 
     fetch("https://example.com/sub", user_agent="custom-client")
     assert captured["headers"]["User-Agent"] == "custom-client"
+
+
+def test_http_fetch_passes_proxy(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        text = "ok"
+        headers = {}
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            return FakeResponse()
+
+    monkeypatch.setattr(fetcher.httpx, "Client", FakeClient)
+
+    fetch("https://example.com/sub", proxy="socks5://127.0.0.1:1080")
+    assert captured["proxy"] == "socks5://127.0.0.1:1080"
+
+    captured.clear()
+    fetch("https://example.com/sub")
+    assert "proxy" not in captured
+
+
+def test_invalid_proxy_type_raises():
+    with pytest.raises(FetchError, match="proxy must be text"):
+        fetch("paste://x", proxy=123)

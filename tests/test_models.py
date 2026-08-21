@@ -35,6 +35,12 @@ def test_settings_round_trip():
     assert Settings.from_dict(_round(s)) == s
 
 
+def test_settings_subscription_proxy_round_trip():
+    s = Settings(subscription_proxy="socks5://127.0.0.1:1080")
+    assert Settings.from_dict(_round(s)) == s
+    assert Settings.from_dict(_round(Settings())).subscription_proxy == ""
+
+
 def test_routing_round_trip():
     r = RoutingConfig(mode="split", rules=[RoutingRule(action="direct")])
     d = _round(r)
