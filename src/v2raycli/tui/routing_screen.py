@@ -112,7 +112,9 @@ def _add_rule(store) -> None:
 
     domains = widgets.input_text("Domains (comma separated; keyword:/regex:/geosite: prefixes)")
     ips = widgets.input_text("IPs/CIDRs (comma separated; geoip: prefix)")
-    match = {"domains": _split(domains), "ips": _split(ips), "geoip": [], "geosite": []}
+    geoip = widgets.input_text("GeoIP codes (comma separated; e.g. cn,private)")
+    geosite = widgets.input_text("GeoSite codes (comma separated; e.g. gfw,category-ads-all)")
+    match = {"domains": _split(domains), "ips": _split(ips), "geoip": _split(geoip), "geosite": _split(geosite)}
     try:
         rule = add_rule(action, match, target_id=target_id)
     except ValueError as exc:
@@ -141,6 +143,8 @@ def _edit_rule(store) -> None:
             ("target", "Target (profile/group)"),
             ("domains", "Domains"),
             ("ips", "IPs/CIDRs"),
+            ("geoip", "GeoIP codes"),
+            ("geosite", "GeoSite codes"),
             ("back", "Back"),
         ],
     )
@@ -175,6 +179,14 @@ def _edit_rule(store) -> None:
         current = ", ".join(rule.match.get("ips", []))
         raw = widgets.input_text("IPs/CIDRs", current)
         rule.match["ips"] = _split(raw)
+    elif field == "geoip":
+        current = ", ".join(rule.match.get("geoip", []))
+        raw = widgets.input_text("GeoIP codes", current)
+        rule.match["geoip"] = _split(raw)
+    elif field == "geosite":
+        current = ", ".join(rule.match.get("geosite", []))
+        raw = widgets.input_text("GeoSite codes", current)
+        rule.match["geosite"] = _split(raw)
 
     try:
         validate_rule(rule)

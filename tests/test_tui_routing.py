@@ -22,10 +22,10 @@ def test_add_proxy_rule_with_target(tmp_path, monkeypatch):
     p = store.add_profile(Profile(name="Netflix", kind="vmess", outbound=SOCKS))
     routing = store.config.routing
 
-    # Simulate UI: action=proxy, target=p, domains=netflix.com, ips=""
+    # Simulate UI: action=proxy, target=p, domains=netflix.com, ips="", geoip="", geosite=""
     actions = iter(["proxy"])
     targets = iter([("profile", p.id)])
-    inputs = iter(["netflix.com", ""])
+    inputs = iter(["netflix.com", "", "", ""])
     messages = []
 
     monkeypatch.setattr(routing_screen.widgets, "menu", lambda *args: next(actions))
@@ -53,7 +53,7 @@ def test_add_direct_rule_no_target(tmp_path, monkeypatch):
     routing = store.config.routing
 
     actions = iter(["direct"])
-    inputs = iter(["local.dev", ""])
+    inputs = iter(["local.dev", "", "", ""])
     messages = []
 
     monkeypatch.setattr(routing_screen.widgets, "menu", lambda *args: next(actions))
@@ -232,3 +232,82 @@ def test_remove_rule_shows_label(tmp_path, monkeypatch):
     # The menu should show the rule label with target info
     assert any("proxy" in label for _, label in choices)
     assert any("A" in label for _, label in choices)
+
+
+def test_add_rule_with_geo_matchers(tmp_path, monkeypatch):
+    """Adding a rule with geoip/geosite matchers stores them."""
+    store = _store(tmp_path)
+    routing = store.config.routing
+
+    actions = iter(["direct"])
+    inputs = iter(["", "", "cn,private", "gfw,category-ads-all"])
+
+    monkeypatch.setattr(routing_screen.widgets, "menu", lambda *args: next(actions))
+    monkeypatch.setattr(routing_screen.widgets, "input_text", lambda *args: next(inputs))
+
+    routing_screen._add_rule(store)
+
+    assert len(routing.rules) == 1
+    rule = routing.rules[0]
+    assert rule.match["geoip"] == ["cn", "private"]
+    assert rule.match["geosite"] == ["gfw", "category-ads-all"]
+
+
+def test_edit_rule_geoip(tmp_path, monkeypatch):
+    """Editing geoip field updates the rule."""
+    store = _store(tmp_path)
+    rule = RoutingRule(action="direct", match={"geoip": ["cn"]})
+    store.config.routing.rules.append(rule)
+
+    call_count = [0]
+
+    def fake_menu(title, values, *a, **kw):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return rule.id  # pick rule
+        if call_count[0] == 2:
+            return "geoip"  # pick field
+        return None
+
+    monkeypatch.setattr(routing_screen.widgets, "menu", fake_menu)
+    monkeypatch.setattr(routing_screen.widgets, "input_text", lambda *a, **kw: "cn,us,jp")
+
+    routing_screen._edit_rule(store)
+
+    assert rule.match["geoip"] == ["cn", "us", "jp"]
+
+
+def test_edit_rule_geosite(tmp_path, monkeypatch):
+    """Editing geosite field updates the rule."""
+    store = _store(tmp_path)
+    rule = RoutingRule(action="proxy", target_id="x", match={"geosite": ["gfw"]})
+    store.config.routing.rules.append(rule)
+
+    call_count = [0]
+
+    def fake_menu(title, values, *a, **kw):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return rule.id
+        if call_count[0] == 2:
+            return "geosite"
+        return None
+
+    monkeypatch.setattr(routing_screen.widgets, "menu", fake_menu)
+    monkeypatch.setattr(routing_screen.widgets, "input_text", lambda *a, **kw: "category-ads-all,google")
+
+    routing_screen._edit_rule(store)
+
+    assert rule.match["geosite"] == ["category-ads-all", "google"]
+
+
+def test_rule_label_shows_geoip_geosite(tmp_path):
+    """_rule_label includes geoip and geosite in the display."""
+    store = _store(tmp_path)
+    rule = RoutingRule(
+        action="direct",
+        match={"geoip": ["cn", "private"], "geosite": ["gfw"]},
+    )
+    label = routing_screen._rule_label(store, rule)
+    assert "geoip=cn,private" in label
+    assert "geosite=gfw" in label
