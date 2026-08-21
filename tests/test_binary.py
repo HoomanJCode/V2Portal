@@ -26,6 +26,10 @@ def test_release_asset_mapping():
     assert name == "sing-box-1.10.0-linux-arm64.tar.gz"
     assert kind == "tar.gz"
 
+    name, kind = release_asset("sing-box", "v1.13.19", "windows", "amd64")
+    assert name == "sing-box-1.13.19-windows-amd64.zip"
+    assert kind == "zip"
+
 
 def test_effective_platform_android(monkeypatch):
     monkeypatch.setattr("v2raycli.engines.binary.is_android", lambda: True)

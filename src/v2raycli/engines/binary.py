@@ -79,6 +79,8 @@ def release_asset(engine: str, version: str, platform: str, arch: str) -> tuple[
         a = {"amd64": "64", "arm64": "arm64-v8a", "armv7": "armv7a"}.get(arch, arch)
         return f"Xray-{plat}-{a}.zip", "zip"
     bare = (version or "").lstrip("v")
+    if platform == "windows":
+        return f"sing-box-{bare}-{platform}-{arch}.zip", "zip"
     return f"sing-box-{bare}-{platform}-{arch}.tar.gz", "tar.gz"
 
 

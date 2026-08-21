@@ -592,6 +592,12 @@ def build_test_config(profile: Profile, settings, port: int) -> tuple[str, dict]
         profiles=[profile],
     )
     config_dict = adapter.generate(test_settings, RoutingConfig(mode="all"), target)
+    # Strip custom DNS to avoid circular dependency: the DNS servers would be
+    # resolved through the proxy outbound which itself needs DNS to resolve the
+    # server hostname.  System DNS is sufficient for the short-lived probe.
+    config_dict.pop("dns", None)
+    if "route" in config_dict:
+        config_dict["route"].pop("default_domain_resolver", None)
     return engine, config_dict
 
 
