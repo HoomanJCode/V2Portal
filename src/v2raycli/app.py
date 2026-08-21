@@ -110,6 +110,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     profile_commands = profile.add_subparsers(dest="profile_command", metavar="ACTION")
     profile_list = profile_commands.add_parser("list", help="list profiles")
     profile_list.add_argument("--json", action="store_true", help="emit JSON")
+    profile_list.add_argument("--subscription", metavar="ID", help="show only profiles from a subscription")
+    profile_list.add_argument("--kind", help="show only profiles of this protocol kind")
     profile_add = profile_commands.add_parser("add", help="add a profile")
     profile_add_commands = profile_add.add_subparsers(dest="profile_add_command", metavar="TYPE")
     share = profile_add_commands.add_parser("share", help="add a v2ray share link")
@@ -414,16 +416,22 @@ def _status(store: ConfigStore, as_json: bool = False) -> int:
 def _profile_command(store: ConfigStore, args) -> int:
     action = args.profile_command
     if action == "list":
+        profiles = store.list_profiles()
+        if getattr(args, "subscription", None):
+            profiles = [p for p in profiles if p.subscription_id == args.subscription]
+        if getattr(args, "kind", None):
+            profiles = [p for p in profiles if p.kind == args.kind]
         rows = [
-            {"id": p.id, "name": p.name, "kind": p.kind, "engine": p.engine, "source": p.source}
-            for p in store.list_profiles()
+            {"id": p.id, "name": p.name, "kind": p.kind, "engine": p.engine, "source": p.source, "subscription_id": p.subscription_id}
+            for p in profiles
         ]
         if args.json:
             print(json.dumps(rows, ensure_ascii=False))
         else:
             if rows:
                 for row in rows:
-                    print(f"{row['id']}  {row['kind']:<11} {row['engine']:<8} {row['name']}")
+                    sub = f"  sub={row['subscription_id']}" if row["subscription_id"] else ""
+                    print(f"{row['id']}  {row['kind']:<11} {row['engine']:<8} {row['name']}{sub}")
             else:
                 print("no profiles")
         return 0

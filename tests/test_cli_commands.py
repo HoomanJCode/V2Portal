@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from v2raycli import app
-from v2raycli.models import Profile
+from v2raycli.models import Profile, Subscription
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -62,3 +62,30 @@ def test_default_main_never_enters_tui(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "_tui_available", lambda: (_ for _ in ()).throw(AssertionError("TUI invoked")))
 
     assert app.main(["--headless", "--no-auto-update"]) == 0
+
+
+def test_profile_list_filter_by_subscription(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub = store.add_subscription(Subscription(name="myprovider"))
+    sub_node = store.add_profile(Profile(name="sub-node", kind="vless", outbound=SOCKS, subscription_id=sub.id))
+    manual_node = store.add_profile(Profile(name="manual-node", kind="socks", outbound=SOCKS))
+    store.save()
+
+    args = app.build_parser().parse_args(["profile", "list", "--subscription", sub.id])
+    assert app._profile_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert "sub-node" in out
+    assert "manual-node" not in out
+
+
+def test_profile_list_filter_by_kind(tmp_path, capsys):
+    store = _store(tmp_path)
+    store.add_profile(Profile(name="a-socks", kind="socks", outbound=SOCKS))
+    store.add_profile(Profile(name="a-vless", kind="vless", outbound=SOCKS))
+    store.save()
+
+    args = app.build_parser().parse_args(["profile", "list", "--kind", "socks"])
+    assert app._profile_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert "a-socks" in out
+    assert "a-vless" not in out
