@@ -131,25 +131,6 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     status.add_argument("--json", action="store_true", help="emit summary as JSON")
 
-    # -- connect --------------------------------------------------------------
-    connect = commands.add_parser(
-        "connect",
-        help="start a proxy server in the background (alias for server add + start)",
-        description=(
-            "Create a server entry for the given profile or group and start it\n"
-            "in the background on the default mixed port. The server persists\n"
-            "in config and can be managed with 'server list/stop/remove'.\n\n"
-            "If a server already exists for this profile on the mixed port,\n"
-            "it is reused. Any other server running on that port is stopped first.\n\n"
-            "Examples:\n"
-            "  v2raycli connect abc-123\n"
-            "  v2raycli server list                    # see running servers\n"
-            "  v2raycli server stop abc-123-server     # stop it"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    connect.add_argument("id", metavar="ID", help="profile or group ID to connect to")
-
     # -- health ---------------------------------------------------------------
     health = commands.add_parser(
         "health",
@@ -1151,8 +1132,6 @@ def _command(store: ConfigStore, args) -> int:
     try:
         if command == "status":
             return _status(store, args.json)
-        if command == "connect":
-            return _connect(store, args.id)
         if command in ("profile", "profiles"):
             return _profile_command(store, args)
         if command in ("subscription", "subscriptions"):
@@ -1752,71 +1731,6 @@ def _uninstall_service() -> int:
         print("no service installed")
         return 0
     print(f"removed service -> {removed}")
-    return 0
-
-
-def _connect(store: ConfigStore, selection_id: str) -> int:
-    """Connect is an alias for 'server add + start'. Creates a server entry
-    on the default mixed port and starts it in the background."""
-    from .models import Server
-    from .servers import ServerManager
-
-    profile = store.get_profile(selection_id)
-    group = store.get_group(selection_id)
-    if profile is None and group is None:
-        print(f"unknown profile or group id: {selection_id}", file=sys.stderr)
-        return 1
-
-    # Determine outbound type and name
-    if profile:
-        outbound_type = "profile"
-        name = profile.name
-    else:
-        outbound_type = "group"
-        name = group.name
-
-    # Check if a server already exists for this outbound on the mixed port
-    existing = None
-    for s in store.list_servers():
-        if (s.outbound_id == selection_id
-                and s.port == store.config.settings.mixed_port
-                and s.protocol == "mixed"):
-            existing = s
-            break
-
-    if existing:
-        # Reuse existing server entry
-        server = existing
-    else:
-        # Create a new server entry
-        server = Server(
-            name=name,
-            port=store.config.settings.mixed_port,
-            protocol="mixed",
-            outbound_id=selection_id,
-            outbound_type=outbound_type,
-        )
-        store.add_server(server)
-        store.save()
-
-    # Stop any running server on this port first
-    mgr = ServerManager(store)
-    for s in store.list_servers():
-        if s.port == server.port and s.id != server.id:
-            state = mgr.get_state(s.id)
-            if state and state.is_running():
-                mgr.stop(s.id)
-                print(f"stopped {s.name} on :{s.port}")
-
-    # Start the server
-    state = mgr.start(server.id)
-    if state.error:
-        print(f"connect failed: {state.error}", file=sys.stderr)
-        return 1
-
-    print(f"connected to {name} on :{server.port}")
-    print(f"server id: {server.id}")
-    print(f"manage with: v2raycli server list | v2raycli server stop {server.id}")
     return 0
 
 

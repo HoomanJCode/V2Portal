@@ -49,12 +49,6 @@ def test_main_reports_malformed_config(tmp_path, capsys):
     assert "config load failed" in capsys.readouterr().err
 
 
-def test_connect_unknown_id(tmp_path, capsys):
-    store = _store(tmp_path)
-    assert app._connect(store, "nope") == 1
-    assert "unknown" in capsys.readouterr().err
-
-
 def test_probe_flag_resolves_scope_and_returns_failure(tmp_path, monkeypatch):
     from v2raycli.test import latency
 
@@ -319,21 +313,3 @@ def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):
     assert "no service" in capsys.readouterr().out
 
 
-def test_connect_creates_server_and_starts(tmp_path, monkeypatch, capsys):
-    from v2raycli.servers import ServerManager, ServerState
-
-    store = _store(tmp_path)
-    profile = store.add_profile(Profile(name="t", kind="socks", outbound=SOCKS))
-
-    def fake_start(self, server_id):
-        return ServerState(server_id=server_id, pid=99999)
-
-    monkeypatch.setattr(ServerManager, "start", fake_start)
-
-    assert app._connect(store, profile.id) == 0
-    out = capsys.readouterr().out
-    assert "connected to t" in out
-    assert "server id:" in out
-    # Server entry was created
-    assert len(store.list_servers()) == 1
-    assert store.list_servers()[0].outbound_id == profile.id
