@@ -77,11 +77,51 @@ Engine binaries and geo assets still download on first run.
 
 ## Quickstart
 
+The primary interface is non-interactive and safe for scripts. Run
+`v2raycli --help` or `v2raycli COMMAND --help` for the complete tree:
+
 ```bash
-v2raycli
+v2raycli status
+v2raycli profile list
+v2raycli subscription list
+v2raycli group list
+v2raycli test latency all
 ```
 
-Start screen:
+Every mutating command uses explicit arguments and writes the config only after
+validation. The old one-shot flags (`--test`, `--connect`, `--export`, etc.)
+remain supported for compatibility. The full command layout is:
+
+```text
+profile       list | add | rename | remove | export
+subscription  list | add | update | remove
+group          list | create balancer | create chain | remove
+test          latency | endpoint | websocket
+backup        create | list | restore
+config        show | set | export | import
+engine        update
+service       install | uninstall
+routing       list | mode | add | remove
+status        health
+```
+
+Examples:
+
+```bash
+v2raycli profile add socks office-proxy 127.0.0.1 1080
+v2raycli profile add share us-node 'vless://...'
+v2raycli profile rename PROFILE_ID 'Office proxy'
+v2raycli subscription add my-provider https://example.com/sub --proxy socks5://127.0.0.1:1080
+v2raycli subscription update --all
+v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
+v2raycli group create chain chained PROFILE_A PROFILE_B
+v2raycli routing add block --domain 'keyword:ads'
+```
+
+The TUI is retained as a library module for users who explicitly embed it; the
+installed command never opens an interactive prompt implicitly.
+
+Start screen (legacy TUI documentation):
 
 - **Connect** — pick a config (subscription node, manual proxy, or group) and
   start the proxy.
@@ -93,12 +133,12 @@ Start screen:
 - **Settings** — port, LAN sharing, inbound auth, default engine, test URL,
   and confirmed engine updates.
 
-### Scripting / headless
+### Legacy flags / scripting
 
 ```bash
 v2raycli --version
 v2raycli --config-dir /path/to/dir          # alternate config location
-v2raycli --headless                          # print a summary, no TUI
+v2raycli --headless                          # print a summary (compatibility alias)
 v2raycli --connect <profile-or-group-id>     # connect and stay running (Ctrl+C to stop)
 v2raycli --probe all                         # ICMP/TCP probe every endpoint
 v2raycli --probe <subscription-id>           # probe one subscription's endpoints
