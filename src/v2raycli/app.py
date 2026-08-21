@@ -1208,8 +1208,6 @@ def _command(store: ConfigStore, args) -> int:
             return _server_command(store, args)
         if command == "health":
             return _health_command(store, args.json)
-        if command == "status":
-            return _status(store, args.json)
         return _command_help(args)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1481,8 +1479,8 @@ def _config_command(store: ConfigStore, args) -> int:
         key = args.key.split(".", 1)[1]
         if key in ("mixed_port", "socks_port", "http_port") and (isinstance(value, bool) or not isinstance(value, int)):
             raise ValueError(f"settings.{key} must be an integer")
-        if key in ("mixed_port", "socks_port", "http_port") and isinstance(value, int) and not (0 <= value <= 65535):
-            raise ValueError(f"settings.{key} must be between 0 and 65535 (0 = disabled)")
+        if key in ("mixed_port", "socks_port", "http_port") and isinstance(value, int) and not (0 <= value <= 65534):
+            raise ValueError(f"settings.{key} must be between 0 and 65534 (0 = disabled; xray reserves mixed_port+1 for HTTP)")
         if key == "allow_lan" and not isinstance(value, bool):
             raise ValueError("settings.allow_lan must be boolean (use true or false)")
         if key == "default_engine" and value not in ("sing-box", "xray"):

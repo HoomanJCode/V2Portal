@@ -244,7 +244,7 @@ class ServerManager:
         """Spawn an engine process."""
         import subprocess
         kwargs = {
-            "argv": argv,
+            "args": argv,
             "cwd": str(cwd),
             "stdout": subprocess.DEVNULL,
             "stderr": subprocess.DEVNULL,
