@@ -98,7 +98,7 @@ def run(store) -> None:
         elif action == "remove":
             _remove_rule(store)
         elif action == "move":
-            _move_rule(routing)
+            _move_rule(store)
         store.save()
 
 
@@ -231,10 +231,14 @@ def _remove_rule(store) -> None:
     store.remove_rule(choice)
 
 
-def _move_rule(routing) -> None:
+def _move_rule(store) -> None:
+    routing = store.config.routing
     if len(routing.rules) < 2:
         return
-    choice = widgets.menu("Move rule", [(r.id, r.action) for r in routing.rules])
+    choice = widgets.menu(
+        "Move rule",
+        [(r.id, _rule_label(store, r)) for r in routing.rules],
+    )
     if choice is None:
         return
     direction = widgets.menu("Direction", [("up", "Up"), ("down", "Down")])

@@ -43,6 +43,7 @@ def test_load_rejects_wrong_config_shape(tmp_path):
         ({"subscriptions": [{"profile_ids": "profile-id"}]}, "subscriptions[0].profile_ids must be a list"),
         ({"groups": [{"profile_ids": [123]}]}, "groups[0].profile_ids[0] must be text"),
         ({"routing": {"rules": [{"match": {"ips": "10.0.0.0/8"}}]}}, "rules[0].match.ips must be a list"),
+        ({"routing": {"rules": [{"enabled": "yes"}]}}, "rules[0].enabled must be boolean"),
     ],
 )
 def test_load_rejects_malformed_nested_shapes(tmp_path, payload, message):

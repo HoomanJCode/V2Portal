@@ -78,6 +78,8 @@ def _validate_persisted_shape(raw: dict) -> None:
             rule["target_id"], str
         ):
             raise ValueError(f"config routing rules[{index}].target_id must be text or null")
+        if "enabled" in rule and not isinstance(rule["enabled"], bool):
+            raise ValueError(f"config routing rules[{index}].enabled must be boolean")
         if "match" in rule:
             match = _require_dict(rule["match"], f"config routing rules[{index}].match")
             for key, values in match.items():
