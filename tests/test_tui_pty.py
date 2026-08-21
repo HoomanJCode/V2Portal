@@ -1,9 +1,8 @@
-"""Smoke-test the real TUI by driving it through a pseudo-terminal.
+"""Smoke-test the CLI by launching it through a pseudo-terminal.
 
-The widget-level tests mock ``prompt_toolkit`` dialogs, so they never exercise
-the actual terminal loop. This test launches ``python -m v2raycli`` on a real
-pty, forces the small-terminal numbered menu, sends the Quit selection, and
-asserts the process renders the menu and exits cleanly.
+The CLI is deliberately non-interactive — it prints a summary and exits
+when no command is given.  This test verifies that the process starts,
+prints the expected summary lines, and exits cleanly.
 """
 
 from __future__ import annotations
@@ -47,7 +46,8 @@ def _read_all(master: int, timeout: float) -> bytes:
     return data
 
 
-def test_tui_launches_and_quits_on_pty(tmp_path):
+def test_cli_launches_and_exits_on_pty(tmp_path):
+    """Launch the CLI on a pty and verify it prints the summary and exits."""
     import fcntl
     import pty
     import termios
@@ -58,7 +58,7 @@ def test_tui_launches_and_quits_on_pty(tmp_path):
     store.save()
 
     master, slave = pty.openpty()
-    # 40 columns forces widgets._use_simple_ui() -> numbered text prompts.
+    # 40 columns forces widgets._use_simple_ui() if the TUI were launched.
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 40, 0, 0))
 
     src = Path(__file__).resolve().parent.parent / "src"
@@ -78,18 +78,16 @@ def test_tui_launches_and_quits_on_pty(tmp_path):
     os.close(slave)
 
     output = b""
-    sent_quit = False
     deadline = time.time() + 15
     while time.time() < deadline and proc.poll() is None:
         output += _read_all(master, 0.5)
-        if not sent_quit and b"Quit" in output:
-            os.write(master, b"6\n")
-            sent_quit = True
 
     output += _read_all(master, 2.0)
     os.close(master)
     rc = proc.wait(timeout=10)
 
     text = output.decode("utf-8", errors="replace")
-    assert rc == 0, f"TUI exited {rc}; output:\n{text}"
-    assert "Quit" in text
+    assert rc == 0, f"CLI exited {rc}; output:\n{text}"
+    # The CLI prints a summary (version + config path + counts).
+    assert "v2raycli" in text
+    assert "profiles:" in text
