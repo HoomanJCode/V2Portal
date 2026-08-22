@@ -12,12 +12,14 @@ Other platforms (Windows, macOS) are not supported and raise.
 
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import sys
 from pathlib import Path
 
 SERVICE_NAME = "v2raycli"
+_log = logging.getLogger(__name__)
 
 
 def platform() -> str:
@@ -108,6 +110,10 @@ def uninstall_service() -> Path | None:
     removed = None
     for path in candidates:
         if path.exists():
-            path.unlink()
+            try:
+                path.unlink()
+            except OSError as exc:
+                _log.warning("failed to remove service %s: %s", path, exc)
+                continue
             removed = path
     return removed
