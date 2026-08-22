@@ -19,6 +19,7 @@ from .models import (
     Settings,
     Subscription,
 )
+import v2raycli.models as _models
 
 
 class ConfigLoadError(V2RayCLIError, ValueError):
@@ -190,6 +191,13 @@ class ConfigStore:
         self.path = Path(path) if path is not None else config.CONFIG_PATH
         self.config = self.default()
         self.pre_write_hooks: list[Callable] = []
+        self._id_seq = 0
+
+    def next_id(self) -> str:
+        """Return the next sequential short numeric ID (001, 002, …)."""
+        self._id_seq += 1
+        _models._id_counter = self._id_seq
+        return f"{self._id_seq:03d}"
 
     @staticmethod
     def default() -> Config:
@@ -218,14 +226,61 @@ class ConfigStore:
             if (
                 isinstance(schema_version, bool)
                 or not isinstance(schema_version, int)
-                or schema_version != config.SCHEMA_VERSION
+                or schema_version > config.SCHEMA_VERSION
             ):
                 raise ValueError(f"unsupported schema_version: {schema_version}")
             _validate_persisted_shape(raw)
             self.config = Config.from_dict(raw)
+            # Migrate older schemas to the current version
+            if schema_version < config.SCHEMA_VERSION:
+                self._migrate(schema_version)
         except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
             raise ConfigLoadError(f"could not load config {self.path}: {exc}") from exc
         return self.config
+
+    def _migrate(self, from_version: int) -> None:
+        """Run schema migrations from *from_version* up to SCHEMA_VERSION."""
+        if from_version < 3:
+            self._migrate_v2_to_v3()
+        self.config.schema_version = config.SCHEMA_VERSION
+        self.save()
+
+    def _migrate_v2_to_v3(self) -> None:
+        """Migrate schema v2 → v3: replace long UUID IDs with short numeric IDs."""
+        id_map: dict[str, str] = {}
+        self._id_seq = 0
+
+        # Assign new IDs to all entities in deterministic order
+        for sub in self.config.subscriptions:
+            id_map[sub.id] = self.next_id()
+            sub.id = id_map[sub.id]
+        for profile in self.config.profiles:
+            id_map[profile.id] = self.next_id()
+            profile.id = id_map[profile.id]
+        for group in self.config.groups:
+            id_map[group.id] = self.next_id()
+            group.id = id_map[group.id]
+        for server in self.config.servers:
+            id_map[server.id] = self.next_id()
+            server.id = id_map[server.id]
+        for rule in self.config.routing.rules:
+            id_map[rule.id] = self.next_id()
+            rule.id = id_map[rule.id]
+
+        # Rebuild cross-references
+        for profile in self.config.profiles:
+            if profile.subscription_id and profile.subscription_id in id_map:
+                profile.subscription_id = id_map[profile.subscription_id]
+        for sub in self.config.subscriptions:
+            sub.profile_ids = [id_map.get(pid, pid) for pid in sub.profile_ids]
+        for group in self.config.groups:
+            group.profile_ids = [id_map.get(pid, pid) for pid in group.profile_ids]
+        for rule in self.config.routing.rules:
+            if rule.target_id and rule.target_id in id_map:
+                rule.target_id = id_map[rule.target_id]
+        for server in self.config.servers:
+            if server.outbound_id and server.outbound_id in id_map:
+                server.outbound_id = id_map[server.outbound_id]
 
     def register_pre_write_hook(self, hook: Callable) -> None:
         """Register ``hook(store, reason)`` to run before destructive mutations."""

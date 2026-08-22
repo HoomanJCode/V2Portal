@@ -125,10 +125,21 @@ def restore_backup(path, store, backup_dir=None) -> Config:
         raise FileNotFoundError(f"backup not found: {source}")
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.get("schema_version") != config.SCHEMA_VERSION:
+        if not isinstance(data, dict):
+            raise ValueError("not a valid v2raycli backup")
+        sv = data.get("schema_version")
+        if not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
             raise ValueError("not a valid v2raycli backup")
         _validate_persisted_shape(data)
         restored = Config.from_dict(data)
+        # Migrate older schemas to the current version
+        if sv < config.SCHEMA_VERSION:
+            from .storage import ConfigStore
+
+            tmp = ConfigStore.__new__(ConfigStore)
+            tmp.config = restored
+            tmp._id_seq = 0
+            tmp._migrate(sv)
     except (OSError, ValueError, TypeError, AttributeError, KeyError, UnicodeError) as exc:
         if isinstance(exc, ValueError) and str(exc) == "not a valid v2raycli backup":
             raise
