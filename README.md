@@ -43,6 +43,11 @@ pip install .
 pip install -e .[dev]
 ```
 
+> **Tip:** If the `v2raycli` command is not found after install, use
+> `python -m v2raycli` as a fallback, or install with `pipx install .`
+> (install pipx first: `pip install pipx`). `pipx` handles PATH setup
+> automatically.
+
 ### Termux (Android)
 
 ```bash
@@ -61,6 +66,23 @@ The engine binaries (sing-box / xray) download automatically to
 ```bash
 pip install .
 ```
+
+After installing, the `v2raycli` command is placed in Python's `Scripts`
+directory (e.g. `%LOCALAPPDATA%\Python\pythonX.Y-64\Scripts`). If the
+command is not found, **one of these will work**:
+
+1. Add the `Scripts` folder to your system `PATH` permanently:
+   ```powershell
+   [Environment]::SetEnvironmentVariable(
+       "Path",
+       $env:Path + ";" + [IO.Path]::Combine([Environment]::GetFolderPath("LocalApplicationData"), "Python", "python$([Environment]::Version.ToString(3))", "Scripts"),
+       "User"
+   )
+   ```
+   Then restart your terminal.
+
+2. Or use `python -m v2raycli` instead of `v2raycli` — this always works
+   regardless of PATH.
 
 Config lives in `%APPDATA%\v2raycli`. Engine binaries download to
 `%APPDATA%\v2raycli\bin`. When LAN sharing is enabled, allow the program
@@ -342,6 +364,10 @@ Remove it with `v2raycli service uninstall`.
   network).
 - **VPN client missing** — install `openvpn` / `openconnect` and ensure it's on
   `PATH`.
+- **`v2raycli` command not found after `pip install .`** — the script is in
+  Python's `Scripts` directory which may not be on `PATH`. Fix: use
+  `python -m v2raycli`, add `Scripts` to your `PATH`, or reinstall with
+  `pipx install .`.
 
 ## Config layout
 
