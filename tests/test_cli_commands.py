@@ -341,3 +341,54 @@ def test_routing_list_shows_disabled(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "[disabled]" in out
     assert "b.com" in out
+
+
+# -- wrong-command help ------------------------------------------------------
+
+
+def test_invalid_top_level_command_shows_help(capsys):
+    """Typing 'v2raycli foo' prints the top-level usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "usage:" in err.lower()
+
+
+def test_invalid_profile_action_shows_profile_help(capsys):
+    """Typing 'v2raycli profile foo' prints profile usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["profile", "foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "profile" in err.lower()
+
+
+def test_invalid_subscription_action_shows_subscription_help(capsys):
+    """Typing 'v2raycli subscription foo' prints subscription usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["subscription", "foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "subscription" in err.lower()
+
+
+def test_invalid_server_action_shows_server_help(capsys):
+    """Typing 'v2raycli server foo' prints server usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["server", "foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "server" in err.lower()
+
+
+def test_invalid_routing_action_shows_routing_help(capsys):
+    """Typing 'v2raycli routing foo' prints routing usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["routing", "foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "routing" in err.lower()
+
+
+def test_invalid_test_action_shows_test_help(capsys):
+    """Typing 'v2raycli test foo' prints test usage and exits 2."""
+    with pytest.raises(SystemExit, match="2"):
+        app.build_parser().parse_args(["test", "foo"])
+    err = capsys.readouterr().out + capsys.readouterr().err
+    assert "test" in err.lower()

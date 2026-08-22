@@ -13,8 +13,49 @@ from . import backup, config
 from .storage import ConfigStore
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+class _SubcommandParser(argparse.ArgumentParser):
+    """ArgumentParser that shows context-appropriate help on invalid commands.
+
+    When the user enters an invalid subcommand (e.g. ``v2raycli profile foo``)
+    argparse prints an unfriendly "invalid choice" error.  This subclass
+    overrides ``error()`` to display the help for the parent command instead,
+    making it clear what actions are available.
+    """
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        ns, _ = self.parse_known_args([])
+        command = getattr(ns, "command", None)
+        if command is None:
+            self.print_help()
+        else:
+            subcmd_attr = f"{command}_command"
+            subcmd = getattr(ns, subcmd_attr, None)
+            if subcmd is not None:
+                # nested group (e.g. profile add foo, routing move ID bad)
+                self._print_subcommand_help(command, subcmd)
+            else:
+                self._print_subcommand_help(command)
+        raise SystemExit(2)
+
+    def _print_subcommand_help(self, command: str, action: str | None = None) -> None:
+        """Walk the parser tree to print the help for *command [action]*."""
+        current = self
+        for name in (command, *([action] if action else [])):
+            for sub_action in current._actions:  # type: ignore[attr-defined]
+                if (
+                    isinstance(sub_action, argparse._SubParsersAction)
+                    and name in sub_action._name_parser_map
+                ):
+                    current = sub_action._name_parser_map[name]
+                    break
+            else:
+                break
+        current.print_help()
+
+
+
+def build_parser() -> _SubcommandParser:
+    parser = _SubcommandParser(
         prog="v2raycli",
         description=(
             "v2raycli — manage proxy profiles and run inbound servers (sing-box + xray-core).\n\n"
