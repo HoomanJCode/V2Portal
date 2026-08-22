@@ -10,7 +10,7 @@ from v2raycli.storage import ConfigLoadError, ConfigStore
 def test_first_run_creates_default(tmp_path):
     store = ConfigStore(tmp_path / "config.json")
     cfg = store.load()
-    assert cfg.schema_version == 2
+    assert cfg.schema_version == 3
     assert cfg.settings.mixed_port == 1080
     assert cfg.settings.default_engine == "sing-box"
     assert cfg.profiles == []
@@ -177,3 +177,134 @@ def test_remove_profile_cleans_group_profile_ids_and_routing(tmp_path):
 
     assert g.profile_ids == ["other-id"]
     assert store.config.routing.rules == []
+
+
+# -- numeric ID generation --------------------------------------------------
+
+
+def test_new_id_is_short_numeric():
+    from v2raycli.models import new_id
+
+    ids = [new_id() for _ in range(5)]
+    assert all(len(i) <= 4 for i in ids)
+    assert ids[0] != ids[1]  # sequential
+    # all-numeric
+    assert all(i.isdigit() for i in ids)
+
+
+def test_store_next_id_is_sequential(tmp_path):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    id1 = store.next_id()
+    id2 = store.next_id()
+    id3 = store.next_id()
+    assert id1 == "001"
+    assert id2 == "002"
+    assert id3 == "003"
+
+
+# -- schema migration -------------------------------------------------------
+
+
+def test_migrate_v2_uuid_ids_to_v3_numeric(tmp_path):
+    """A v2 config with UUID ids is migrated to v3 with short numeric ids."""
+    from v2raycli.models import RoutingRule
+
+    path = tmp_path / "config.json"
+    sub_id = "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb"
+    profile_id = "cccccccc-4444-5555-6666-dddddddddddd"
+    group_id = "eeeeeeee-7777-8888-9999-ffffffffffff"
+    server_id = "11111111-aaaa-bbbb-cccc-dddddddddddd"
+    rule_id = "22222222-aaaa-bbbb-cccc-dddddddddddd"
+
+    raw = {
+        "schema_version": 2,
+        "settings": {"mixed_port": 1080},
+        "routing": {
+            "mode": "split",
+            "rules": [
+                {
+                    "id": rule_id,
+                    "action": "proxy",
+                    "target_id": profile_id,
+                    "enabled": True,
+                    "match": {"domains": [], "ips": [], "geoip": [], "geosite": []},
+                }
+            ],
+        },
+        "engines": {},
+        "profiles": [
+            {
+                "id": profile_id,
+                "name": "test",
+                "kind": "socks",
+                "engine": "auto",
+                "source": "manual",
+                "subscription_id": sub_id,
+                "outbound": {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}},
+                "created_at": "2024-01-01T00:00:00",
+                "updated_at": "2024-01-01T00:00:00",
+            }
+        ],
+        "subscriptions": [
+            {
+                "id": sub_id,
+                "name": "test-sub",
+                "url": "https://example.com/sub",
+                "profile_ids": [profile_id],
+            }
+        ],
+        "groups": [
+            {
+                "id": group_id,
+                "name": "test-group",
+                "type": "single",
+                "strategy": "latency",
+                "profile_ids": [profile_id],
+                "engine": "auto",
+            }
+        ],
+        "servers": [
+            {
+                "id": server_id,
+                "name": "test-server",
+                "port": 1080,
+                "protocol": "mixed",
+                "outbound_id": profile_id,
+                "outbound_type": "profile",
+                "listen": "0.0.0.0",
+            }
+        ],
+    }
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    store = ConfigStore(path)
+    cfg = store.load()
+
+    # schema version bumped
+    assert cfg.schema_version == 3
+
+    # IDs are now short numeric
+    assert cfg.profiles[0].id.isdigit()
+    assert cfg.subscriptions[0].id.isdigit()
+    assert cfg.groups[0].id.isdigit()
+    assert cfg.servers[0].id.isdigit()
+    assert cfg.routing.rules[0].id.isdigit()
+
+    # cross-references remapped
+    assert cfg.profiles[0].subscription_id == cfg.subscriptions[0].id
+    assert cfg.subscriptions[0].profile_ids == [cfg.profiles[0].id]
+    assert cfg.groups[0].profile_ids == [cfg.profiles[0].id]
+    assert cfg.routing.rules[0].target_id == cfg.profiles[0].id
+    assert cfg.servers[0].outbound_id == cfg.profiles[0].id
+
+
+def test_v3_config_loaded_without_migration(tmp_path):
+    """A fresh v3 config is loaded directly without migration."""
+    store = ConfigStore(tmp_path / "config.json")
+    cfg = store.load()
+    assert cfg.schema_version == 3
+    # IDs should be short numeric from the start
+    p = store.add_profile(Profile(name="p"))
+    assert p.id.isdigit()
+    assert len(p.id) <= 4
