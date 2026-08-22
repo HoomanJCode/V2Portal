@@ -244,9 +244,14 @@ class ConfigStore:
                 json.dump(data, fh, ensure_ascii=False, indent=2)
                 fh.write("\n")
             os.replace(tmp, self.path)
+        except OSError as exc:
+            raise ValueError(f"failed to save config: {exc}") from exc
         finally:
             if os.path.exists(tmp):
-                os.unlink(tmp)
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
 
     # -- profiles ------------------------------------------------------------
 

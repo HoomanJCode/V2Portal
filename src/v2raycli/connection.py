@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 from . import config
 from .engines import get_adapter
@@ -20,7 +23,8 @@ from .routing.rules import uses_geo
 from .runner import Proc
 
 
-class ConnectionError(Exception):
+class ProxyConnectionError(Exception):
+    """Raised when a proxy connection attempt fails."""
     pass
 
 
@@ -51,7 +55,7 @@ def lan_ips() -> list[str]:
         ip = probe.getsockname()[0]
         probe.close()
         return [ip] if ip and ip != "0.0.0.0" else []
-    except Exception:
+    except OSError:
         return []
 
 
@@ -91,7 +95,7 @@ class ConnectionController:
             if is_vpn:
                 return self._connect_vpn(target.profiles[0])
             return self._connect_proxy(target)
-        except (ConnectionError, BinaryError, OSError, TypeError, ValueError) as exc:
+        except (ProxyConnectionError, BinaryError, OSError, TypeError, ValueError) as exc:
             self._cleanup_inline()
             self._selection = None
             self.status = ConnectionStatus(
@@ -147,8 +151,8 @@ class ConnectionController:
         selection.traffic_down = existing_down + down
         try:
             self.store.save()
-        except OSError:
-            pass
+        except OSError as exc:
+            _log.debug("failed to save traffic stats: %s", exc)
 
     # -- proxy connections --------------------------------------------------
 
@@ -162,27 +166,27 @@ class ConnectionController:
         try:
             binary = locate_binary(target.engine, options, bin_dir=self.bin_dir)
         except BinaryError as exc:
-            raise ConnectionError(f"missing binary for {target.engine}: {exc}") from exc
+            raise ProxyConnectionError(f"missing binary for {target.engine}: {exc}") from exc
 
         env = None
         if target.engine == "xray" and uses_geo(self.store.config.routing):
             try:
                 geo_dir = ensure_geo_assets("xray", geo_dir=self.geo_dir)
             except GeoError as exc:
-                raise ConnectionError(f"geo assets: {exc}") from exc
+                raise ProxyConnectionError(f"geo assets: {exc}") from exc
             env = {**os.environ, "XRAY_LOCATION_ASSET": str(geo_dir)}
 
         try:
             validate_config(target.engine, path, binary=binary, env=env)
         except RuntimeError as exc:
-            raise ConnectionError(f"invalid config: {exc}") from exc
+            raise ProxyConnectionError(f"invalid config: {exc}") from exc
 
         self.proc.start([str(binary), *adapter.run_args(str(path))], env=env)
         time.sleep(0.2)
         if not self.proc.is_running():
             tail = " ".join(self.proc.logs()[-3:])
             self.proc.stop()
-            raise ConnectionError(f"{target.engine} exited immediately: {tail}")
+            raise ProxyConnectionError(f"{target.engine} exited immediately: {tail}")
 
         self.status = ConnectionStatus(
             state="connected",
@@ -224,10 +228,10 @@ class ConnectionController:
         if vtype == "openvpn":
             config_path = vpn.get("config_path")
             if config_path and not Path(config_path).is_file():
-                raise ConnectionError(f"openvpn config not found: {config_path}")
+                raise ProxyConnectionError(f"openvpn config not found: {config_path}")
         client = clients.get(vtype)
         if not client:
-            raise ConnectionError(client_install_hint(vtype))
+            raise ProxyConnectionError(client_install_hint(vtype))
 
         argv = self.vpn_argv(vtype, client, vpn, profile)
         self.proc.start(argv)
@@ -235,7 +239,7 @@ class ConnectionController:
         if not self.proc.is_running():
             tail = " ".join(self.proc.logs()[-3:])
             self.proc.stop()
-            raise ConnectionError(f"{vtype} exited immediately: {tail}")
+            raise ProxyConnectionError(f"{vtype} exited immediately: {tail}")
 
         self.status = ConnectionStatus(
             state="connected",

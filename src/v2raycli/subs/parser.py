@@ -19,11 +19,11 @@ def _try_b64(text: str) -> str | None:
     t += "=" * (-len(t) % 4)
     try:
         raw = base64.b64decode(t)
-    except Exception:
+    except (ValueError, TypeError):
         return None
     try:
         decoded = raw.decode("utf-8")
-    except Exception:
+    except UnicodeDecodeError:
         return None
     if "\n" in decoded or "://" in decoded or decoded.lstrip().startswith("vmess"):
         return decoded

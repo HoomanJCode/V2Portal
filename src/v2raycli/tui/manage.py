@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..outbounds import manual, vpn
 from ..outbounds.groups import create_balancer_group, create_chain_group
+from ..subs.fetcher import FetchError
 from ..subs.parser import import_subscription, update_subscription
 from ..subs.share import ShareLinkError, decode_link, encode_link
 from . import widgets
@@ -74,7 +75,7 @@ def _add(store) -> None:
         proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
         try:
             sub, profiles, errors = import_subscription(name, url, proxy=proxy or None)
-        except Exception as exc:  # FetchError etc.
+        except (FetchError, OSError, ValueError) as exc:
             widgets.show_message("Import failed", str(exc))
             return
         store.add_subscription(sub)
@@ -193,7 +194,7 @@ def _transfer(store) -> None:
         if choice and widgets.confirm("Restore this backup? Current config is backed up first."):
             try:
                 backup.restore_backup(choice, store)
-            except Exception as exc:
+            except (OSError, ValueError, TypeError) as exc:
                 widgets.show_message("Restore failed", str(exc))
                 return
             widgets.show_message("Restored", "Config restored.")
@@ -212,7 +213,7 @@ def _transfer(store) -> None:
             return
         try:
             exchange.import_full(store, path, mode=mode)
-        except Exception as exc:
+        except (OSError, ValueError, TypeError) as exc:
             widgets.show_message("Import failed", str(exc))
             return
         widgets.show_message("Imported", "Config imported.")
@@ -270,7 +271,7 @@ def _do_update(store, sub_id: str) -> None:
     proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
     try:
         profiles, errors = update_subscription(store, sub_id, proxy=proxy or None)
-    except Exception as exc:
+    except (FetchError, OSError, ValueError) as exc:
         widgets.show_message("Update failed", str(exc))
         return
     widgets.show_message("Updated", f"{len(profiles)} profiles.")

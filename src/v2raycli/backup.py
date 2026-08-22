@@ -8,6 +8,7 @@ pre-write hook (see ``install_backup_hook``).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import tempfile
@@ -18,6 +19,8 @@ from pathlib import Path
 from . import config
 from .models import Config
 from .storage import _validate_persisted_shape
+
+_log = logging.getLogger(__name__)
 
 _BACKUP_RE = re.compile(r"^backup-(\d{8}-\d{6}-\d{6})-(.+)\.json$")
 
@@ -104,8 +107,8 @@ def prune(keep: int, backup_dir=None) -> None:
     for info in list_backups(directory)[keep:]:
         try:
             Path(info.path).unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            _log.debug("prune: failed to remove %s: %s", info.path, exc)
 
 
 def restore_backup(path, store, backup_dir=None) -> Config:
@@ -154,5 +157,5 @@ def set_private_permissions() -> None:
     for directory in (config.CONFIG_PATH.parent, config.BACKUP_DIR):
         try:
             os.chmod(directory, 0o700)
-        except OSError:
-            pass
+        except OSError as exc:
+            _log.debug("set_private_permissions: failed to chmod %s: %s", directory, exc)

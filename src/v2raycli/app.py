@@ -1897,7 +1897,7 @@ def _restore(store: ConfigStore, path: str) -> int:
 
     try:
         backup.restore_backup(path, store)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         print(f"restore failed: {exc}", file=sys.stderr)
         return 1
     print(f"restored from {path}")
@@ -1909,7 +1909,7 @@ def _export(store: ConfigStore, path: str, redact: bool) -> int:
 
     try:
         exchange.export_full(store, path, redact=redact)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         print(f"export failed: {exc}", file=sys.stderr)
         return 1
     print(f"exported to {path}")
@@ -1922,7 +1922,7 @@ def _import(store: ConfigStore, path: str, replace: bool) -> int:
     mode = "replace" if replace else "merge"
     try:
         exchange.import_full(store, path, mode=mode)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         print(f"import failed: {exc}", file=sys.stderr)
         return 1
     print(f"imported {path} ({mode})")

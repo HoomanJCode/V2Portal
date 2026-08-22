@@ -7,6 +7,7 @@ and forwards traffic to a specific profile or group.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 import time
@@ -17,6 +18,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .models import Server, Settings
     from .storage import ConfigStore
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -63,8 +66,8 @@ class ServerManager:
                 if server_id not in known_ids:
                     continue  # server was removed; skip stale state
                 self._states[server_id] = ServerState(**state_data)
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as exc:
+            _log.warning("failed to load server states from %s: %s", path, exc)
 
     def _save_states(self) -> None:
         data = {}

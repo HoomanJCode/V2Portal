@@ -41,7 +41,7 @@ def run(store) -> int:
                 elif action == "settings":
                     run_settings(store, controller)
                 store.save()
-            except Exception as exc:  # noqa: BLE001 - keep the interactive loop alive
+            except (OSError, ValueError, TypeError) as exc:
                 widgets.show_message("Action failed", str(exc))
     except (EOFError, KeyboardInterrupt):
         return 0
@@ -56,7 +56,7 @@ def _guide_first_run(store) -> None:
     widgets.show_message("Welcome", "No configs yet. Add a subscription or proxy to get started.")
     try:
         run_manage(store)
-    except Exception as exc:  # noqa: BLE001 - onboarding must not block the main menu
+    except (OSError, ValueError, TypeError) as exc:
         widgets.show_message("Setup unavailable", str(exc))
 
 
