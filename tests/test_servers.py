@@ -271,3 +271,42 @@ def test_server_active_states_survive_load(tmp_path):
     mgr2 = ServerManager(store, runtime_dir=tmp_path / "runtime")
     assert server.id in mgr2._states
     assert mgr2._states[server.id].pid is None
+
+
+def test_server_start_reports_immediate_crash(tmp_path, monkeypatch):
+    """start() returns an error state when the engine exits right away."""
+    import subprocess
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    server = store.add_server(
+        Server(name="crashy", port=10808, outbound_id=profile.id)
+    )
+    store.save()
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+
+    # Fake a process that has already exited
+    class FakeDeadProc:
+        pid = 99999
+        returncode = 1
+        stderr = None
+        _captured_stderr = ["FATAL: bind: address already in use"]
+
+        def poll(self):
+            return 1  # already exited
+
+    def fake_popen(*args, **kwargs):
+        return FakeDeadProc()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    # Patch locate_binary to skip download
+    monkeypatch.setattr(
+        "v2raycli.engines.binary.locate_binary",
+        lambda engine, opts: tmp_path / "fake-bin",
+    )
+
+    state = mgr.start(server.id)
+    assert state.error is not None
+    assert "immediately" in state.error
+    assert "FATAL" in state.error

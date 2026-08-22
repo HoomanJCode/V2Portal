@@ -200,19 +200,34 @@ class ServerManager:
 
         # Start process
         try:
-            proc = self._spawn(argv, config_dir)
+            proc = self._spawn(argv, config_dir, capture_stderr=True)
         except OSError as exc:
             state = ServerState(server_id=server_id, error=str(exc))
             self._states[server_id] = state
             self._save_states()
             return state
 
-        state = ServerState(
-            server_id=server_id,
-            pid=proc.pid,
-            config_path=str(config_path),
-            started_at=datetime.now(timezone.utc).isoformat(),
-        )
+        # Brief pause to catch engines that crash immediately (bad config,
+        # missing binary, port conflict, etc.).
+        for _ in range(10):
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+
+        if proc.poll() is not None:
+            stderr_lines = getattr(proc, "_captured_stderr", [])
+            detail = " ".join(stderr_lines[-3:]) if stderr_lines else f"exit code {proc.returncode}"
+            state = ServerState(
+                server_id=server_id,
+                error=f"engine exited immediately: {detail}",
+            )
+        else:
+            state = ServerState(
+                server_id=server_id,
+                pid=proc.pid,
+                config_path=str(config_path),
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
         self._states[server_id] = state
         self._save_states()
         return state
@@ -246,16 +261,38 @@ class ServerManager:
                 count += 1
         return count
 
-    def _spawn(self, argv: list[str], cwd: Path):
-        """Spawn an engine process."""
+    def _spawn(self, argv: list[str], cwd: Path, capture_stderr: bool = False):
+        """Spawn an engine process.
+
+        When *capture_stderr* is True the child's stderr is captured so
+        callers can surface crash messages.  The pipe is drained in a
+        daemon thread to prevent the OS buffer from filling up.
+        """
         import subprocess
+        import threading
+
         kwargs = {
             "args": argv,
             "cwd": str(cwd),
             "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-            "start_new_session": True,
+            "stderr": subprocess.PIPE if capture_stderr else subprocess.DEVNULL,
         }
         if os.name == "nt":
-            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
-        return subprocess.Popen(**kwargs)
+            # CREATE_NO_WINDOW prevents a console flash; the process is
+            # detached from the CLI so Ctrl+C doesn't kill it.
+            kwargs["creationflags"] = (
+                subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            kwargs["start_new_session"] = True
+        proc = subprocess.Popen(**kwargs)
+        if capture_stderr and proc.stderr is not None:
+            lines: list[str] = []
+            def _drain():
+                for raw in iter(proc.stderr.readline, b""):
+                    text = raw.decode("utf-8", errors="replace").rstrip("\n")
+                    if text:
+                        lines.append(text)
+            threading.Thread(target=_drain, daemon=True).start()
+            proc._captured_stderr = lines  # type: ignore[attr-defined]
+        return proc
