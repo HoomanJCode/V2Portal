@@ -17,10 +17,11 @@ import json
 from urllib.parse import parse_qs, quote, unquote
 
 from ..engines import engine_for_kind
+from ..errors import V2RayCLIError
 from ..models import Profile
 
 
-class ShareLinkError(ValueError):
+class ShareLinkError(V2RayCLIError, ValueError):
     """Raised when a share link cannot be parsed."""
 
 

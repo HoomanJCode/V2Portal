@@ -6,11 +6,13 @@ from pathlib import Path
 
 import httpx
 
+from ..errors import V2RayCLIError
+
 
 DEFAULT_USER_AGENT = "v2rayN/6.23"
 
 
-class FetchError(Exception):
+class FetchError(V2RayCLIError):
     """A typed failure while fetching a subscription."""
 
 

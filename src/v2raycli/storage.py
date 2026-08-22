@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import config
+from .errors import V2RayCLIError
 from .models import (
     Config,
     Group,
@@ -20,7 +21,7 @@ from .models import (
 )
 
 
-class ConfigLoadError(ValueError):
+class ConfigLoadError(V2RayCLIError, ValueError):
     """Raised when the on-disk config cannot be decoded or validated."""
 
 

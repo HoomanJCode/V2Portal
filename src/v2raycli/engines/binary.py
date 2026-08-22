@@ -16,10 +16,11 @@ from pathlib import Path
 import httpx
 
 from .. import config
+from ..errors import V2RayCLIError
 from .base import get_adapter
 
 
-class BinaryError(Exception):
+class BinaryError(V2RayCLIError):
     pass
 
 

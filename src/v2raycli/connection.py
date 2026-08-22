@@ -13,6 +13,7 @@ from pathlib import Path
 _log = logging.getLogger(__name__)
 
 from . import config
+from .errors import V2RayCLIError
 from .engines import get_adapter
 from .engines.base import validate_config, write_runtime_config
 from .engines.binary import BinaryError, locate_binary
@@ -23,7 +24,7 @@ from .routing.rules import uses_geo
 from .runner import Proc
 
 
-class ProxyConnectionError(Exception):
+class ProxyConnectionError(V2RayCLIError):
     """Raised when a proxy connection attempt fails."""
     pass
 

@@ -10,9 +10,10 @@ from pathlib import Path
 import httpx
 
 from . import config
+from .errors import V2RayCLIError
 
 
-class GeoError(Exception):
+class GeoError(V2RayCLIError):
     pass
 
 
