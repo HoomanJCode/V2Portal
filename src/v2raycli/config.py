@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - stdlib fallback for minimal dev setups
 from .models import Settings
 
 APP_NAME = "v2raycli"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _user_config_dir(appname: str) -> str:

@@ -6,15 +6,22 @@ Storage, config generation, and the TUI all consume them.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 
+# Sequential ID counter — incremented by ConfigStore.next_id() to produce
+# short, easy-to-copy numeric IDs (001, 002, …).  The module-level default
+# only fires for models created outside the store (tests, manual).
+_id_counter: int = 0
+
+
 def new_id() -> str:
-    return str(uuid.uuid4())
+    global _id_counter
+    _id_counter += 1
+    return f"{_id_counter:03d}"
 
 
 def now_iso() -> str:
