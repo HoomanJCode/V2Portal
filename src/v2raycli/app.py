@@ -1590,10 +1590,20 @@ def _server_command(store: ConfigStore, args) -> int:
         rows = []
         for s in servers:
             state = mgr.get_state(s.id)
+            target_name = ""
+            if s.outbound_type == "profile":
+                p = store.get_profile(s.outbound_id)
+                target_name = p.name if p else s.outbound_id
+            elif s.outbound_type == "group":
+                g = store.get_group(s.outbound_id)
+                target_name = g.name if g else s.outbound_id
+            elif s.outbound_type == "direct":
+                target_name = "direct (device)"
             rows.append({
                 "id": s.id, "name": s.name, "port": s.port,
                 "protocol": s.protocol, "outbound_type": s.outbound_type,
-                "outbound_id": s.outbound_id, "enabled": s.enabled,
+                "outbound_id": s.outbound_id, "outbound_name": target_name,
+                "enabled": s.enabled,
                 "running": state.is_running() if state else False,
             })
         if getattr(args, 'json', False):
@@ -1601,7 +1611,8 @@ def _server_command(store: ConfigStore, args) -> int:
         elif rows:
             for row in rows:
                 status = "running" if row["running"] else "stopped"
-                print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {row['outbound_type']:<8} {status:<8} {row['name']}")
+                target = f"{row['outbound_type']}/{row['outbound_name']}" if row["outbound_name"] else row["outbound_type"]
+                print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {status:<8} {target}")
         else:
             print("no servers")
         return 0
