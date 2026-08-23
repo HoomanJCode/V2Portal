@@ -1168,6 +1168,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command:
         if not args.no_auto_update:
             _auto_update(store)
+        # Only show health warnings on status/health, not every command.
+        if args.command in ("status", "health") and not args.no_auto_update:
             _health_check(store)
         return _command(store, args)
 

@@ -48,6 +48,9 @@ def subscription_status(sub: Subscription, now: datetime | None = None, warn_day
         now = now.replace(tzinfo=timezone.utc)
 
     expires = parse_iso(sub.expires)
+    # Treat epoch or very old dates (before 2020) as "no expiry set".
+    if expires is not None and expires.year < 2020:
+        expires = None
     expired = expires is not None and expires <= now
     days_left = None
     expiring = False
