@@ -1,5 +1,5 @@
 do these todos in priority and mark as down if passed.
-> * [x] ~~when i write v2raycli test its show me an error~~ — previously fixed
+> * [x] ~~when i write v2raycli test its show me an error~~ — Fixed: `v2raycli test` without subcommand now shows usage help instead of crashing
 > * [x] for testing its better show any loading result for profiles, also show profile id instead.
 > * [x] for group, its not accept adding subscription or other group, also i dont want its add profiles of group or sub, its should add them and maybe later subscription updated and profiles changes.
 > * [x] i need a command to edit profile of added server
