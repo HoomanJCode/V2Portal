@@ -357,7 +357,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     # -- subscription ---------------------------------------------------------
     subscription = commands.add_parser(
-        "subscription", aliases=["subscriptions"],
+        "subscription", aliases=["subscriptions", "sub"],
         help="manage proxy subscriptions",
         description=(
             "A subscription is a URL that returns a list of proxy nodes.\n"
@@ -976,7 +976,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     # -- server ---------------------------------------------------------------
     server_cmd = commands.add_parser(
-        "server",
+        "server", aliases=["sv"],
         help="manage inbound proxy servers (multiple ports, each with its own outbound)",
         description=(
             "A server is a persistent inbound proxy that listens on a dedicated port\n"
@@ -986,9 +986,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  v2raycli server add --port 1080 --profile abc --name 'US proxy'\n"
             "  v2raycli server add --port 1081 --group def --protocol http\n"
             "  v2raycli server list\n"
+            "  v2raycli server start\n"
             "  v2raycli server start SERVER_ID\n"
+            "  v2raycli server stop\n"
             "  v2raycli server stop SERVER_ID\n"
-            "  v2raycli server stop --all"
+            "  v2raycli server restart\n"
+            "  v2raycli server restart SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1037,10 +1040,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     server_start = server_commands.add_parser(
         "start",
-        help="start a server (or --all)",
+        help="start a server, or all servers when no ID is given",
         description=(
-            "Start a server's engine process. The server must be added first.\n\n"
+            "Start a server's engine process. The server must be added first.\n"
+            "Without arguments starts all enabled servers.\n\n"
             "Examples:\n"
+            "  v2raycli server start\n"
             "  v2raycli server start SERVER_ID\n"
             "  v2raycli server start --all"
         ),
@@ -1052,10 +1057,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     server_stop = server_commands.add_parser(
         "stop",
-        help="stop a running server (or --all)",
+        help="stop a running server, or all servers when no ID is given",
         description=(
-            "Stop a running server's engine process.\n\n"
+            "Stop a running server's engine process.\n"
+            "Without arguments stops all running servers.\n\n"
             "Examples:\n"
+            "  v2raycli server stop\n"
             "  v2raycli server stop SERVER_ID\n"
             "  v2raycli server stop --all"
         ),
@@ -1064,6 +1071,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_stop.add_argument("id", nargs="?", help="server ID to stop (or use --all)")
     server_stop.add_argument("--all", action="store_true", dest="stop_all",
                             help="stop all running servers")
+
+    server_restart = server_commands.add_parser(
+        "restart",
+        help="restart a server (or --all)",
+        description=(
+            "Restart a server. Equivalent to stop + start.\n\n"
+            "Examples:\n"
+            "  v2raycli server restart SERVER_ID\n"
+            "  v2raycli server restart --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_restart.add_argument("id", nargs="?", help="server ID to restart (or use --all)")
+    server_restart.add_argument("--all", action="store_true", dest="restart_all",
+                               help="restart all enabled servers")
 
     server_remove = server_commands.add_parser(
         "remove",
@@ -1123,7 +1145,7 @@ def _command(store: ConfigStore, args) -> int:
             return _status(store, args.json)
         if command in ("profile", "profiles"):
             return _profile_command(store, args)
-        if command in ("subscription", "subscriptions"):
+        if command in ("subscription", "subscriptions", "sub"):
             return _subscription_command(store, args)
         if command in ("group", "groups"):
             return _group_command(store, args)
@@ -1158,7 +1180,7 @@ def _command(store: ConfigStore, args) -> int:
             return _command_help(args, "service")
         if command == "routing":
             return _routing_command(store, args)
-        if command == "server":
+        if command in ("server", "sv"):
             return _server_command(store, args)
         if command == "health":
             return _health_command(store, args.json)
@@ -1615,6 +1637,9 @@ def _server_command(store: ConfigStore, args) -> int:
         from .servers import ServerManager
 
         mgr = ServerManager(store)
+        # Default to --all when no specific ID is given.
+        if not args.id and not args.start_all:
+            args.start_all = True
         if args.start_all:
             servers = [s for s in store.list_servers() if s.enabled]
             if not servers:
@@ -1652,6 +1677,9 @@ def _server_command(store: ConfigStore, args) -> int:
         from .servers import ServerManager
 
         mgr = ServerManager(store)
+        # Default to --all when no specific ID is given.
+        if not args.id and not args.stop_all:
+            args.stop_all = True
         if args.stop_all:
             count = mgr.stop_all()
             print(f"stopped {count} server(s)")
@@ -1663,6 +1691,45 @@ def _server_command(store: ConfigStore, args) -> int:
             print(f"stopped {args.id}")
         else:
             print(f"{args.id} is not running")
+        return 0
+
+    if action == "restart":
+        from .servers import ServerManager
+
+        mgr = ServerManager(store)
+        if args.restart_all:
+            servers = [s for s in store.list_servers() if s.enabled]
+            if not servers:
+                print("no enabled servers")
+                return 0
+            failed = False
+            for s in servers:
+                try:
+                    mgr.stop(s.id)
+                    state = mgr.start(s.id)
+                    if state.error:
+                        failed = True
+                        print(f"{s.id}  failed: {state.error}", file=sys.stderr)
+                    else:
+                        print(f"{s.id}  restarted on :{s.port}")
+                except (ValueError, OSError) as exc:
+                    failed = True
+                    print(f"{s.id}  failed: {exc}", file=sys.stderr)
+            return 1 if failed else 0
+        if not args.id:
+            print("server restart requires ID or --all", file=sys.stderr)
+            return 2
+        try:
+            mgr.stop(args.id)
+            state = mgr.start(args.id)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if state.error:
+            print(f"failed: {state.error}", file=sys.stderr)
+            return 1
+        server = store.get_server(args.id)
+        print(f"{state.server_id}  restarted on :{server.port}")
         return 0
 
     if action == "remove":
