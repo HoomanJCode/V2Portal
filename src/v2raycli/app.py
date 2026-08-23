@@ -1199,6 +1199,8 @@ def _command(store: ConfigStore, args) -> int:
         if command in ("group", "groups"):
             return _group_command(store, args)
         if command == "test":
+            if not args.test_command:
+                return _command_help(args, "test")
             scope = args.scope
             if args.test_command in ("latency", "request"):
                 return _test(store, scope)
