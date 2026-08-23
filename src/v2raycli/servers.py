@@ -35,11 +35,26 @@ class ServerState:
     def is_running(self) -> bool:
         if self.pid is None:
             return False
+        if os.name == "nt":
+            return self._is_running_win32(self.pid)
         try:
             os.kill(self.pid, 0)
             return True
         except (OSError, ProcessLookupError):
             return False
+
+    @staticmethod
+    def _is_running_win32(pid: int) -> bool:
+        """Check process existence on Windows via OpenProcess."""
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid,
+        )
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
 
 
 class ServerManager:
