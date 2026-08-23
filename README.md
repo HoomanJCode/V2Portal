@@ -116,16 +116,17 @@ Every mutating command uses explicit arguments and writes the config only after
 validation. The full command layout is:
 
 ```text
-profile       list | add | rename | remove | export
-subscription  list | add | update | remove
-group          list | create balancer | create chain | remove
-server        list | add | start | stop | remove
+profile       list | add | rename | edit | remove | export
+subscription  list | add | update | remove       (aliases: sub, subscriptions)
+group          list | create balancer | create chain | remove   (alias: groups)
+server        list | add | start | stop | restart | remove    (alias: sv)
 test          latency | endpoint | websocket
 backup        create | list | restore
 config        show | set | export | import
 engine        update
 service       install | uninstall
 routing       list | mode | add | move | remove
+completion    bash | zsh
 status        health
 ```
 
@@ -145,9 +146,27 @@ v2raycli profile list --subscription SUB_ID
 v2raycli server add --port 1080 --profile PROFILE_ID --name 'US proxy'
 v2raycli server start SERVER_ID
 
+# Servers run in the background and survive terminal close.
+# Manage them afterwards:
+v2raycli server list
+v2raycli sv stop SERVER_ID
+
 # Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
 v2raycli profile list --kind socks
+
+# Manage servers — start/stop/restart default to --all when no ID given
+v2raycli sv start
+v2raycli sv stop
+v2raycli sv restart SERVER_ID
+v2raycli sv restart --all
+
+# Test by group, subscription, or profile ID
+v2raycli test latency GROUP_ID
+v2raycli test endpoint SUB_ID
+
+# Edit an existing profile
+v2raycli profile edit PROFILE_ID --name "New Name" --host 10.0.0.2 --port 1081
 
 # Create groups and routing rules
 v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
@@ -163,31 +182,18 @@ v2raycli server list
 v2raycli server start --all
 ```
 
-### Legacy flags / scripting
+### Tab completion
 
 ```bash
-v2raycli --version
-v2raycli --config-dir /path/to/dir          # alternate config location
-v2raycli --headless                          # print a summary (compatibility alias)
-v2raycli --probe all                         # ICMP/TCP probe every endpoint
-v2raycli --probe <subscription-id>           # probe one subscription's endpoints
-v2raycli --ws-test all                        # validate WS/WSS profiles
-v2raycli --test all                           # full proxy delay-test every outbound
-v2raycli --update sing-box                    # explicitly update sing-box
-v2raycli --update xray                        # explicitly update xray
-v2raycli --update both                        # explicitly update both engines
-v2raycli --update both --proxy socks5://127.0.0.1:10808  # update through a temporary proxy
-v2raycli --test <subscription-id>            # test one subscription's nodes
-v2raycli --test <id1,id2>                    # test specific profiles
-v2raycli --backup                            # snapshot the config, print its path
-v2raycli --list-backups                      # list snapshots (newest first)
-v2raycli --restore <backup.json>             # restore a snapshot (safety backup first)
-v2raycli --export <out.json> [--redact]      # export the full config (mask credentials)
-v2raycli --import <out.json> [--replace]     # import (merge by default, or replace)
-v2raycli --install-service <id>              # install a boot service (systemd/Termux)
-v2raycli --uninstall-service                 # remove the installed service
-v2raycli --health                            # show subscription expiry/traffic status
+# bash — add to ~/.bashrc
+source <(v2raycli completion bash)
+
+# zsh — add to ~/.zshrc
+source <(v2raycli completion zsh)
 ```
+
+The completion script covers all commands, subcommands, aliases (`sv`, `sub`,
+`groups`, `profiles`, `subscriptions`), and option flags.
 
 ### Engine updates
 
@@ -229,8 +235,10 @@ You can add proxies via CLI:
 
 ## Groups
 
-- **Balancer** — pick 2+ profiles and a strategy (`latency`, `random`,
-  `roundRobin`, `leastLoad`). `leastLoad` forces xray-core.
+- **Balancer** — pick 2+ profiles or subscription IDs and a strategy
+  (`latency`, `random`, `roundRobin`, `leastLoad`). `leastLoad` forces
+  xray-core. Subscription IDs resolve dynamically, so the group updates
+  when subscriptions are refreshed.
 - **Chain** — pick an ordered list; traffic flows through each in order.
 - VPN profiles cannot join balancers/chains.
 
@@ -350,6 +358,40 @@ Remove it with `v2raycli service uninstall`.
   chained, balanced and routed to like any other outbound.
 - **xray-core** is used automatically for `ssr` and `leastLoad`.
 - Override per profile/group, or change the global default in Settings.
+
+### Routing guide: per-destination proxy selection
+
+You can route different traffic through different outbounds using split routing
+rules. Here's a practical setup:
+
+```bash
+# Enable split routing
+v2raycli routing mode split
+
+# Route Epic Games traffic through a Berlin profile
+v2raycli routing add proxy --domain epicgames.com --target BERLIN_PROFILE_ID
+v2raycli routing add proxy --domain fortnite.com --target BERLIN_PROFILE_ID
+
+# Route YouTube traffic through a balancer group
+v2raycli routing add proxy --domain youtube.com --target GROUP_1_ID
+v2raycli routing add proxy --domain googlevideo.com --target GROUP_1_ID
+
+# Route everything else through a subscription (use a group with --subscription)
+v2raycli group create balancer default SUB_ID_A --subscription SUB_ID_2
+
+# Route Russian websites directly (no proxy)
+v2raycli routing add direct --geoip ru
+v2raycli routing add direct --geosite ru
+
+# Block ads globally
+v2raycli routing add block --geosite category-ads-all
+
+# Review your rules
+v2raycli routing list
+```
+
+Rules are evaluated in order; the first match wins. Use `v2raycli routing move`
+to reorder them.
 
 ## Troubleshooting
 
