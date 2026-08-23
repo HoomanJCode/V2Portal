@@ -183,6 +183,7 @@ class Group:
     type: str = "single"  # single | balancer | chain
     strategy: str = "latency"
     profile_ids: list[str] = field(default_factory=list)
+    subscription_ids: list[str] = field(default_factory=list)
     engine: str = "auto"
     enabled: bool = True
     traffic_up: int = 0

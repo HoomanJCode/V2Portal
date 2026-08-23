@@ -76,27 +76,46 @@ def _assert_engine_compatible(profiles: list[Profile], engine: str) -> None:
 
 
 def create_balancer_group(
-    name: str, strategy: str, profile_ids: list[str], store, engine: str = AUTO
+    name: str, strategy: str, profile_ids: list[str], store, engine: str = AUTO,
+    subscription_ids: list[str] | None = None,
 ) -> Group:
     if strategy not in VALID_STRATEGIES:
         raise ValueError(f"invalid strategy: {strategy}")
-    if len(set(profile_ids)) < 2:
+    # Merge static + subscription profiles for validation.
+    all_ids = list(profile_ids)
+    if subscription_ids:
+        all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
+    if len(set(all_ids)) < 2:
         raise ValueError("a balancer requires at least 2 profiles")
-    profiles = _resolve_members(store, profile_ids)
+    profiles = _resolve_members(store, all_ids)
     _assert_non_vpn(profiles)
     _resolve_group_engine(profiles, strategy, engine, SINGBOX)  # validates strategy support
-    return Group(name=name, type="balancer", strategy=strategy, profile_ids=list(profile_ids), engine=engine)
+    return Group(
+        name=name, type="balancer", strategy=strategy,
+        profile_ids=list(profile_ids),
+        subscription_ids=list(subscription_ids) if subscription_ids else [],
+        engine=engine,
+    )
 
 
 def create_chain_group(
-    name: str, ordered_profile_ids: list[str], store, engine: str = AUTO
+    name: str, ordered_profile_ids: list[str], store, engine: str = AUTO,
+    subscription_ids: list[str] | None = None,
 ) -> Group:
-    if len(ordered_profile_ids) < 2:
+    all_ids = list(ordered_profile_ids)
+    if subscription_ids:
+        all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
+    if len(all_ids) < 2:
         raise ValueError("a chain requires at least 2 profiles")
-    profiles = _resolve_members(store, ordered_profile_ids)
+    profiles = _resolve_members(store, all_ids)
     _assert_non_vpn(profiles)
     _resolve_group_engine(profiles, "", engine, SINGBOX)
-    return Group(name=name, type="chain", profile_ids=list(ordered_profile_ids), engine=engine)
+    return Group(
+        name=name, type="chain",
+        profile_ids=list(ordered_profile_ids),
+        subscription_ids=list(subscription_ids) if subscription_ids else [],
+        engine=engine,
+    )
 
 
 def create_single_group(name: str, profile_id: str) -> Group:
@@ -120,6 +139,17 @@ def remove_member(group: Group, profile_id: str) -> Group:
     return group
 
 
+def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[str]:
+    """Expand subscription IDs into their current profile IDs."""
+    profile_ids: list[str] = []
+    for sub_id in subscription_ids:
+        sub = store.get_subscription(sub_id)
+        if sub is None:
+            raise ValueError(f"unknown subscription id: {sub_id}")
+        profile_ids.extend(sub.profile_ids)
+    return profile_ids
+
+
 def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
     """Resolve a Profile or Group into a concrete Target."""
     if isinstance(selection, Profile):
@@ -133,7 +163,11 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
     if isinstance(selection, Group):
         if selection.type not in ("single", "balancer", "chain"):
             raise ValueError(f"unsupported group type: {selection.type}")
-        profiles = _resolve_members(store, selection.profile_ids)
+        # Merge static profile IDs with dynamically resolved subscription profiles.
+        all_profile_ids = list(selection.profile_ids)
+        if selection.subscription_ids:
+            all_profile_ids.extend(_resolve_subscription_profiles(store, selection.subscription_ids))
+        profiles = _resolve_members(store, all_profile_ids)
         if selection.type == "single":
             if len(profiles) != 1:
                 raise ValueError("a single group requires exactly 1 profile")

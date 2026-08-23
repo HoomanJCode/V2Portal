@@ -506,20 +506,24 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "balancer",
         help="create a balanced group (strategy: latency|random|roundRobin|leastLoad)",
         description=(
-            "Create a balancer group. Requires a name and 2+ profile IDs.\n\n"
+            "Create a balancer group. Requires a name and 2+ profile IDs or\n"
+            "subscription IDs. Subscription profiles are resolved dynamically.\n\n"
             "  latency      — pick the lowest-latency profile (sing-box urltest)\n"
             "  random       — pick a random profile\n"
             "  roundRobin   — rotate through profiles in order\n"
             "  leastLoad    — pick the least-loaded (forces xray engine)\n\n"
             "Examples:\n"
             "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
-            "  v2raycli group create balancer pool ID_A ID_B ID_C --strategy random"
+            "  v2raycli group create balancer pool ID_A --subscription SUB_ID\n"
+            "  v2raycli group create balancer fromsub --subscription SUB_A --subscription SUB_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     balancer.add_argument("name", help="display name for this group")
-    balancer.add_argument("profile_ids", nargs="+",
-                         help="2+ profile IDs that are candidates for this balancer")
+    balancer.add_argument("profile_ids", nargs="*", default=[],
+                         help="profile IDs that are candidates for this balancer")
+    balancer.add_argument("--subscription", action="append", default=[], dest="subscription_ids",
+                         help="subscription ID whose profiles are included (repeatable)")
     balancer.add_argument("--strategy",
                          choices=("latency", "random", "roundRobin", "leastLoad"),
                          default="latency",
@@ -534,16 +538,19 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="create a proxy chain (traffic flows through each hop in order)",
         description=(
             "Create a chain group. Requires a name and 2+ profile IDs\n"
-            "listed in hop order. Traffic flows through the first proxy,\n"
-            "then the second, and so on.\n\n"
-            "Example:\n"
-            "  v2raycli group create chain tunnel ID_A ID_B"
+            "or subscription IDs. Subscription profiles are resolved dynamically.\n"
+            "Traffic flows through the first proxy, then the second, and so on.\n\n"
+            "Examples:\n"
+            "  v2raycli group create chain tunnel ID_A ID_B\n"
+            "  v2raycli group create chain tunnel ID_A --subscription SUB_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     chain.add_argument("name", help="display name for this group")
-    chain.add_argument("profile_ids", nargs="+",
+    chain.add_argument("profile_ids", nargs="*", default=[],
                       help="ordered list of profile IDs forming the chain")
+    chain.add_argument("--subscription", action="append", default=[], dest="subscription_ids",
+                      help="subscription ID whose profiles are included (repeatable)")
     chain.add_argument("--engine",
                       choices=("auto", "sing-box", "xray"),
                       default="auto",
@@ -1477,27 +1484,39 @@ def _group_command(store: ConfigStore, args) -> int:
     if action is None:
         action = "list"
     if action == "list":
-        rows = [
-            {"id": g.id, "name": g.name, "type": g.type, "strategy": g.strategy, "profiles": len(g.profile_ids)}
-            for g in store.list_groups()
-        ]
+        rows = []
+        for g in store.list_groups():
+            sub_label = f"+{len(g.subscription_ids)}sub" if g.subscription_ids else ""
+            rows.append({
+                "id": g.id, "name": g.name, "type": g.type, "strategy": g.strategy,
+                "profiles": len(g.profile_ids),
+                "subscription_ids": g.subscription_ids,
+                "sub_label": sub_label,
+            })
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         elif rows:
             for row in rows:
-                print(f"{row['id']}  {row['type']:<8} {row['strategy']:<10} {row['profiles']:>2} profiles  {row['name']}")
+                subs = row["sub_label"]
+                tag = f"{row['profiles']:>2}p" + (f" {subs}" if subs else "")
+                print(f"{row['id']}  {row['type']:<8} {row['strategy']:<10} {tag:<10} {row['name']}")
         else:
             print("no groups")
         return 0
     if action == "create":
         from .outbounds.groups import create_balancer_group, create_chain_group
 
+        sub_ids = getattr(args, "subscription_ids", []) or []
         if args.group_create_command == "balancer":
             group = create_balancer_group(
-                args.name, args.strategy, args.profile_ids, store, engine=args.engine
+                args.name, args.strategy, args.profile_ids, store,
+                engine=args.engine, subscription_ids=sub_ids,
             )
         elif args.group_create_command == "chain":
-            group = create_chain_group(args.name, args.profile_ids, store, engine=args.engine)
+            group = create_chain_group(
+                args.name, args.profile_ids, store,
+                engine=args.engine, subscription_ids=sub_ids,
+            )
         else:
             return _command_help(args, "group create")
         store.add_group(group)
