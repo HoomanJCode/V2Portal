@@ -463,15 +463,17 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "group", aliases=["groups"],
         help="manage profile groups (balancers, chains, singles)",
         description=(
-            "A group lets you connect to multiple profiles at once.\n\n"
-            "  balancer  — pick the fastest/random/round-robin from a set\n"
-            "  chain     — route traffic through proxies in order\n"
-            "  single    — wrap one profile as a named group\n\n"
-            "VPN profiles (OpenVPN, OpenConnect) cannot join groups.\n\n"
-            "Examples:\n"
-            "  v2raycli group list\n"
-            "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
-            "  v2raycli group create chain tunnel ID_A ID_B"
+        "A group lets you connect to multiple profiles at once.\n\n"
+        "  balancer  — pick the fastest/random/round-robin from a set\n"
+        "  chain     — route traffic through proxies in order\n"
+        "  single    — wrap one profile as a named group\n\n"
+        "VPN profiles (OpenVPN, OpenConnect) cannot join groups.\n\n"
+        "Examples:\n"
+        "  v2raycli group list\n"
+        "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
+        "  v2raycli group create chain tunnel ID_A ID_B\n"
+        "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
+        "  v2raycli group add-sub GROUP_ID SUB_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -567,6 +569,62 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_remove.add_argument("id", help="group ID to remove")
+
+    group_add_member = group_commands.add_parser(
+        "add-member",
+        help="add a profile to a group",
+        description=(
+            "Add a profile to an existing group.\n\n"
+            "Examples:\n"
+            "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
+            "  v2raycli group add-member GROUP_ID PROFILE_A PROFILE_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_add_member.add_argument("id", help="group ID to modify")
+    group_add_member.add_argument("profile_ids", nargs="+", help="profile ID(s) to add")
+
+    group_remove_member = group_commands.add_parser(
+        "remove-member",
+        help="remove a profile from a group",
+        description=(
+            "Remove a profile from an existing group.\n\n"
+            "Examples:\n"
+            "  v2raycli group remove-member GROUP_ID PROFILE_ID\n"
+            "  v2raycli group remove-member GROUP_ID PROFILE_A PROFILE_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_remove_member.add_argument("id", help="group ID to modify")
+    group_remove_member.add_argument("profile_ids", nargs="+", help="profile ID(s) to remove")
+
+    group_add_sub = group_commands.add_parser(
+        "add-sub",
+        help="add a subscription to a group",
+        description=(
+            "Add a subscription to a group. Its profiles are resolved\n"
+            "dynamically and update when the subscription is refreshed.\n\n"
+            "Examples:\n"
+            "  v2raycli group add-sub GROUP_ID SUB_ID\n"
+            "  v2raycli group add-sub GROUP_ID SUB_A SUB_B"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_add_sub.add_argument("id", help="group ID to modify")
+    group_add_sub.add_argument("subscription_ids", nargs="+", help="subscription ID(s) to add")
+
+    group_remove_sub = group_commands.add_parser(
+        "remove-sub",
+        help="remove a subscription from a group",
+        description=(
+            "Remove a subscription from a group.\n\n"
+            "Examples:\n"
+            "  v2raycli group remove-sub GROUP_ID SUB_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group_remove_sub.add_argument("id", help="group ID to modify")
+    group_remove_sub.add_argument("subscription_ids", nargs="+", help="subscription ID(s) to remove")
 
     # -- test -----------------------------------------------------------------
     test = commands.add_parser(
@@ -1598,6 +1656,65 @@ def _group_command(store: ConfigStore, args) -> int:
             return 1
         store.save()
         print(f"removed group {args.id}")
+        return 0
+    if action == "add-member":
+        from .outbounds.groups import add_member, _resolve_members
+
+        group = store.get_group(args.id)
+        if group is None:
+            _not_found("group", args.id, store)
+            return 1
+        # Validate profiles exist before adding.
+        _resolve_members(store, args.profile_ids)
+        for pid in args.profile_ids:
+            add_member(group, pid)
+        store.save()
+        print(f"added {len(args.profile_ids)} profile(s) to {args.id}")
+        return 0
+    if action == "remove-member":
+        from .outbounds.groups import remove_member
+
+        group = store.get_group(args.id)
+        if group is None:
+            _not_found("group", args.id, store)
+            return 1
+        removed = 0
+        for pid in args.profile_ids:
+            before = len(group.profile_ids)
+            remove_member(group, pid)
+            if len(group.profile_ids) < before:
+                removed += 1
+        store.save()
+        print(f"removed {removed} profile(s) from {args.id}")
+        return 0
+    if action == "add-sub":
+        group = store.get_group(args.id)
+        if group is None:
+            _not_found("group", args.id, store)
+            return 1
+        added = 0
+        for sub_id in args.subscription_ids:
+            if store.get_subscription(sub_id) is None:
+                _not_found("subscription", sub_id, store)
+                return 1
+            if sub_id not in group.subscription_ids:
+                group.subscription_ids.append(sub_id)
+                added += 1
+        store.save()
+        print(f"added {added} subscription(s) to {args.id}")
+        return 0
+    if action == "remove-sub":
+        group = store.get_group(args.id)
+        if group is None:
+            _not_found("group", args.id, store)
+            return 1
+        removed = 0
+        for sub_id in args.subscription_ids:
+            if sub_id in group.subscription_ids:
+                group.subscription_ids.remove(sub_id)
+                removed += 1
+        store.save()
+        print(f"removed {removed} subscription(s) from {args.id}")
         return 0
     return _command_help(args, "group")
 

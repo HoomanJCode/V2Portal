@@ -138,6 +138,38 @@ def test_persisted_group_engine_rejects_unsupported_member(tmp_path):
         resolve_target(store, group)
 
 
+def test_add_member(tmp_path):
+    store, a, b = _store(tmp_path)
+    g = create_single_group("single", a.id)
+    store.add_group(g)
+    from v2raycli.outbounds.groups import add_member
+
+    add_member(g, b.id)
+    assert g.profile_ids == [a.id, b.id]
+
+
+def test_remove_member(tmp_path):
+    store, a, b = _store(tmp_path)
+    g = create_single_group("single", a.id)
+    g.profile_ids.append(b.id)
+    from v2raycli.outbounds.groups import remove_member
+
+    remove_member(g, b.id)
+    assert g.profile_ids == [a.id]
+
+
+def test_subscription_membership(tmp_path):
+    store, a, b = _store(tmp_path)
+    from v2raycli.models import Subscription
+
+    sub = store.add_subscription(Subscription(name="sub1", profile_ids=[b.id]))
+    g = create_balancer_group("bal", "latency", [a.id], store, subscription_ids=[sub.id])
+    assert sub.id in g.subscription_ids
+    t = resolve_target(store, g, default_engine="sing-box")
+    assert b.id in t.profile_ids
+    assert a.id in t.profile_ids
+
+
 def test_persisted_group_shape_is_validated(tmp_path):
     store, a, b = _store(tmp_path)
 
