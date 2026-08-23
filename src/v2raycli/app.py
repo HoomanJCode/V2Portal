@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from . import backup, config
+from .errors import V2RayCLIError
 from .storage import ConfigStore
 
 
@@ -1250,7 +1251,7 @@ def _command(store: ConfigStore, args) -> int:
         if command == "health":
             return _health_command(store, args.json)
         return _command_help(args)
-    except (OSError, ValueError, TypeError, KeyError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, V2RayCLIError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
