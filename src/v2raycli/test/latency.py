@@ -190,13 +190,22 @@ def probe_endpoint(profile, timeout: float = 5.0) -> EndpointResult:
 
 def probe_many(profiles, concurrency: int = 8, timeout: float = 5.0) -> list[EndpointResult]:
     """Probe endpoints concurrently while preserving profile input order."""
+    import sys
+    total = len(profiles)
     results: dict[str, EndpointResult] = {}
     workers = max(1, min(int(concurrency), 32))
+    if sys.stderr.isatty():
+        print(f"\rprobing {total} endpoints…", end="", file=sys.stderr, flush=True)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(probe_endpoint, profile, timeout): profile.id for profile in profiles}
         for future in as_completed(futures):
             result = future.result()
             results[result.profile_id] = result
+            if sys.stderr.isatty():
+                done = len(results)
+                print(f"\rprobing {done}/{total}…", end="", file=sys.stderr, flush=True)
+    if sys.stderr.isatty():
+        print("\rdone.              ", file=sys.stderr)
     return [results[profile.id] for profile in profiles]
 
 
@@ -205,14 +214,14 @@ def render_endpoint_table(results: list[EndpointResult]) -> None:
     from rich.table import Table
 
     table = Table(title="Endpoint probes")
-    for column in ("Name", "Endpoint", "ICMP", "TCP", "Status"):
+    for column in ("ID", "Name", "Endpoint", "ICMP", "TCP", "Status"):
         table.add_column(column)
     for result in results:
         icmp = f"{result.icmp_ms:.0f} ms" if result.icmp_ms is not None else result.icmp_status
         tcp = f"{result.tcp_ms:.0f} ms" if result.tcp_ms is not None else result.tcp_status
         status = "OK" if result.tcp_status == "ok" else (result.error or result.tcp_status)
         style = "green" if result.tcp_status == "ok" else "red"
-        table.add_row(result.name, f"{result.host}:{result.port or '-'}", icmp, tcp, status, style=style)
+        table.add_row(result.profile_id, result.name, f"{result.host}:{result.port or '-'}", icmp, tcp, status, style=style)
     Console().print(table)
 
 
@@ -475,8 +484,12 @@ def websocket_test_many(
     concurrency: int = 4,
     bin_dir=None,
 ) -> list[WebSocketResult]:
+    import sys
+    total = len(profiles)
     results: dict[str, WebSocketResult] = {}
     workers = max(1, min(int(concurrency), 16))
+    if sys.stderr.isatty():
+        print(f"\rtesting {total} websockets…", end="", file=sys.stderr, flush=True)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(test_websocket_profile, profile, settings, engines, bin_dir): profile.id
@@ -485,6 +498,11 @@ def websocket_test_many(
         for future in as_completed(futures):
             result = future.result()
             results[result.profile_id] = result
+            if sys.stderr.isatty():
+                done = len(results)
+                print(f"\rtesting {done}/{total} websockets…", end="", file=sys.stderr, flush=True)
+    if sys.stderr.isatty():
+        print("\rdone.              ", file=sys.stderr)
     return [results[profile.id] for profile in profiles]
 
 
@@ -493,14 +511,14 @@ def render_websocket_table(results: list[WebSocketResult]) -> None:
     from rich.table import Table
 
     table = Table(title="WebSocket tests")
-    for column in ("Name", "Endpoint", "Handshake", "Payload", "Status"):
+    for column in ("ID", "Name", "Endpoint", "Handshake", "Payload", "Status"):
         table.add_column(column)
     for result in results:
         handshake = f"{result.handshake_ms:.0f} ms" if result.handshake_ms is not None else result.handshake_status
         payload = f"{result.payload_ms:.0f} ms" if result.payload_ms is not None else result.payload_status
         ok = result.handshake_status == "ok" and result.payload_status == "ok"
         status = "skip" if result.not_testable else ("OK" if ok else (result.error or "FAIL"))
-        table.add_row(result.name, f"{result.host}:{result.port or '-'}", handshake, payload, status,
+        table.add_row(result.profile_id, result.name, f"{result.host}:{result.port or '-'}", handshake, payload, status,
                       style="green" if ok else ("dim" if result.not_testable else "red"))
     Console().print(table)
 
@@ -669,8 +687,12 @@ def test_many(
     concurrency: int = 8,
     bin_dir=None,
 ) -> list[TestResult]:
+    import sys
+    total = len(profiles)
     results: dict[str, TestResult] = {}
     workers = max(1, min(int(concurrency), 32))
+    if sys.stderr.isatty():
+        print(f"\rtesting {total} profiles…", end="", file=sys.stderr, flush=True)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(test_profile, p, settings, engines, bin_dir): p.id
@@ -679,6 +701,11 @@ def test_many(
         for future in as_completed(futures):
             result = future.result()
             results[result.profile_id] = result
+            if sys.stderr.isatty():
+                done = len(results)
+                print(f"\rtesting {done}/{total}…", end="", file=sys.stderr, flush=True)
+    if sys.stderr.isatty():
+        print("\rdone.              ", file=sys.stderr)
     return [results[p.id] for p in profiles]
 
 
@@ -750,6 +777,7 @@ def render_table(results: list[TestResult]) -> None:
 
     console = Console()
     table = Table(title="Outbound latency")
+    table.add_column("ID")
     table.add_column("Name")
     table.add_column("Kind")
     table.add_column("Engine")
@@ -769,7 +797,7 @@ def render_table(results: list[TestResult]) -> None:
             status, style = "OK", "green"
         else:
             status, style = "FAIL", "red"
-        table.add_row(result.name, result.kind, result.engine, connect, latency, status, style=style)
+        table.add_row(result.profile_id, result.name, result.kind, result.engine, connect, latency, status, style=style)
     console.print(table)
 
 
