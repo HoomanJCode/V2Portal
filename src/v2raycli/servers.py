@@ -151,7 +151,7 @@ class ServerManager:
             pass
 
         adapter = get_adapter(target.engine)
-        return adapter.generate(settings, self.store.config.routing, target)
+        return adapter.generate(settings, self.store.config.routing, target), target.engine
 
     def start(self, server_id: str) -> ServerState:
         """Start a server by its ID."""
@@ -166,7 +166,7 @@ class ServerManager:
             return state
 
         # Generate config
-        config = self._generate_server_config(server)
+        config, target_engine = self._generate_server_config(server)
 
         # Write runtime config
         config_dir = self.runtime_dir / f"server-{server_id}"
@@ -178,13 +178,6 @@ class ServerManager:
 
         # Resolve engine binary
         from .engines.binary import locate_binary
-
-        target_engine = config.get("_target_engine", "sing-box")
-        # Try to detect engine from config
-        if "dns" in config and "route" in config:
-            target_engine = "sing-box"
-        elif "routing" in config and "balancers" in config.get("routing", {}):
-            target_engine = "xray"
 
         binary = locate_binary(
             target_engine,

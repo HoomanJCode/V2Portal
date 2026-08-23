@@ -140,7 +140,7 @@ def test_server_config_includes_split_routing_targets(tmp_path):
         Server(name="s1", port=1080, outbound_id=main.id, outbound_type="profile")
     )
     mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
-    config = mgr._generate_server_config(server)
+    config, engine = mgr._generate_server_config(server)
 
     # The extra profile's outbound should be in the config.
     all_outbound_tags = [o.get("tag") for o in config.get("outbounds", [])]
@@ -172,7 +172,7 @@ def test_server_config_with_balancer_routing_target(tmp_path):
         Server(name="s1", port=1080, outbound_id=main.id, outbound_type="profile")
     )
     mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
-    config = mgr._generate_server_config(server)
+    config, engine = mgr._generate_server_config(server)
 
     all_outbound_tags = [o.get("tag") for o in config.get("outbounds", [])]
     # Both member profiles and the balancer group should be in the config.
