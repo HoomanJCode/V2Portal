@@ -96,13 +96,13 @@ def _merge_config(current: Config, incoming: Config) -> None:
     keys = {_profile_key(p) for p in profiles}
 
     for profile in incoming.profiles:
-        index = _index_of_id(profiles, profile.id)
-        if index is not None:
-            profiles[index] = profile  # update by id
-            continue
         key = _profile_key(profile)
         if key in keys:
-            continue  # duplicate; keep the existing profile
+            continue  # duplicate by key; keep the existing profile
+        index = _index_of_id(profiles, profile.id)
+        if index is not None:
+            profiles[index] = profile  # same id but different key → update
+            continue
         profiles.append(profile)
         keys.add(key)
 

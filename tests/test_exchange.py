@@ -125,8 +125,9 @@ def test_import_merge_updates_by_id(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="orig", kind="socks", outbound=SOCKS))
 
+    different_outbound = {"settings": {"servers": [{"address": "5.6.7.8", "port": 9090}]}}
     incoming = _store(tmp_path, "incoming.json")
-    incoming.add_profile(Profile(id=p.id, name="renamed", kind="socks", outbound=SOCKS))
+    incoming.add_profile(Profile(id=p.id, name="renamed", kind="socks", outbound=different_outbound))
     path = _export(tmp_path, incoming)
 
     exchange.import_full(store, path, mode="merge")

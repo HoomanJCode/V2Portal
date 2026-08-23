@@ -199,6 +199,24 @@ class ConfigStore:
         _models._id_counter = self._id_seq
         return f"{self._id_seq:03d}"
 
+    def _init_seq_from_config(self) -> None:
+        """Seed _id_seq from the highest numeric ID already in the config."""
+        max_id = 0
+        for entity_list in (
+            self.config.profiles,
+            self.config.subscriptions,
+            self.config.groups,
+            self.config.servers,
+            self.config.routing.rules,
+        ):
+            for item in entity_list:
+                try:
+                    max_id = max(max_id, int(item.id))
+                except (ValueError, TypeError):
+                    pass
+        self._id_seq = max_id
+        _models._id_counter = max_id
+
     @staticmethod
     def default() -> Config:
         return Config(
@@ -216,6 +234,7 @@ class ConfigStore:
     def load(self) -> Config:
         if not self.path.exists():
             self.config = self.default()
+            self._init_seq_from_config()
             self.save()
             return self.config
         try:
@@ -234,6 +253,7 @@ class ConfigStore:
             # Migrate older schemas to the current version
             if schema_version < config.SCHEMA_VERSION:
                 self._migrate(schema_version)
+            self._init_seq_from_config()
         except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
             raise ConfigLoadError(f"could not load config {self.path}: {exc}") from exc
         return self.config
