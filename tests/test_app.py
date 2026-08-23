@@ -37,7 +37,7 @@ def test_config_dir_flag(tmp_path):
 
 
 def test_headless_summary(tmp_path, capsys):
-    assert app.main(["--headless", "--config-dir", str(tmp_path)]) == 0
+    assert app.main(["--config-dir", str(tmp_path), "status"]) == 0
     out = capsys.readouterr().out
     assert "profiles: 0" in out
 
@@ -45,7 +45,7 @@ def test_headless_summary(tmp_path, capsys):
 def test_main_reports_malformed_config(tmp_path, capsys):
     (tmp_path / "config.json").write_text("{not-json")
 
-    assert app.main(["--headless", "--config-dir", str(tmp_path)]) == 1
+    assert app.main(["--config-dir", str(tmp_path), "status"]) == 1
     assert "config load failed" in capsys.readouterr().err
 
 
@@ -68,21 +68,23 @@ def test_probe_flag_resolves_scope_and_returns_failure(tmp_path, monkeypatch):
 
 
 def test_probe_parser_option():
-    args = app.build_parser().parse_args(["--probe", "all"])
+    args = app.build_parser().parse_args(["test", "endpoint", "all"])
 
-    assert args.probe == "all"
+    assert args.test_command == "endpoint"
+    assert args.scope == "all"
 
 
 def test_ws_test_parser_option():
-    args = app.build_parser().parse_args(["--ws-test", "all"])
+    args = app.build_parser().parse_args(["test", "websocket", "all"])
 
-    assert args.ws_test == "all"
+    assert args.test_command == "websocket"
+    assert args.scope == "all"
 
 
 def test_update_parser_option():
-    args = app.build_parser().parse_args(["--update", "both", "--proxy", "socks5://proxy.example:1080"])
+    args = app.build_parser().parse_args(["engine", "update", "both", "--proxy", "socks5://proxy.example:1080"])
 
-    assert args.update == "both"
+    assert args.engine == "both"
     assert args.proxy == "socks5://proxy.example:1080"
 
 

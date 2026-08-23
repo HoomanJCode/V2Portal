@@ -120,5 +120,5 @@ def test_app_auto_update_flag(tmp_path, monkeypatch):
     )
 
     # --no-auto-update must skip the fetch entirely.
-    assert app.main(["--no-auto-update", "--headless", "--config-dir", str(tmp_path)]) == 0
+    assert app.main(["--config-dir", str(tmp_path), "--no-auto-update", "status"]) == 0
     assert fetched == []

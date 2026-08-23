@@ -81,67 +81,9 @@ def build_parser() -> _SubcommandParser:
         help="skip auto-updating stale subscriptions on startup",
     )
     parser.add_argument(
-        "--headless", action="store_true",
-        help="[deprecated] print a summary and exit (legacy alias for 'status')",
-    )
-    parser.add_argument(
-        "--test",
-        metavar="SCOPE",
-        help="[deprecated] latency-test outbounds (use 'test latency' command)",
-    )
-    parser.add_argument(
-        "--probe",
-        metavar="SCOPE",
-        help="[deprecated] probe endpoints (use 'test endpoint' command)",
-    )
-    parser.add_argument(
-        "--ws-test",
-        metavar="SCOPE",
-        help="[deprecated] websocket test (use 'test websocket' command)",
-    )
-    parser.add_argument(
-        "--update",
-        choices=("sing-box", "xray", "both"),
-        metavar="ENGINE",
-        help="[deprecated] update engines (use 'engine update' command)",
-    )
-    parser.add_argument(
         "--proxy",
         metavar="URL",
         help="ephemeral HTTP/SOCKS proxy for engine updates (not stored)",
-    )
-    parser.add_argument("--backup", action="store_true",
-                        help="[deprecated] create a backup (use 'backup create')")
-    parser.add_argument("--list-backups", action="store_true",
-                        help="[deprecated] list backups (use 'backup list')")
-    parser.add_argument("--restore", metavar="PATH",
-                        help="[deprecated] restore backup (use 'backup restore')")
-    parser.add_argument("--export", metavar="PATH",
-                        help="[deprecated] export config (use 'config export')")
-    parser.add_argument(
-        "--redact", action="store_true",
-        help="[deprecated] mask credentials (use with 'config export')",
-    )
-    parser.add_argument(
-        "--import", dest="import_path", metavar="PATH",
-        help="[deprecated] import config (use 'config import')",
-    )
-    parser.add_argument(
-        "--replace", action="store_true",
-        help="[deprecated] replace on import (use 'config import --replace')",
-    )
-    parser.add_argument(
-        "--install-service",
-        metavar="ID",
-        help="[deprecated] install boot service (use 'service install')",
-    )
-    parser.add_argument(
-        "--uninstall-service", action="store_true",
-        help="[deprecated] remove boot service (use 'service uninstall')",
-    )
-    parser.add_argument(
-        "--health", action="store_true",
-        help="[deprecated] show subscription health (use 'health' command)",
     )
     _add_command_parser(parser)
     return parser
@@ -1156,13 +1098,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     backup.install_backup_hook(store)
 
-    if args.install_service:
-        return _install_service(store, args.install_service, args.config_dir)
-    if args.uninstall_service:
-        return _uninstall_service()
-    if args.health:
-        return _health(store)
-
     if args.command == "health":
         return _command(store, args)
     if args.command:
@@ -1177,31 +1112,6 @@ def main(argv: list[str] | None = None) -> int:
         _auto_update(store)
         _health_check(store)
 
-    if args.test:
-        return _test(store, args.test)
-
-    if args.probe:
-        return _probe(store, args.probe)
-
-    if args.ws_test:
-        return _ws_test(store, args.ws_test)
-
-    if args.update:
-        return _update(store, args.update, args.proxy)
-
-    if args.backup:
-        return _backup(store)
-    if args.list_backups:
-        return _list_backups()
-    if args.restore:
-        return _restore(store, args.restore)
-    if args.export:
-        return _export(store, args.export, args.redact)
-    if args.import_path:
-        return _import(store, args.import_path, args.replace)
-
-    # The CLI is deliberately non-interactive. The TUI modules remain
-    # available to downstream users, but stdin is never read implicitly.
     return _summary(store)
 
 
@@ -1289,6 +1199,8 @@ def _status(store: ConfigStore, as_json: bool = False) -> int:
 
 def _profile_command(store: ConfigStore, args) -> int:
     action = args.profile_command
+    if action is None:
+        action = "list"
     if action == "list":
         profiles = store.list_profiles()
         if getattr(args, "subscription", None):
@@ -1299,7 +1211,7 @@ def _profile_command(store: ConfigStore, args) -> int:
             {"id": p.id, "name": p.name, "kind": p.kind, "engine": p.engine, "source": p.source, "subscription_id": p.subscription_id}
             for p in profiles
         ]
-        if args.json:
+        if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         else:
             if rows:
@@ -1395,13 +1307,15 @@ def _profile_add_command(store: ConfigStore, args) -> int:
 
 def _subscription_command(store: ConfigStore, args) -> int:
     action = args.subscription_command
+    if action is None:
+        action = "list"
     if action == "list":
         statuses = []
         for sub in store.list_subscriptions():
             statuses.append(
                 {"id": sub.id, "name": sub.name, "profiles": len(sub.profile_ids), "url": sub.url}
             )
-        if args.json:
+        if getattr(args, 'json', False):
             print(json.dumps(statuses, ensure_ascii=False))
         elif statuses:
             for row in statuses:
@@ -1465,12 +1379,14 @@ def _subscription_command(store: ConfigStore, args) -> int:
 
 def _group_command(store: ConfigStore, args) -> int:
     action = args.group_command
+    if action is None:
+        action = "list"
     if action == "list":
         rows = [
             {"id": g.id, "name": g.name, "type": g.type, "strategy": g.strategy, "profiles": len(g.profile_ids)}
             for g in store.list_groups()
         ]
-        if args.json:
+        if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         elif rows:
             for row in rows:
@@ -1505,13 +1421,15 @@ def _group_command(store: ConfigStore, args) -> int:
 
 def _config_command(store: ConfigStore, args) -> int:
     action = args.config_command
+    if action is None:
+        action = "show"
     if action == "show":
         from .exchange import export_full
 
-        print(json.dumps(export_full(store, redact=args.redact), ensure_ascii=False, indent=2))
+        print(json.dumps(export_full(store, redact=getattr(args, 'redact', False)), ensure_ascii=False, indent=2))
         return 0
     if action == "export":
-        return _export(store, args.path, args.redact)
+        return _export(store, args.path, getattr(args, 'redact', False))
     if action == "import":
         return _import(store, args.path, args.replace)
     if action == "set":
@@ -1540,9 +1458,11 @@ def _routing_command(store: ConfigStore, args) -> int:
     from .routing.rules import add_rule
 
     action = args.routing_command
+    if action is None:
+        action = "list"
     if action == "list":
         rows = [rule.to_dict() for rule in store.config.routing.rules]
-        if args.json:
+        if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         else:
             print(f"mode={store.config.routing.mode}")
@@ -1614,12 +1534,14 @@ def _server_command(store: ConfigStore, args) -> int:
     from .models import Server
 
     action = args.server_command
+    if action is None:
+        action = "list"
     if action == "list":
         from .servers import ServerManager
 
         mgr = ServerManager(store)
         servers = store.list_servers()
-        if args.running:
+        if getattr(args, 'running', False):
             running_ids = set(mgr.list_running())
             servers = [s for s in servers if s.id in running_ids]
         rows = []
@@ -1631,7 +1553,7 @@ def _server_command(store: ConfigStore, args) -> int:
                 "outbound_id": s.outbound_id, "enabled": s.enabled,
                 "running": state.is_running() if state else False,
             })
-        if args.json:
+        if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         elif rows:
             for row in rows:

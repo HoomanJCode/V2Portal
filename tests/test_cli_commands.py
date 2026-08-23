@@ -63,7 +63,7 @@ def test_default_main_never_enters_tui(tmp_path, monkeypatch):
     monkeypatch.setattr(app.config, "ensure_dirs", lambda: None)
     monkeypatch.setattr(app, "_tui_available", lambda: (_ for _ in ()).throw(AssertionError("TUI invoked")))
 
-    assert app.main(["--headless", "--no-auto-update"]) == 0
+    assert app.main(["--no-auto-update", "status"]) == 0
 
 
 def test_profile_list_filter_by_subscription(tmp_path, capsys):
