@@ -342,6 +342,26 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     profile_rename.add_argument("id", help="profile ID to rename")
     profile_rename.add_argument("name", help="new display name")
 
+    profile_edit = profile_commands.add_parser(
+        "edit",
+        help="edit an existing profile's fields",
+        description=(
+            "Change fields on an existing profile. You can update the name,\n"
+            "host/address, port, and authentication for socks/http types.\n\n"
+            "Examples:\n"
+            "  v2raycli profile edit abc-123 --name 'New Name'\n"
+            "  v2raycli profile edit abc-123 --host 10.0.0.2 --port 1081\n"
+            "  v2raycli profile edit abc-123 --username u --password p"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    profile_edit.add_argument("id", help="profile ID to edit")
+    profile_edit.add_argument("--name", default=None, help="new display name")
+    profile_edit.add_argument("--host", default=None, help="new host/address")
+    profile_edit.add_argument("--port", type=int, default=None, help="new port")
+    profile_edit.add_argument("--username", default=None, help="new auth username")
+    profile_edit.add_argument("--password", default=None, help="new auth password")
+
     profile_export = profile_commands.add_parser(
         "export",
         help="print a share link for a profile",
@@ -1281,6 +1301,38 @@ def _profile_command(store: ConfigStore, args) -> int:
         edit_profile(store, args.id, name=args.name)
         store.save()
         print(f"renamed profile {args.id} -> {args.name}")
+        return 0
+    if action == "edit":
+        from .outbounds.manual import edit_profile
+
+        profile = store.get_profile(args.id)
+        if profile is None:
+            _not_found("profile", args.id, store)
+            return 1
+        updates = {}
+        if args.name is not None:
+            updates["name"] = args.name
+        if args.host is not None:
+            if "outbound" in profile.to_dict() and isinstance(profile.outbound, dict):
+                profile.outbound["server"] = args.host
+            else:
+                updates["name"] = profile.name  # only name is editable
+        if args.port is not None:
+            if "outbound" in profile.to_dict() and isinstance(profile.outbound, dict):
+                profile.outbound["server_port"] = args.port
+        if args.username is not None or args.password is not None:
+            if profile.kind in ("socks", "http") and isinstance(profile.outbound, dict):
+                users = profile.outbound.get("users", [])
+                if not users:
+                    users = [{}]
+                    profile.outbound["users"] = users
+                if args.username is not None:
+                    users[0]["user"] = args.username
+                if args.password is not None:
+                    users[0]["pass"] = args.password
+        edit_profile(store, args.id, **updates)
+        store.save()
+        print(f"updated profile {args.id}")
         return 0
     if action == "export":
         profile = store.get_profile(args.id)
