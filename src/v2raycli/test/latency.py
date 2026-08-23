@@ -692,6 +692,12 @@ def select_profiles(store, scope) -> list[Profile]:
         return store.list_profiles()
     if isinstance(scope, tuple) and scope and scope[0] == "subscription":
         return [p for p in store.list_profiles() if p.subscription_id == scope[1]]
+    if isinstance(scope, tuple) and scope and scope[0] == "group":
+        group = store.get_group(scope[1])
+        if group is None:
+            return []
+        ids = set(group.profile_ids)
+        return [p for p in store.list_profiles() if p.id in ids]
     if isinstance(scope, tuple) and scope and scope[0] == "profiles":
         ids = set(scope[1])
         return [p for p in store.list_profiles() if p.id in ids]

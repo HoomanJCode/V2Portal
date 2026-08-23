@@ -548,10 +548,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Test profiles to measure latency, check endpoint reachability,\n"
             "or validate WebSocket handshakes. Scope can be 'all', a\n"
-            "subscription ID, or a comma-separated list of profile IDs.\n\n"
+            "subscription ID, a group ID, or comma-separated profile IDs.\n\n"
             "Examples:\n"
             "  v2raycli test latency all\n"
             "  v2raycli test latency SUB_ID\n"
+            "  v2raycli test latency GROUP_ID\n"
             "  v2raycli test endpoint all\n"
             "  v2raycli test websocket ID_A,ID_B"
         ),
@@ -1855,8 +1856,11 @@ def _resolve_test_scope(store: ConfigStore, scope: str):
         return select_profiles(store, "all")
     if scope.strip() == "routing":
         return select_profiles(store, "routing_targets")
-    if len(ids) == 1 and store.get_subscription(ids[0]) is not None:
-        return select_profiles(store, ("subscription", ids[0]))
+    if len(ids) == 1:
+        if store.get_subscription(ids[0]) is not None:
+            return select_profiles(store, ("subscription", ids[0]))
+        if store.get_group(ids[0]) is not None:
+            return select_profiles(store, ("group", ids[0]))
     return select_profiles(store, ("profiles", ids))
 
 
