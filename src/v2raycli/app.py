@@ -1400,7 +1400,7 @@ def _subscription_command(store: ConfigStore, args) -> int:
                 print(f"{sub_id}  updated {len(profiles)} profiles")
                 for error in errors:
                     print(f"warning: {error}", file=sys.stderr)
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, V2RayCLIError) as exc:
                 failed = True
                 print(f"{sub_id}  update failed: {exc}", file=sys.stderr)
         store.save()

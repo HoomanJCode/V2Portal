@@ -554,7 +554,12 @@ def _http_latency(url: str, port: int, timeout: float = 10.0) -> tuple[bool, flo
             ok = response.status_code < 400
             return ok, elapsed, "" if ok else f"http {response.status_code}"
     except Exception as exc:
-        return False, (time.monotonic() - start) * 1000.0, str(exc)
+        msg = str(exc).split("\n")[0].strip()
+        if "Timeout" in type(exc).__name__ or "TimeoutError" in type(exc).__name__:
+            msg = "timeout"
+        elif "ConnectError" in type(exc).__name__:
+            msg = "connection failed"
+        return False, (time.monotonic() - start) * 1000.0, msg
 
 
 def _url_authority(url: str) -> tuple[str, int]:

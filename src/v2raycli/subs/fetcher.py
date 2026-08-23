@@ -54,13 +54,17 @@ def fetch(url: str, user_agent: str | None = None, proxy: str | None = None) -> 
             resp.raise_for_status()
             return resp.text, {k.lower(): v for k, v in resp.headers.items()}
     except httpx.TimeoutException:
-        raise FetchError("request timed out") from None
+        raise FetchError("request timed out — check your network or proxy") from None
     except httpx.ConnectError as exc:
         # Strip verbose SSL/library details — the proxy URL is enough context.
         msg = str(exc).split(": ", 1)[-1].split("\n")[0]
         hint = f" (proxy: {proxy})" if proxy else ""
-        raise FetchError(f"connection failed: {msg}{hint}") from exc
+        raise FetchError(f"connection failed — {msg}{hint}") from exc
     except httpx.HTTPStatusError as exc:
         raise FetchError(f"http {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
-        raise FetchError(str(exc)) from exc
+        # Keep the message short — strip verbose httpcore/h11 internals.
+        msg = str(exc).split("\n")[0].strip()
+        if len(msg) > 200:
+            msg = msg[:197] + "..."
+        raise FetchError(msg) from exc
