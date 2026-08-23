@@ -817,6 +817,27 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     engine_update.add_argument("--proxy",
                              help="HTTP/SOCKS proxy for the download (not stored)")
 
+    # -- completion -----------------------------------------------------------
+    completion_cmd = commands.add_parser(
+        "completion",
+        help="generate shell completion script",
+        description=(
+            "Print a shell completion script. Supports bash and zsh.\n\n"
+            "Examples:\n"
+            "  source <(v2raycli completion bash)     # bash\n"
+            "  source <(v2raycli completion zsh)      # zsh"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    completion_cmd.add_argument(
+        "shell", choices=("bash", "zsh"), nargs="?",
+        help="target shell for the completion script",
+    )
+    completion_cmd.add_argument(
+        "--complete", nargs=1, dest="complete_line",
+        help=argparse.SUPPRESS,
+    )
+
     # -- service ---------------------------------------------------------------
     service_command = commands.add_parser(
         "service",
@@ -1196,6 +1217,8 @@ def _command(store: ConfigStore, args) -> int:
             return _command_help(args, "backup")
         if command == "config":
             return _config_command(store, args)
+        if command == "completion":
+            return _completion_command(args)
         if command == "engine":
             if args.engine_command != "update":
                 return _command_help(args, "engine")
@@ -2096,6 +2119,121 @@ def _summary(store: ConfigStore) -> int:
         f"groups: {len(conf.groups)}"
     )
     return 0
+
+
+BASH_COMPLETION = '''# v2raycli bash completion — add to ~/.bashrc or ~/.bash_completion
+_v2raycli_complete() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local line="${COMP_LINE}"
+    local completions
+    completions=($(v2raycli completion --complete "$line"))
+    COMPREPLY=($(compgen -W "${completions[*]}" -- "$cur"))
+    return 0
+}
+complete -F _v2raycli_complete v2raycli
+'''
+
+ZSH_COMPLETION = '''#compdef v2raycli
+# v2raycli zsh completion — source from ~/.zshrc
+_v2raycli() {
+    local -a completions
+    local line="${words[*]}"
+    completions=(${(f)"$(v2raycli completion --complete "$line")"})
+    compadd -a completions
+}
+_v2raycli
+'''
+
+
+def _completion_command(args) -> int:
+    """Handle the completion command.
+
+    Without --complete, prints the shell script to stdout.
+    With --complete LINE, performs actual completion.
+    """
+    if args.complete_line:
+        return _do_complete(args.complete_line[0])
+    if args.shell == "bash":
+        print(BASH_COMPLETION)
+    elif args.shell == "zsh":
+        print(ZSH_COMPLETION)
+    return 0
+
+
+def _do_complete(raw_line: str) -> int:
+    """Perform actual word completion.
+
+    The line is the raw COMP_WORDS[*] from bash (words joined by spaces).
+    We detect the prefix and completed words from it.
+    """
+    trailing_space = raw_line.endswith(" ")
+    # Split into words; if trailing space, last "word" would be empty, so split captures it.
+    parts = raw_line.strip().split() if trailing_space else raw_line.rstrip().split()
+    if not parts or parts[0] != "v2raycli":
+        return 0
+
+    words = parts[1:]  # all words after "v2raycli"
+    if trailing_space:
+        prefix = ""
+    else:
+        prefix = words[-1] if words else ""
+        words = words[:-1] if words else []
+
+    # Walk completed words to the deepest subparser.
+    parser = build_parser()
+    current = _walk_parser(parser, words)
+
+    # Collect completions at this level filtered by prefix.
+    completions = _collect_actions(current)
+
+    # If prefix exactly matches a subcommand, also show its children.
+    for c in sorted(set(completions)):
+        if c == prefix:
+            sub = _walk_parser(current, [prefix])
+            completions = list(set(completions + _collect_actions(sub)))
+            break
+
+    for c in sorted(set(completions)):
+        if c.startswith(prefix):
+            print(c)
+    return 0
+
+
+def _walk_parser(parser: argparse.ArgumentParser, words: list[str]) -> argparse.ArgumentParser:
+    """Walk completed words through the parser tree."""
+    current = parser
+    for word in words:
+        found = False
+        for action in current._actions:  # type: ignore[attr-defined]
+            if isinstance(action, argparse._SubParsersAction):
+                if word in action._name_parser_map:
+                    current = action._name_parser_map[word]
+                    found = True
+                    break
+        if not found:
+            break
+    return current
+
+
+def _collect_actions(parser: argparse.ArgumentParser) -> list[str]:
+    """Collect available subcommands and option strings from a parser."""
+    completions: list[str] = []
+    for action in parser._actions:  # type: ignore[attr-defined]
+        if isinstance(action, argparse._SubParsersAction):
+            completions.extend(action._name_parser_map.keys())
+        else:
+            for opt in (action.option_strings or []):
+                completions.append(opt)
+            if action.choices:
+                completions.extend(action.choices)
+    return completions
+
+
+def _print_completions(completions: list[str], prefix: str) -> None:
+    """Print completions that match the current partial word."""
+    for c in sorted(set(completions)):
+        if c.startswith(prefix):
+            print(c)
 
 
 if __name__ == "__main__":
