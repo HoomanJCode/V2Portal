@@ -90,4 +90,4 @@ def test_cli_launches_and_exits_on_pty(tmp_path):
     assert rc == 0, f"CLI exited {rc}; output:\n{text}"
     # The CLI prints a summary (version + config path + counts).
     assert "v2raycli" in text
-    assert "profiles:" in text
+    assert "profiles" in text

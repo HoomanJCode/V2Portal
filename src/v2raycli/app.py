@@ -1306,13 +1306,28 @@ def _profile_command(store: ConfigStore, args) -> int:
         ]
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
-        else:
-            if rows:
+        elif rows:
+            if sys.stdout.isatty():
+                from rich.console import Console
+                from rich.table import Table
+
+                table = Table(title="Profiles", border_style="dim")
+                table.add_column("ID", style="dim")
+                table.add_column("Kind")
+                table.add_column("Engine")
+                table.add_column("Name")
+                table.add_column("Source")
+                for row in rows:
+                    sub = row["subscription_id"] or ""
+                    src = f"sub:{sub}" if sub else row["source"]
+                    table.add_row(row["id"], row["kind"], row["engine"], row["name"], src)
+                Console().print(table)
+            else:
                 for row in rows:
                     sub = f"  sub={row['subscription_id']}" if row["subscription_id"] else ""
                     print(f"{row['id']}  {row['kind']:<11} {row['engine']:<8} {row['name']}{sub}")
-            else:
-                print("no profiles")
+        else:
+            print("no profiles")
         return 0
     if action == "add":
         return _profile_add_command(store, args)
@@ -1443,8 +1458,21 @@ def _subscription_command(store: ConfigStore, args) -> int:
         if getattr(args, 'json', False):
             print(json.dumps(statuses, ensure_ascii=False))
         elif statuses:
-            for row in statuses:
-                print(f"{row['id']}  {row['profiles']:>3} profiles  {row['name']}  {row['url']}")
+            if sys.stdout.isatty():
+                from rich.console import Console
+                from rich.table import Table
+
+                table = Table(title="Subscriptions", border_style="dim")
+                table.add_column("ID", style="dim")
+                table.add_column("Name")
+                table.add_column("Profiles", justify="right")
+                table.add_column("URL")
+                for row in statuses:
+                    table.add_row(row["id"], row["name"], str(row["profiles"]), row["url"])
+                Console().print(table)
+            else:
+                for row in statuses:
+                    print(f"{row['id']}  {row['profiles']:>3} profiles  {row['name']}  {row['url']}")
         else:
             print("no subscriptions")
         return 0
@@ -1519,10 +1547,26 @@ def _group_command(store: ConfigStore, args) -> int:
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         elif rows:
-            for row in rows:
-                subs = row["sub_label"]
-                tag = f"{row['profiles']:>2}p" + (f" {subs}" if subs else "")
-                print(f"{row['id']}  {row['type']:<8} {row['strategy']:<10} {tag:<10} {row['name']}")
+            if sys.stdout.isatty():
+                from rich.console import Console
+                from rich.table import Table
+
+                table = Table(title="Groups", border_style="dim")
+                table.add_column("ID", style="dim")
+                table.add_column("Type")
+                table.add_column("Strategy")
+                table.add_column("Members", justify="right")
+                table.add_column("Name")
+                for row in rows:
+                    subs = row["sub_label"]
+                    tag = f"{row['profiles']}p" + (f" +{subs}" if subs else "")
+                    table.add_row(row["id"], row["type"], row["strategy"], tag, row["name"])
+                Console().print(table)
+            else:
+                for row in rows:
+                    subs = row["sub_label"]
+                    tag = f"{row['profiles']:>2}p" + (f" {subs}" if subs else "")
+                    print(f"{row['id']}  {row['type']:<8} {row['strategy']:<10} {tag:<10} {row['name']}")
         else:
             print("no groups")
         return 0
@@ -1601,6 +1645,28 @@ def _routing_command(store: ConfigStore, args) -> int:
         rows = [rule.to_dict() for rule in store.config.routing.rules]
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
+        elif sys.stdout.isatty():
+            from rich.console import Console
+            from rich.table import Table
+
+            mode_style = "[green]split[/green]" if store.config.routing.mode == "split" else "[dim]all[/dim]"
+            table = Table(title=f"Routing — mode={mode_style}", border_style="dim")
+            table.add_column("ID", style="dim")
+            table.add_column("Action")
+            table.add_column("Target")
+            table.add_column("Match")
+            for row in rows:
+                target = row["target_id"] or "selected"
+                match = row["match"]
+                values = ", ".join(
+                    f"{key}={','.join(value)}" for key, value in match.items() if value
+                )
+                action_style = {"proxy": "green", "direct": "yellow", "block": "red"}.get(row["action"], "")
+                action = f"[{action_style}]{row['action']}[/{action_style}]" if action_style else row["action"]
+                if not row.get("enabled", True):
+                    action = f"[dim]{action} [disabled][/dim]"
+                table.add_row(row["id"], action, target, values)
+            Console().print(table)
         else:
             print(f"mode={store.config.routing.mode}")
             for row in rows:
@@ -1703,10 +1769,27 @@ def _server_command(store: ConfigStore, args) -> int:
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
         elif rows:
-            for row in rows:
-                status = "running" if row["running"] else "stopped"
-                target = f"{row['outbound_type']}/{row['outbound_name']}" if row["outbound_name"] else row["outbound_type"]
-                print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {status:<8} {target}")
+            if sys.stdout.isatty():
+                from rich.console import Console
+                from rich.table import Table
+
+                table = Table(title="Servers", border_style="dim")
+                table.add_column("ID", style="dim")
+                table.add_column("Port", justify="right")
+                table.add_column("Protocol")
+                table.add_column("Status")
+                table.add_column("Outbound")
+                table.add_column("Name")
+                for row in rows:
+                    status = "[green]running[/green]" if row["running"] else "[dim]stopped[/dim]"
+                    target = f"{row['outbound_type']}/{row['outbound_name']}" if row.get("outbound_name") else row["outbound_type"]
+                    table.add_row(row["id"], str(row["port"]), row["protocol"], status, target, row["name"])
+                Console().print(table)
+            else:
+                for row in rows:
+                    status = "running" if row["running"] else "stopped"
+                    target = f"{row['outbound_type']}/{row['outbound_name']}" if row.get("outbound_name") else row["outbound_type"]
+                    print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {status:<8} {target}")
         else:
             print("no servers")
         return 0
@@ -1757,12 +1840,12 @@ def _server_command(store: ConfigStore, args) -> int:
                     state = mgr.start(s.id)
                     if state.error:
                         failed = True
-                        print(f"{s.id}  failed: {state.error}", file=sys.stderr)
+                        _status_line(s.id, "FAILED", state.error)
                     else:
-                        print(f"{s.id}  started on :{s.port}")
+                        _status_line(s.id, "started", f":{s.port}")
                 except (ValueError, OSError) as exc:
                     failed = True
-                    print(f"{s.id}  failed: {exc}", file=sys.stderr)
+                    _status_line(s.id, "FAILED", str(exc))
             return 1 if failed else 0
         if not args.id:
             print("server start requires ID or --all", file=sys.stderr)
@@ -1773,10 +1856,10 @@ def _server_command(store: ConfigStore, args) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if state.error:
-            print(f"failed: {state.error}", file=sys.stderr)
+            _status_line(state.server_id, "FAILED", state.error)
             return 1
         server = store.get_server(args.id)
-        print(f"{state.server_id}  started on :{server.port}")
+        _status_line(state.server_id, "started", f":{server.port}")
         return 0
 
     if action == "stop":
@@ -1815,12 +1898,12 @@ def _server_command(store: ConfigStore, args) -> int:
                     state = mgr.start(s.id)
                     if state.error:
                         failed = True
-                        print(f"{s.id}  failed: {state.error}", file=sys.stderr)
+                        _status_line(s.id, "FAILED", state.error)
                     else:
-                        print(f"{s.id}  restarted on :{s.port}")
+                        _status_line(s.id, "restarted", f":{s.port}")
                 except (ValueError, OSError) as exc:
                     failed = True
-                    print(f"{s.id}  failed: {exc}", file=sys.stderr)
+                    _status_line(s.id, "FAILED", str(exc))
             return 1 if failed else 0
         if not args.id:
             print("server restart requires ID or --all", file=sys.stderr)
@@ -1832,10 +1915,10 @@ def _server_command(store: ConfigStore, args) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         if state.error:
-            print(f"failed: {state.error}", file=sys.stderr)
+            _status_line(state.server_id, "FAILED", state.error)
             return 1
         server = store.get_server(args.id)
-        print(f"{state.server_id}  restarted on :{server.port}")
+        _status_line(state.server_id, "restarted", f":{server.port}")
         return 0
 
     if action == "remove":
@@ -1917,12 +2000,32 @@ def _health(store: ConfigStore) -> int:
     if not statuses:
         print("no subscriptions")
         return 0
-    for status in statuses:
-        state = "EXPIRED" if status["expired"] else ("expiring" if status["expiring"] else "ok")
-        expiry = status["expires"].strftime("%Y-%m-%d") if status["expires"] else "-"
-        print(
-            f"{status['name']:<24} {state:<9} {expiry:<12} {human_bytes(status['traffic_used'])}"
-        )
+    if sys.stdout.isatty():
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(title="Subscription Health", border_style="dim")
+        table.add_column("Name")
+        table.add_column("Status")
+        table.add_column("Expiry")
+        table.add_column("Traffic", justify="right")
+        for status in statuses:
+            if status["expired"]:
+                state = "[bold red]EXPIRED[/bold red]"
+            elif status["expiring"]:
+                state = f"[yellow]expiring ({status['days_left']}d)[/yellow]"
+            else:
+                state = "[green]ok[/green]"
+            expiry = status["expires"].strftime("%Y-%m-%d") if status["expires"] else "-"
+            table.add_row(status["name"], state, expiry, human_bytes(status["traffic_used"]))
+        Console().print(table)
+    else:
+        for status in statuses:
+            state = "EXPIRED" if status["expired"] else ("expiring" if status["expiring"] else "ok")
+            expiry = status["expires"].strftime("%Y-%m-%d") if status["expires"] else "-"
+            print(
+                f"{status['name']:<24} {state:<9} {expiry:<12} {human_bytes(status['traffic_used'])}"
+            )
     return 0
 
 
@@ -2109,15 +2212,42 @@ def _tui_available() -> bool:
     return True
 
 
+def _status_line(server_id: str, action: str, detail: str = "") -> None:
+    """Print a color-coded server status line."""
+    if sys.stdout.isatty():
+        color = {"started": "32", "restarted": "33", "stopped": "33", "FAILED": "31"}.get(action, "0")
+        print(f"\033[1m{server_id}\033[0m  \033[{color}m{action}\033[0m  {detail}")
+    else:
+        print(f"{server_id}  {action}  {detail}")
+
+
 def _summary(store: ConfigStore) -> int:
     conf = store.config
-    print(f"v2raycli v{__version__}")
-    print(f"config: {store.path}")
-    print(
-        f"profiles: {len(conf.profiles)}  "
-        f"subscriptions: {len(conf.subscriptions)}  "
-        f"groups: {len(conf.groups)}"
-    )
+    if sys.stdout.isatty():
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.table import Table
+
+        console = Console()
+        table = Table(title=None, show_header=False, box=None, padding=(0, 1))
+        table.add_column("", style="bold")
+        table.add_column("")
+        table.add_row("version", f"v{__version__}")
+        table.add_row("config", str(store.path))
+        table.add_row("profiles", str(len(conf.profiles)))
+        table.add_row("subscriptions", str(len(conf.subscriptions)))
+        table.add_row("groups", str(len(conf.groups)))
+        table.add_row("servers", str(len(conf.servers)))
+        table.add_row("routing mode", conf.routing.mode)
+        console.print(Panel(table, title=f"v2raycli v{__version__}", border_style="blue"))
+    else:
+        print(f"v2raycli v{__version__}")
+        print(f"config: {store.path}")
+        print(
+            f"profiles: {len(conf.profiles)}  "
+            f"subscriptions: {len(conf.subscriptions)}  "
+            f"groups: {len(conf.groups)}"
+        )
     return 0
 
 
