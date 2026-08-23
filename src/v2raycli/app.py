@@ -1168,6 +1168,26 @@ def _command(store: ConfigStore, args) -> int:
         return 1
 
 
+def _not_found(entity: str, bad_id: str, store: ConfigStore) -> None:
+    """Print an error and list available IDs for *entity*."""
+    print(f"unknown {entity} id: {bad_id}", file=sys.stderr)
+    if entity == "profile":
+        for p in store.list_profiles():
+            print(f"  {p.id}  {p.name}", file=sys.stderr)
+    elif entity == "server":
+        for s in store.list_servers():
+            print(f"  {s.id}  :{s.port}  {s.name}", file=sys.stderr)
+    elif entity == "group":
+        for g in store.list_groups():
+            print(f"  {g.id}  {g.name}", file=sys.stderr)
+    elif entity == "subscription":
+        for s in store.list_subscriptions():
+            print(f"  {s.id}  {s.name}", file=sys.stderr)
+    elif entity == "rule":
+        for r in store.config.routing.rules:
+            print(f"  {r.id}  {r.action}  {r.match}", file=sys.stderr)
+
+
 def _command_help(args, command: str | None = None) -> int:
     """Return a useful exit code for an incomplete command."""
     parser = build_parser()
@@ -1227,7 +1247,7 @@ def _profile_command(store: ConfigStore, args) -> int:
         from .outbounds.manual import remove_profile
 
         if not remove_profile(store, args.id):
-            print(f"unknown profile id: {args.id}", file=sys.stderr)
+            _not_found("profile", args.id, store)
             return 1
         store.save()
         print(f"removed profile {args.id}")
@@ -1242,7 +1262,7 @@ def _profile_command(store: ConfigStore, args) -> int:
     if action == "export":
         profile = store.get_profile(args.id)
         if profile is None:
-            print(f"unknown profile id: {args.id}", file=sys.stderr)
+            _not_found("profile", args.id, store)
             return 1
         from .subs.share import ShareLinkError, encode_link
 
@@ -1365,7 +1385,7 @@ def _subscription_command(store: ConfigStore, args) -> int:
     if action == "remove":
         sub = store.get_subscription(args.id)
         if sub is None:
-            print(f"unknown subscription id: {args.id}", file=sys.stderr)
+            _not_found("subscription", args.id, store)
             return 1
         for profile in list(store.config.profiles):
             if profile.subscription_id == args.id:
@@ -1411,7 +1431,7 @@ def _group_command(store: ConfigStore, args) -> int:
         return 0
     if action == "remove":
         if not store.remove_group(args.id):
-            print(f"unknown group id: {args.id}", file=sys.stderr)
+            _not_found("group", args.id, store)
             return 1
         store.save()
         print(f"removed group {args.id}")
@@ -1498,7 +1518,7 @@ def _routing_command(store: ConfigStore, args) -> int:
         return 0
     if action == "remove":
         if not store.remove_rule(args.id):
-            print(f"unknown rule id: {args.id}", file=sys.stderr)
+            _not_found("rule", args.id, store)
             return 1
         store.save()
         print(f"removed rule {args.id}")
@@ -1507,7 +1527,7 @@ def _routing_command(store: ConfigStore, args) -> int:
         rules = store.config.routing.rules
         index = next((i for i, r in enumerate(rules) if r.id == args.id), None)
         if index is None:
-            print(f"unknown rule id: {args.id}", file=sys.stderr)
+            _not_found("rule", args.id, store)
             return 1
         swap = index - 1 if args.direction == "up" else index + 1
         if swap < 0 or swap >= len(rules):
@@ -1520,7 +1540,7 @@ def _routing_command(store: ConfigStore, args) -> int:
     if action in ("enable", "disable"):
         rule = next((r for r in store.config.routing.rules if r.id == args.id), None)
         if rule is None:
-            print(f"unknown rule id: {args.id}", file=sys.stderr)
+            _not_found("rule", args.id, store)
             return 1
         rule.enabled = action == "enable"
         store.save()
@@ -1573,14 +1593,14 @@ def _server_command(store: ConfigStore, args) -> int:
         if args.profile:
             profile = store.get_profile(args.profile)
             if profile is None:
-                print(f"unknown profile id: {args.profile}", file=sys.stderr)
+                _not_found("profile", args.profile, store)
                 return 1
             server.outbound_id = args.profile
             server.outbound_type = "profile"
         else:
             group = store.get_group(args.group)
             if group is None:
-                print(f"unknown group id: {args.group}", file=sys.stderr)
+                _not_found("group", args.group, store)
                 return 1
             server.outbound_id = args.group
             server.outbound_type = "group"
@@ -1649,7 +1669,7 @@ def _server_command(store: ConfigStore, args) -> int:
         mgr = ServerManager(store)
         mgr.stop(args.id)  # stop if running (ignore result)
         if not store.remove_server(args.id):
-            print(f"unknown server id: {args.id}", file=sys.stderr)
+            _not_found("server", args.id, store)
             return 1
         store.save()
         print(f"removed server {args.id}")
