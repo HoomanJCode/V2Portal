@@ -1027,7 +1027,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     server_add.add_argument("--port", type=int, required=True, help="port to listen on")
-    server_outbound = server_add.add_mutually_exclusive_group(required=True)
+    server_outbound = server_add.add_mutually_exclusive_group()
     server_outbound.add_argument("--profile", help="profile ID to forward to")
     server_outbound.add_argument("--group", help="group ID to forward to")
     server_add.add_argument("--name", default="", help="display name for this server")
@@ -1597,13 +1597,15 @@ def _server_command(store: ConfigStore, args) -> int:
                 return 1
             server.outbound_id = args.profile
             server.outbound_type = "profile"
-        else:
+        elif args.group:
             group = store.get_group(args.group)
             if group is None:
                 _not_found("group", args.group, store)
                 return 1
             server.outbound_id = args.group
             server.outbound_type = "group"
+        else:
+            server.outbound_type = "direct"
         store.add_server(server)
         store.save()
         print(server.id)

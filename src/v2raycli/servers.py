@@ -121,10 +121,17 @@ class ServerManager:
         """Generate engine config for a single server."""
         from .engines import get_adapter, resolve_engine
         from .models import Profile, Group
-        from .outbounds.groups import enrich_target_with_routing, resolve_target
+        from .outbounds.groups import Target, enrich_target_with_routing, resolve_target
 
         # Resolve the outbound
-        if server.outbound_type == "profile":
+        if server.outbound_type == "direct":
+            # No proxy — traffic goes directly through the engine.
+            target = Target(
+                type="single",
+                engine=self.store.config.settings.default_engine,
+                profiles=[],
+            )
+        elif server.outbound_type == "profile":
             profile = self.store.get_profile(server.outbound_id)
             if profile is None:
                 raise ValueError(f"unknown profile id: {server.outbound_id}")

@@ -225,7 +225,11 @@ class XrayAdapter(EngineAdapter):
                 }
             outbounds.append(outbound)
 
-        selected = target.profiles[-1].id if target.type == "chain" else target.profiles[0].id
+        # Direct mode: no profiles → route straight to the direct outbound.
+        if not target.profiles:
+            selected = "direct"
+        else:
+            selected = target.profiles[-1].id if target.type == "chain" else target.profiles[0].id
         balancers: list[dict] = []
         if target.type == "balancer":
             balancers.append(
