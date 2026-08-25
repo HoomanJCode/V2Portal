@@ -1935,6 +1935,20 @@ def _routing_command(store: ConfigStore, args) -> int:
     return _command_help(args, "routing")
 
 
+def _outbound_label(row: dict) -> str:
+    """Render a server's outbound target including its ID.
+
+    Examples: 'profile/002 (US proxy)', 'group/001 (mygroup)', 'direct (device)'.
+    """
+    if row["outbound_type"] == "direct":
+        return "direct (device)"
+    label = f"{row['outbound_type']}/{row['outbound_id']}"
+    name = row.get("outbound_name") or ""
+    if name and name != row["outbound_id"]:
+        label += f" ({name})"
+    return label
+
+
 def _server_command(store: ConfigStore, args) -> int:
     from .models import Server
 
@@ -1984,14 +1998,12 @@ def _server_command(store: ConfigStore, args) -> int:
                 table.add_column("Name")
                 for row in rows:
                     status = "[green]running[/green]" if row["running"] else "[dim]stopped[/dim]"
-                    target = f"{row['outbound_type']}/{row['outbound_name']}" if row.get("outbound_name") else row["outbound_type"]
-                    table.add_row(row["id"], str(row["port"]), row["protocol"], status, target, row["name"])
+                    table.add_row(row["id"], str(row["port"]), row["protocol"], status, _outbound_label(row), row["name"])
                 Console().print(table)
             else:
                 for row in rows:
                     status = "running" if row["running"] else "stopped"
-                    target = f"{row['outbound_type']}/{row['outbound_name']}" if row.get("outbound_name") else row["outbound_type"]
-                    print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {status:<8} {target}")
+                    print(f"{row['id']}  :{row['port']:<5} {row['protocol']:<6} {status:<8} {_outbound_label(row)}")
         else:
             print("no servers")
         return 0

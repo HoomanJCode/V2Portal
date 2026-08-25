@@ -60,6 +60,19 @@ def test_server_list_json(tmp_path, capsys):
     assert data[0]["port"] == 1080
 
 
+def test_server_list_shows_outbound_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="US proxy", kind="socks", outbound=SOCKS))
+    server = Server(name="s1", port=1080, outbound_id=profile.id, outbound_type="profile")
+    store.add_server(server)
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "list"])
+    assert app._server_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert f"profile/{profile.id} (US proxy)" in out
+
+
 def test_server_add_requires_profile_or_group(tmp_path, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
