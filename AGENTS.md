@@ -6,6 +6,8 @@ Project: `v2raycli` — an interactive v2ray CLI client (sing-box + xray-core).
 
 - `PLAN.md` — architecture, decisions, data model, config mapping.
 - `todos/README.md` — phase index and ordering. Execute phases in numeric order.
+- **Active refactor:** universal ID model & dynamic resolution (see
+  `todos/README.md`; phases `todos/0X-*.md`). Phase 01 is next.
 
 ## Workflow
 

@@ -15,3 +15,17 @@ do these todos in priority and mark as down if passed.
 > * [x] tell me how can i do it and write a doc page about this: i want pass epicgames traffic using berlin profile and youtube traffic from group 1, then other from a sub2 (subscription) and about some specific russian websites i want direct traffic not proxy over any profile.
 > * [x] for server list should write what profile its redirecting and the path is going
 > * [x] don't ask profile or subscription dedicated in commands — IDs are unique so detect automatically (group create / add-member / remove-member now accept mixed profile+subscription IDs)
+
+---
+
+# Refactor — universal ID & resource model
+
+> Plan: `todos/README.md`, phases `todos/01-*.md` … `todos/06-*.md`. Execute in order.
+
+- [x] Phase 01 core: sample of resolution helpers landed earlier (classify_id / classify_ids)
+- [ ] Phase 01 — `resolve_refs` / `subscription_target` / `resolve_target` v2 (nested groups, cycles, dedup)
+- [ ] Phase 02 — uniform command shape (`group add`, per-resource `edit`, flags removed)
+- [ ] Phase 03 — servers accept profile | subscription | group outbound refs
+- [ ] Phase 04 — referential integrity on every remove path
+- [ ] Phase 05 — connect / TUI / service accept any ref
+- [ ] Phase 06 — test sweep, docs, final verification
