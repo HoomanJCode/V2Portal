@@ -1,4 +1,4 @@
-# Phase 06 — Test sweep, docs & final verification
+# Phase 06 — Test sweep, docs & final verification ✅
 
 **Goal:** prove the whole refactor with a comprehensive test pass and
 document the new uniform model.
@@ -38,16 +38,16 @@ Write scenario tests that exercise the *entire* lifecycle on one store:
 - `todos.md` (root checklist): mark the whole refactor done with a summary
   of what changed.
 
-### 6.4 Final verification
+### 6.4 Final verification ✅
 
-- `pytest` full suite green.
-- Manual smoke: `v2raycli group add`, `v2raycli server add --port 1080
-  <subid>`, `v2raycli connect <subid>` (temp), `v2raycli subscription edit`,
-  TUI connect picker shows subs/groups.
+- `pytest` full suite green: **555 passed**.
+- Manual smoke: `group add` (mixed refs + nested), `server add REF`,
+  `server edit --outbound`, `subscription edit/rename`, remove-prune
+  summaries, `connect --help` — all verified live.
 - Commit: `Refactor: universal id model, dynamic resolution, uniform CLI`.
 
 ## Exit criteria
 
-- Everything above, committed; suite green; README/PLAN updated.
+- Everything green, committed; suite green; README/PLAN updated.
 - The refactor is user-visible only as: simpler commands, more acceptance
   of ids everywhere, dynamic servers/groups, no per-purpose flags.

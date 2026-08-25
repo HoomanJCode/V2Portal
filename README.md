@@ -117,68 +117,73 @@ validation. The full command layout is:
 
 ```text
 profile       list | add | rename | edit | remove | export
-subscription  list | add | update | remove       (aliases: sub, subscriptions)
-group          list | create balancer | create chain | remove   (alias: groups)
-server        list | add | start | stop | restart | remove    (alias: sv)
-test          latency | endpoint | websocket
+subscription  list | add | edit | rename | update | remove  (aliases: sub, subscriptions)
+group         list | add | edit | remove | add-member | remove-member  (alias: groups)
+server        list | add | edit | start | stop | restart | remove  (alias: sv)
+connect       REF
+routing       list | mode | add | move | enable | disable | remove
 backup        create | list | restore
 config        show | set | export | import
 engine        update
 service       install | uninstall
-routing       list | mode | add | move | remove
+test          latency | endpoint | websocket
 completion    bash | zsh
-status        health
 ```
+
+**One ID space, auto-detected references.** Every entity — profile,
+subscription, group, server — has a unique ID from a single counter. Any
+command that takes a *target reference* accepts a **profile, subscription, or
+group ID** and detects the type automatically. References are resolved at use
+time: a subscription always contributes its *current* profiles, nested groups
+expand recursively (with dedup and cycle protection), so updated
+subscriptions flow everywhere automatically.
 
 Examples:
 
 ```bash
-# Add a manual proxy
+# Add a manual profile
 v2raycli profile add socks office-proxy 127.0.0.1 1080
 v2raycli profile add share us-node 'vless://...'
-v2raycli profile rename PROFILE_ID 'Office proxy'
+v2raycli profile edit ID --name "Office proxy" --host 10.0.0.2
 
 # Import a subscription
-v2raycli subscription add my-provider https://example.com/sub --proxy socks5://127.0.0.1:1080
+v2raycli subscription add my-provider https://example.com/sub
+v2raycli subscription edit SUB_ID --name 'Renamed provider'
 v2raycli profile list --subscription SUB_ID
 
-# Start a proxy server on a port
-v2raycli server add --port 1080 --profile PROFILE_ID --name 'US proxy'
+# Groups accept profiles, subscriptions, and other groups (auto-detected)
+v2raycli group add balancer fastest PROFILE_A SUB_ID GROUP_B --strategy latency
+v2raycli group add chain chained PROFILE_A PROFILE_B
+v2raycli group edit GROUP_ID --strategy random
+
+# Start a proxy server on a port — REF is auto-detected
+v2raycli server add --port 1080 REF --name 'US proxy'
+v2raycli server edit SERVER_ID --outbound REF
 v2raycli server start SERVER_ID
 
 # Servers run in the background and survive terminal close.
-# Manage them afterwards:
 v2raycli server list
 v2raycli sv stop SERVER_ID
+v2raycli sv restart --all
 
 # Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
 v2raycli profile list --kind socks
 
-# Manage servers — start/stop/restart default to --all when no ID given
-v2raycli sv start
-v2raycli sv stop
-v2raycli sv restart SERVER_ID
-v2raycli sv restart --all
-
 # Test by group, subscription, or profile ID
 v2raycli test latency GROUP_ID
 v2raycli test endpoint SUB_ID
 
-# Edit an existing profile
-v2raycli profile edit PROFILE_ID --name "New Name" --host 10.0.0.2 --port 1081
+# Connect by any reference (runs until Ctrl+C)
+v2raycli connect SUB_ID
 
-# Create groups and routing rules
-v2raycli group create balancer fastest PROFILE_A PROFILE_B --strategy latency
-v2raycli group create chain chained PROFILE_A PROFILE_B
+# Routing rules can target any reference
 v2raycli routing add block --domain 'keyword:ads'
 v2raycli routing add direct --geoip cn
-v2raycli routing add proxy --domain netflix.com --target PROFILE_A
-v2raycli routing list
+v2raycli routing add proxy --domain netflix.com --target SUB_ID
 
-# Run multiple proxy servers on different ports
-v2raycli server add --port 1081 --group GROUP_B --protocol http --name 'Balancer'
-v2raycli server list
+# Multiple servers on different ports
+v2raycli server add --port 1081 GROUP_ID --protocol http --name 'Balancer'
 v2raycli server start --all
 ```
 
@@ -235,12 +240,18 @@ You can add proxies via CLI:
 
 ## Groups
 
-- **Balancer** — pick 2+ profiles or subscription IDs and a strategy
-  (`latency`, `random`, `roundRobin`, `leastLoad`). `leastLoad` forces
-  xray-core. Subscription IDs resolve dynamically, so the group updates
-  when subscriptions are refreshed.
+- **Single** — wrap one profile as a named group.
+- **Balancer** — pick 2+ references (profiles, subscriptions, other groups)
+  and a strategy (`latency`, `random`, `roundRobin`, `leastLoad`).
+  `leastLoad` forces xray-core. Everything resolves dynamically.
 - **Chain** — pick an ordered list; traffic flows through each in order.
+- Groups can **nest**: a balancer can contain other groups. Members are
+  resolved recursively at use time, deduplicated, and cycles are rejected.
 - VPN profiles cannot join balancers/chains.
+
+A **subscription used as a target** (server outbound, connect, routing rule,
+group member) resolves as a strategy-based balancer over its *current*
+profiles — refresh the subscription and the target follows automatically.
 
 ## Split routing
 
@@ -334,12 +345,12 @@ not counted.
 
 ## Run as a service
 
-Keep a server running across reboots:
+Keep a connection running across reboots — any reference works:
 
 ```bash
-v2raycli server add --port 1080 --profile PROFILE_ID
+v2raycli server add --port 1080 REF
 v2raycli server start SERVER_ID
-v2raycli service install SERVER_ID
+v2raycli service install REF
 ```
 
 - **Linux** — writes a systemd *user* unit to
@@ -376,8 +387,8 @@ v2raycli routing add proxy --domain fortnite.com --target BERLIN_PROFILE_ID
 v2raycli routing add proxy --domain youtube.com --target GROUP_1_ID
 v2raycli routing add proxy --domain googlevideo.com --target GROUP_1_ID
 
-# Route everything else through a subscription (use a group with --subscription)
-v2raycli group create balancer default SUB_ID_A --subscription SUB_ID_2
+# Route everything else through a subscription (auto-detected as a member)
+v2raycli group add balancer default SUB_ID_A SUB_ID_2
 
 # Route Russian websites directly (no proxy)
 v2raycli routing add direct --geoip ru

@@ -28,6 +28,11 @@ A fully-interactive command-line client that wraps two proxy engines
 
 | Decision | Choice |
 |---|---|
+| **Universal ID space** | Profiles, subscriptions, groups, servers share **one counter** — an ID alone is unambiguous. Every target reference is auto-detected (no `--profile` / `--group` / `--subscription` selector flags). |
+| **Dynamic graph, resolved at use time** | Any entity that contains outbounds (server, group, routing rule, connect target, service) accepts **profile | subscription | group**. Resolved recursively to concrete profiles at connect/start/test; subscriptions refresh → new profiles flow automatically; deduped. |
+| **Subscription as outbound target** | Resolves as a strategy-based balancer over its current profiles (strategy configurable, default `latency`). |
+| **Nested groups** | Groups can hold profiles + subscriptions + other groups; cycles rejected, members deduped. |
+| Uniform CLI | Every resource uses `list` / `add` / `edit` / `remove` + resource-specific actions (`group add` unifies `group create`; `subscription edit`/`rename`; `server edit --outbound REF`; `connect REF`). |
 | Language | **Python 3.10+** (Linux, Windows, Termux; fastest to iterate) |
 | Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
 | Protocol coverage | vmess, vless, trojan, ss, ssr, wireguard, hysteria2, tuic, socks, http |
@@ -245,10 +250,25 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
   "name": "Auto lowest-latency",
   "type": "single|balancer|chain",
   "strategy": "latency|random|roundRobin|leastLoad",  // balancer only
-  "profile_ids": ["…"],           // balancer: candidate set; chain: ordered hops
+  "profile_ids": ["…"],           // static members
+  "subscription_ids": ["…"],      // dynamic: resolved to current profiles
+  "group_ids": ["…"],             // nested groups (Phase 01)
   "engine": "auto"
 }
 ```
+
+### References & resolution
+
+- **Server** outbound: `profile | subscription | group | direct`
+  (`outbound_type` persisted; `outbound_id` holds the unique id).
+- **Routing rule** `target_id` may reference any of profile | subscription |
+  group. **Connect** (`v2raycli connect REF`), the TUI picker, and the boot
+  service accept the same set.
+- `resolve_refs(store, refs)` → deduped, ordered `Profile` list; expands
+  subscriptions to current `profile_ids`, nested groups recursively,
+  rejects cycles (`circular group reference`), raises on unknown ids.
+- `subscription_target(store, sub_id, strategy="latency")` → balancer Target.
+- `resolve_target` accepts `Profile | Subscription | Group` models.
 
 ## 6. Config generation (per engine)
 
