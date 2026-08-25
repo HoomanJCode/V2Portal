@@ -136,10 +136,12 @@ def show_message(title: str, text: str) -> None:
     message_dialog(title=title, text=text).run()
 
 
-def pick_profile(profiles, groups, include_vpn: bool = True):
-    """Return a ``("profile"|"group", id)`` selection, or None."""
+def pick_profile(profiles, groups, subscriptions=(), include_vpn: bool = True):
+    """Return a ``("profile"|"subscription"|"group", id)`` selection, or None."""
     values = []
     clients = detect_clients()
+    for sub in subscriptions:
+        values.append((("subscription", sub.id), f"[SUB] {sub.name}"))
     for group in groups:
         values.append((("group", group.id), f"[GROUP] {group.name}"))
     for profile in profiles:

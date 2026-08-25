@@ -85,6 +85,11 @@ def build_parser() -> _SubcommandParser:
         metavar="URL",
         help="ephemeral HTTP/SOCKS proxy for engine updates (not stored)",
     )
+    parser.add_argument(
+        "--connect",
+        metavar="REF",
+        help=argparse.SUPPRESS,  # legacy: same as 'connect REF'
+    )
     _add_command_parser(parser)
     return parser
 
@@ -378,6 +383,26 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     profile_export.add_argument("id", help="profile ID to export")
+
+    # -- connect --------------------------------------------------------------
+    connect_cmd = commands.add_parser(
+        "connect",
+        help="connect to a profile, subscription, or group (runs until Ctrl+C)",
+        description=(
+            "Start the engine for the given reference and run the local\n"
+            "mixed inbound until you press Ctrl+C. The reference is\n"
+            "auto-detected: profile, subscription, or group ID.\n"
+            "Subscriptions connect as a strategy-based balancer over\n"
+            "their current profiles.\n\n"
+            "Examples:\n"
+            "  v2raycli connect PROFILE_ID\n"
+            "  v2raycli connect SUB_ID\n"
+            "  v2raycli connect GROUP_ID"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    connect_cmd.add_argument("ref",
+                             help="profile, subscription, or group ID (auto-detected)")
 
     # -- subscription ---------------------------------------------------------
     subscription = commands.add_parser(
@@ -1391,10 +1416,46 @@ def main(argv: list[str] | None = None) -> int:
     return _summary(store)
 
 
+def _connect_command(store: ConfigStore, ref: str) -> int:
+    """Connect to a profile/subscription/group ref and run until Ctrl+C."""
+    from .connector import connect_ref
+    from .connection import ConnectionController
+
+    controller = ConnectionController(store)
+    try:
+        status = connect_ref(store, ref, controller)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if status.state != "connected":
+        print(f"error: {status.error or 'connection failed'}", file=sys.stderr)
+        return 1
+    engine = status.engine or ""
+    print(f"connected: {status.target_name}  engine: {engine}  pid: {status.pid}")
+    inbound = status.inbound or {}
+    for url in inbound.get("urls", []):
+        print(f"  {url}")
+    print("press Ctrl+C to stop")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        controller.disconnect()
+        print("disconnected")
+    return 0
+
+
 def _command(store: ConfigStore, args) -> int:
     """Dispatch the explicit command tree without prompting for input."""
     command = args.command
     try:
+        if getattr(args, "connect", None):
+            # Legacy --connect REF flag (used by old boot services).
+            return _connect_command(store, args.connect)
+        if command == "connect":
+            return _connect_command(store, args.ref)
         if command == "status":
             return _status(store, args.json)
         if command in ("profile", "profiles"):

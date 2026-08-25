@@ -24,13 +24,15 @@ def run(store, controller, selection) -> None:
                 controller.disconnect()
                 break
             if command == "s":
+                from ..connector import resolve_ref_entity
+
                 selection = widgets.pick_profile(
-                    store.list_profiles(), store.list_groups()
+                    store.list_profiles(), store.list_groups(), store.list_subscriptions()
                 )
                 if selection is None:
                     continue
-                kind, key = selection
-                chosen = store.get_profile(key) if kind == "profile" else store.get_group(key)
+                _, key = selection
+                chosen = resolve_ref_entity(store, key)
                 if chosen is None:
                     continue
                 status = controller.switch(chosen)

@@ -272,6 +272,26 @@ def test_profile_edit_enabled_and_engine(tmp_path, capsys):
     assert updated.enabled is False
 
 
+# -- connect by reference (Phase 05) --------------------------------------
+
+
+def test_connect_unknown_ref_errors(tmp_path, capsys):
+    store = _store(tmp_path)
+    assert app._connect_command(store, "nope") == 1
+    assert "unknown id: nope" in capsys.readouterr().err
+
+
+def test_connect_parses_ref(tmp_path):
+    store = _store(tmp_path)
+    sub_node = store.add_profile(Profile(name="n", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[sub_node.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["connect", sub.id])
+    assert args.command == "connect"
+    assert args.ref == sub.id
+
+
 # -- routing CLI commands --------------------------------------------------
 
 

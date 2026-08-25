@@ -34,7 +34,7 @@ def platform() -> str:
 
 
 def _cmdline(connect_id: str, config_dir: str | None = None) -> str:
-    args = [shlex.quote(sys.executable), "-m", "v2raycli", "--connect", connect_id]
+    args = [shlex.quote(sys.executable), "-m", "v2raycli", "connect", connect_id]
     if config_dir:
         args += ["--config-dir", shlex.quote(config_dir)]
     return " ".join(args)
@@ -81,8 +81,10 @@ def install_service(store, connect_id: str, config_dir: str | None = None) -> Pa
     Raises ``ValueError`` for an unknown id and ``RuntimeError`` on unsupported
     platforms.
     """
-    if store.get_profile(connect_id) is None and store.get_group(connect_id) is None:
-        raise ValueError(f"unknown profile or group id: {connect_id}")
+    from .outbounds.groups import classify_id
+
+    if classify_id(store, connect_id) is None:
+        raise ValueError(f"unknown profile, subscription, or group id: {connect_id}")
 
     plat = platform()
     if plat == "linux":

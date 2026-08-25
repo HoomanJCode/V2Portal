@@ -132,7 +132,7 @@ def test_tui_connect_dispatches_selected_profile(tmp_path, monkeypatch):
     monkeypatch.setattr(
         app_screen.widgets,
         "pick_profile",
-        lambda profiles, groups: ("profile", profile.id),
+        lambda profiles, groups, subscriptions=(): ("profile", profile.id),
     )
     monkeypatch.setattr(
         app_screen,
@@ -183,7 +183,7 @@ def test_connection_screen_switches_target(tmp_path, monkeypatch):
     monkeypatch.setattr(
         connection_screen.widgets,
         "pick_profile",
-        lambda profiles, groups: ("profile", second.id),
+        lambda profiles, groups, subscriptions=(): ("profile", second.id),
     )
     rendered = []
     monkeypatch.setattr(

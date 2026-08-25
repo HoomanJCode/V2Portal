@@ -27,5 +27,5 @@ do these todos in priority and mark as down if passed.
 - [x] Phase 02 — uniform command shape (`group add`, per-resource `edit`, flags removed)
 - [x] Phase 03 — servers accept profile | subscription | group outbound refs
 - [x] Phase 04 — referential integrity on every remove path
-- [ ] Phase 05 — connect / TUI / service accept any ref
+- [x] Phase 05 — connect / TUI / service accept any ref
 - [ ] Phase 06 — test sweep, docs, final verification

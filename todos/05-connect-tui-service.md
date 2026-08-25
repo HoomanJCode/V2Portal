@@ -1,4 +1,4 @@
-# Phase 05 — Connect, TUI & service on the universal model
+# Phase 05 — Connect, TUI & service on the universal model ✅
 
 **Goal:** one `connector` code path is used by CLI connect, the TUI connect
 screen, and the boot service; all accept any reference
@@ -31,14 +31,14 @@ screen, and the boot service; all accept any reference
 - `connection_screen` shows the resolved target name/engine as today
   (balancer name for subscriptions = sub name + strategy).
 
-### 5.4 Tests
+### 5.4 Tests ✅
 
-- `connect` ref resolution (unit-level; no real engine — mock
-  `ConnectionController` / binary).
-- TUI picker includes sub/group entries (`tests/test_tui_widgets.py`).
-- `service install SUB_ID` accepts, `service install UNKNOWN` rejects.
-- `connector` resolves sub→balancer, group→nested, profile→single.
+- `tests/test_connector.py`: ref detection + controller routing.
+- `connect` CLI parses ref; unknown ref errors cleanly (`_connect_command`).
+- `service install` accepts SUB_ID, unit uses `connect <id>` command.
+- TUI picker includes `[SUB]` entries; mocks updated to 3-arg picker.
 
 ## Exit criteria
 
-- `pytest` green; commit `Connect by any reference (CLI/TUI/service)`.
+- `pytest` green (533 passed);
+  commit: `Connect by any reference (CLI/TUI/service)` ✅

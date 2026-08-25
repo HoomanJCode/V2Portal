@@ -63,14 +63,17 @@ def _guide_first_run(store) -> None:
 def _connect(store, controller) -> None:
     profiles = store.list_profiles()
     groups = store.list_groups()
-    if not profiles and not groups:
+    subscriptions = store.list_subscriptions()
+    if not profiles and not groups and not subscriptions:
         widgets.show_message("No configs", "Add a subscription or proxy first.")
         run_manage(store)
         return
-    selection = widgets.pick_profile(profiles, groups)
+    selection = widgets.pick_profile(profiles, groups, subscriptions)
     if selection is None:
         return
     kind, key = selection
-    chosen = store.get_profile(key) if kind == "profile" else store.get_group(key)
+    from ..connector import resolve_ref_entity
+
+    chosen = resolve_ref_entity(store, key)
     if chosen is not None:
         run_connection(store, controller, chosen)

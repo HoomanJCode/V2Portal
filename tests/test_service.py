@@ -1,5 +1,5 @@
 from v2raycli import service
-from v2raycli.models import Profile
+from v2raycli.models import Profile, Subscription
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -30,7 +30,7 @@ def test_platform_detection(monkeypatch):
 def test_build_systemd_unit():
     unit = service.build_systemd_unit("abc123", "/tmp/cfg")
     assert "ExecStart=" in unit
-    assert "--connect abc123" in unit
+    assert "connect abc123" in unit
     assert "--config-dir /tmp/cfg" in unit
     assert "WantedBy=default.target" in unit
 
@@ -44,7 +44,7 @@ def test_build_termux_run_script():
     script = service.build_termux_run_script("abc123")
     assert script.startswith("#!/data/data/com.termux/files/usr/bin/sh")
     assert "exec " in script
-    assert "--connect abc123" in script
+    assert "connect abc123" in script
 
 
 def test_install_service_unknown_id(tmp_path):
@@ -58,6 +58,19 @@ def test_install_service_unknown_id(tmp_path):
         raise AssertionError("expected ValueError")
 
 
+def test_install_service_accepts_subscription(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    sub = store.add_subscription(Subscription(name="sub"))
+    unit_dir = tmp_path / "systemd"
+    monkeypatch.setattr(service, "platform", lambda: "linux")
+    monkeypatch.setattr(service, "systemd_unit_dir", lambda: unit_dir)
+
+    path = service.install_service(store, sub.id)
+    assert path == unit_dir / "v2raycli.service"
+    assert f"connect {sub.id}" in path.read_text(encoding="utf-8")
+
+
 def test_install_service_linux(tmp_path, monkeypatch):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -68,7 +81,7 @@ def test_install_service_linux(tmp_path, monkeypatch):
 
     path = service.install_service(store, profile.id)
     assert path == unit_dir / "v2raycli.service"
-    assert "--connect" in path.read_text(encoding="utf-8")
+    assert "connect " in path.read_text(encoding="utf-8")
 
 
 def test_install_service_termux(tmp_path, monkeypatch):
