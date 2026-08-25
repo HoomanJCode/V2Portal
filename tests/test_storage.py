@@ -84,15 +84,19 @@ def test_atomic_write_leaves_no_temp_files(tmp_path):
     assert leftovers == []
 
 
-def test_remove_subscription_unlinks_profiles(tmp_path):
+def test_remove_subscription_deletes_profiles_and_prunes_groups(tmp_path):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
     sub = store.add_subscription(Subscription(name="S"))
     store.add_profile(Profile(name="P", subscription_id=sub.id))
+    g = store.add_group(Group(name="G", subscription_ids=[sub.id]))
 
-    assert store.remove_subscription(sub.id) is True
-    assert store.config.profiles[0].subscription_id is None
-    assert store.remove_subscription("missing") is False
+    summary = store.remove_subscription(sub.id)
+    assert summary["deleted_profiles"] == 1
+    assert summary["pruned_groups"] == 1
+    assert store.config.profiles == []
+    assert g.subscription_ids == []
+    assert store.remove_subscription("missing") == {}
 
 
 def test_profile_and_group_crud(tmp_path):
@@ -103,8 +107,8 @@ def test_profile_and_group_crud(tmp_path):
 
     assert store.get_profile(p.id) is p
     assert store.get_group(g.id) is g
-    assert store.remove_group(g.id) is True
-    assert store.remove_profile(p.id) is True
+    assert store.remove_group(g.id)  # truthy summary dict
+    assert store.remove_profile(p.id)  # truthy summary dict
     assert store.get_profile(p.id) is None
 
 
@@ -177,6 +181,29 @@ def test_remove_profile_cleans_group_profile_ids_and_routing(tmp_path):
 
     assert g.profile_ids == ["other-id"]
     assert store.config.routing.rules == []
+
+
+def test_remove_profile_prunes_nested_group_members(tmp_path):
+    """A profile used as a nested group member is pruned from group_ids."""
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    p = store.add_profile(Profile(name="P"))
+    g = store.add_group(Group(name="nested", group_ids=[p.id]))
+
+    store.remove_profile(p.id)
+    assert g.group_ids == []
+
+
+def test_remove_group_prunes_nested_members(tmp_path):
+    """Removing a group prunes it from other groups' nested members."""
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    a = store.add_group(Group(name="a"))
+    b = store.add_group(Group(name="b", group_ids=[a.id]))
+
+    summary = store.remove_group(a.id)
+    assert summary["pruned_groups"] == 1
+    assert b.group_ids == []
 
 
 # -- numeric ID generation --------------------------------------------------

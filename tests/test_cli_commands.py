@@ -225,6 +225,39 @@ def test_subscription_edit_and_rename(tmp_path, capsys):
     assert store.get_subscription(sub.id).name == "renamed"
 
 
+def test_subscription_remove_prunes_groups_and_deletes_profiles(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub = store.add_subscription(Subscription(name="myprovider"))
+    sub_node = store.add_profile(Profile(
+        name="sub-node", kind="socks", outbound=SOCKS, subscription_id=sub.id,
+    ))
+    sub.profile_ids = [sub_node.id]
+    group = store.add_group(Group(name="g", subscription_ids=[sub.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["subscription", "remove", sub.id])
+    assert app._subscription_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert "deleted 1 profile(s)" in out
+    assert "pruned from 1 group(s)" in out
+    assert store.get_subscription(sub.id) is None
+    assert store.get_profile(sub_node.id) is None
+    assert store.get_group(group.id).subscription_ids == []
+
+
+def test_group_remove_prunes_nested(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    leaf = store.add_group(Group(name="leaf", type="single", profile_ids=[p.id]))
+    parent = store.add_group(Group(name="parent", type="single", group_ids=[leaf.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "remove", leaf.id])
+    assert app._group_command(store, args) == 0
+    assert "pruned from 1 group(s)" in capsys.readouterr().out
+    assert store.get_group(parent.id).group_ids == []
+
+
 def test_profile_edit_enabled_and_engine(tmp_path, capsys):
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS, engine="auto"))

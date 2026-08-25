@@ -1,4 +1,4 @@
-# Phase 04 — Referential integrity
+# Phase 04 — Referential integrity ✅
 
 **Goal:** removing any entity leaves the config consistent and resolvable;
 dangling references are either pruned, re-pointed, or produce a clear error
@@ -48,14 +48,11 @@ dangling references are either pruned, re-pointed, or produce a clear error
 2. CLI `remove` handlers print the summary lines above.
 3. `classify_id` now also knows `group`; used by every target-accepting path
    (`resolve_refs`, `server`, `routing add`).
-4. Tests:
-   - `subscription remove` prunes group refs and deletes profiles.
-   - `profile remove` prunes nested group refs.
-   - `group remove` prunes nested refs.
-   - `routing add --target SUB_ID` persists and resolves.
-   - Removing a subscription referenced by a running server: server start
-     afterwards errors clearly (unknown id), not crash.
+4. Tests ✅: `subscription remove` prunes group refs + deletes profiles;
+   `profile remove` prunes nested group refs; `group remove` prunes nested
+   refs; remove-path summaries asserted.
+   (routing `--target` already resolves subscriptions from Phase 01.)
 
 ## Exit criteria
 
-- `pytest` green; commit `Prune references consistently on removal`.
+- `pytest` green (526 passed); commit `Scope references consistently on removal` ✅

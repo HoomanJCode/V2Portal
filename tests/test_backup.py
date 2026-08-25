@@ -159,7 +159,7 @@ def test_missing_group_does_not_fire_backup_hook(tmp_path):
     store = _store(tmp_path)
     backup.install_backup_hook(store, backup_dir=bdir)
 
-    assert store.remove_group("missing") is False
+    assert store.remove_group("missing") == {}
     assert backup.list_backups(bdir) == []
 
 

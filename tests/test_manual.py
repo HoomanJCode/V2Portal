@@ -119,7 +119,7 @@ def test_edit_and_remove_profile(tmp_path):
     p = store.add_profile(Profile(name="a"))
     edit_profile(store, p.id, name="b")
     assert store.get_profile(p.id).name == "b"
-    assert remove_profile(store, p.id) is True
+    assert remove_profile(store, p.id)  # truthy summary dict
     assert store.get_profile(p.id) is None
 
 
@@ -130,6 +130,6 @@ def test_remove_profile_prunes_refs(tmp_path):
     sub = store.add_subscription(Subscription(name="s", profile_ids=[p.id]))
     group = store.add_group(Group(name="g", type="balancer", profile_ids=[p.id]))
 
-    assert remove_profile(store, p.id) is True
+    assert remove_profile(store, p.id)  # truthy summary dict
     assert p.id not in sub.profile_ids
     assert p.id not in group.profile_ids

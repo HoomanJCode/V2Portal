@@ -1541,11 +1541,18 @@ def _profile_command(store: ConfigStore, args) -> int:
     if action == "remove":
         from .outbounds.manual import remove_profile
 
-        if not remove_profile(store, args.id):
+        summary = remove_profile(store, args.id)
+        if not summary:
             _not_found("profile", args.id, store)
             return 1
         store.save()
-        print(f"removed profile {args.id}")
+        parts = []
+        if summary.get("pruned_groups"):
+            parts.append(f"pruned from {summary['pruned_groups']} group(s)")
+        if summary.get("pruned_rules"):
+            parts.append(f"pruned {summary['pruned_rules']} rule(s)")
+        suffix = f" ({'; '.join(parts)})" if parts else ""
+        print(f"removed profile {args.id}{suffix}")
         return 0
     if action == "rename":
         from .outbounds.manual import edit_profile
@@ -1758,12 +1765,15 @@ def _subscription_command(store: ConfigStore, args) -> int:
         if sub is None:
             _not_found("subscription", args.id, store)
             return 1
-        for profile in list(store.config.profiles):
-            if profile.subscription_id == args.id:
-                store.remove_profile(profile.id)
-        store.remove_subscription(args.id)
+        summary = store.remove_subscription(args.id)
         store.save()
-        print(f"removed subscription {args.id}")
+        parts = []
+        if summary.get("deleted_profiles"):
+            parts.append(f"deleted {summary['deleted_profiles']} profile(s)")
+        if summary.get("pruned_groups"):
+            parts.append(f"pruned from {summary['pruned_groups']} group(s)")
+        suffix = f" ({'; '.join(parts)})" if parts else ""
+        print(f"removed subscription {args.id}{suffix}")
         return 0
     return _command_help(args, "subscription")
 
@@ -1848,11 +1858,18 @@ def _group_command(store: ConfigStore, args) -> int:
         print(group.id)
         return 0
     if action == "remove":
-        if not store.remove_group(args.id):
+        summary = store.remove_group(args.id)
+        if not summary:
             _not_found("group", args.id, store)
             return 1
         store.save()
-        print(f"removed group {args.id}")
+        parts = []
+        if summary.get("pruned_groups"):
+            parts.append(f"pruned from {summary['pruned_groups']} group(s)")
+        if summary.get("pruned_rules"):
+            parts.append(f"pruned {summary['pruned_rules']} rule(s)")
+        suffix = f" ({'; '.join(parts)})" if parts else ""
+        print(f"removed group {args.id}{suffix}")
         return 0
     if action == "edit":
         group = store.get_group(args.id)

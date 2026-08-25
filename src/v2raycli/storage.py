@@ -341,22 +341,33 @@ class ConfigStore:
     def list_profiles(self) -> list[Profile]:
         return list(self.config.profiles)
 
-    def remove_profile(self, profile_id: str) -> bool:
-        profile = self.get_profile(profile_id)
-        if profile is None:
-            return False
+    def remove_profile(self, profile_id: str) -> dict:
+        """Remove a profile, pruning it from subscriptions, groups (incl.
+        nested members), and routing rules. Returns a summary dict (empty if
+        not found).
+        """
+        if self.get_profile(profile_id) is None:
+            return {}
         self.notify_destructive("remove-profile")
-        self.config.profiles.remove(profile)
+        self.config.profiles.remove(self.get_profile(profile_id))
+        summary = {"pruned_subs": 0, "pruned_groups": 0, "pruned_rules": 0}
         for sub in self.config.subscriptions:
             if profile_id in sub.profile_ids:
                 sub.profile_ids.remove(profile_id)
+                summary["pruned_subs"] += 1
         for group in self.config.groups:
             if profile_id in group.profile_ids:
                 group.profile_ids.remove(profile_id)
+                summary["pruned_groups"] += 1
+            if profile_id in group.group_ids:
+                group.group_ids.remove(profile_id)
+                summary["pruned_groups"] += 1
+        before = len(self.config.routing.rules)
         self.config.routing.rules = [
             r for r in self.config.routing.rules if r.target_id != profile_id
         ]
-        return True
+        summary["pruned_rules"] = before - len(self.config.routing.rules)
+        return summary
 
     # -- subscriptions -------------------------------------------------------
 
@@ -370,15 +381,27 @@ class ConfigStore:
     def list_subscriptions(self) -> list[Subscription]:
         return list(self.config.subscriptions)
 
-    def remove_subscription(self, sub_id: str) -> bool:
+    def remove_subscription(self, sub_id: str) -> dict:
+        """Remove a subscription: delete its imported profiles (they are
+        ephemeral subscription artifacts), prune group subscription refs.
+        Server outbound refs are kept and surface a clear error at start.
+        Returns a summary dict.
+        """
         if self.get_subscription(sub_id) is None:
-            return False
+            return {}
         self.notify_destructive("remove-subscription")
         self.config.subscriptions = [s for s in self.config.subscriptions if s.id != sub_id]
-        for profile in self.config.profiles:
+        deleted = 0
+        for profile in list(self.config.profiles):
             if profile.subscription_id == sub_id:
-                profile.subscription_id = None
-        return True
+                self.config.profiles.remove(profile)
+                deleted += 1
+        pruned_groups = 0
+        for group in self.config.groups:
+            if sub_id in group.subscription_ids:
+                group.subscription_ids.remove(sub_id)
+                pruned_groups += 1
+        return {"deleted_profiles": deleted, "pruned_groups": pruned_groups}
 
     # -- groups --------------------------------------------------------------
 
@@ -392,16 +415,24 @@ class ConfigStore:
     def list_groups(self) -> list[Group]:
         return list(self.config.groups)
 
-    def remove_group(self, group_id: str) -> bool:
+    def remove_group(self, group_id: str) -> dict:
+        """Remove a group, pruning it from other groups' nested members and
+        from routing rules. Returns a summary dict (or {} if not found)."""
         group = self.get_group(group_id)
         if group is None:
-            return False
+            return {}
         self.notify_destructive("remove-group")
         self.config.groups.remove(group)
+        pruned_groups = 0
+        for other in self.config.groups:
+            if group_id in other.group_ids:
+                other.group_ids.remove(group_id)
+                pruned_groups += 1
+        before = len(self.config.routing.rules)
         self.config.routing.rules = [
             r for r in self.config.routing.rules if r.target_id != group_id
         ]
-        return True
+        return {"pruned_groups": pruned_groups, "pruned_rules": before - len(self.config.routing.rules)}
 
     # -- servers -------------------------------------------------------------
 

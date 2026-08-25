@@ -271,10 +271,12 @@ def _subscriptions(store) -> None:
     elif action == "remove":
         choice = widgets.menu("Pick", [(s.id, s.name) for s in subs])
         if choice and widgets.confirm("Remove subscription and its profiles?"):
-            for profile in list(store.config.profiles):
-                if profile.subscription_id == choice:
-                    manual.remove_profile(store, profile.id)
-            store.remove_subscription(choice)
+            summary = store.remove_subscription(choice)
+            widgets.show_message(
+                "Removed",
+                f"Deleted {summary.get('deleted_profiles', 0)} profile(s); "
+                f"pruned from {summary.get('pruned_groups', 0)} group(s).",
+            )
 
 
 def _do_update(store, sub_id: str) -> None:
