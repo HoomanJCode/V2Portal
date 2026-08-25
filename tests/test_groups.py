@@ -19,13 +19,18 @@ def _store(tmp_path):
     return store, a, b
 
 
-def test_balancer_requires_two_profiles(tmp_path):
+def test_balancer_requires_two_profiles_at_resolve(tmp_path):
+    """Balancer creation allows 1 profile, but resolve requires 2+."""
     store, a, b = _store(tmp_path)
     g = create_balancer_group("bal", "latency", [a.id, b.id], store)
     assert g.type == "balancer"
     assert g.strategy == "latency"
-    with pytest.raises(ValueError):
-        create_balancer_group("bal", "latency", [a.id], store)
+    # Creating with 1 profile is allowed now (subscription may add more later).
+    g_single = create_balancer_group("bal", "latency", [a.id], store)
+    assert g_single.type == "balancer"
+    # But resolving a balancer with only 1 profile should fail.
+    with pytest.raises(ValueError, match="at least 2"):
+        resolve_target(store, g_single, default_engine="sing-box")
 
 
 def test_least_load_resolves_to_xray(tmp_path):
@@ -190,6 +195,10 @@ def test_persisted_group_shape_is_validated(tmp_path):
             store,
             Group(name="short-balancer", type="balancer", strategy="latency", profile_ids=[a.id]),
         )
+
+    # Creating a group with 1 profile is allowed (subscription may expand later).
+    g_ok = create_balancer_group("ok", "latency", [a.id], store)
+    assert g_ok.type == "balancer"
 
     with pytest.raises(ValueError, match="invalid strategy"):
         resolve_target(

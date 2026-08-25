@@ -337,8 +337,8 @@ def _create_balancer(store) -> None:
     members = widgets.multi_select(
         "Members", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
     )
-    if not members or len(members) < 2:
-        widgets.show_message("Need 2+", "Select at least two profiles.")
+    if not members:
+        widgets.show_message("No members", "Select at least one profile.")
         return
     try:
         store.add_group(create_balancer_group(name, strategy, members, store))
@@ -351,8 +351,8 @@ def _create_chain(store) -> None:
     members = widgets.multi_select(
         "Hops (in order)", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
     )
-    if not members or len(members) < 2:
-        widgets.show_message("Need 2+", "Select at least two profiles.")
+    if not members:
+        widgets.show_message("No members", "Select at least one profile.")
         return
     try:
         store.add_group(create_chain_group(name, members, store))

@@ -85,8 +85,8 @@ def create_balancer_group(
     all_ids = list(profile_ids)
     if subscription_ids:
         all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
-    if len(set(all_ids)) < 2:
-        raise ValueError("a balancer requires at least 2 profiles")
+    if not all_ids:
+        raise ValueError("group requires at least one profile or subscription")
     profiles = _resolve_members(store, all_ids)
     _assert_non_vpn(profiles)
     _resolve_group_engine(profiles, strategy, engine, SINGBOX)  # validates strategy support
@@ -105,8 +105,8 @@ def create_chain_group(
     all_ids = list(ordered_profile_ids)
     if subscription_ids:
         all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
-    if len(all_ids) < 2:
-        raise ValueError("a chain requires at least 2 profiles")
+    if not all_ids:
+        raise ValueError("group requires at least one profile or subscription")
     profiles = _resolve_members(store, all_ids)
     _assert_non_vpn(profiles)
     _resolve_group_engine(profiles, "", engine, SINGBOX)
