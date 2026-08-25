@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from ..outbounds import manual, vpn
-from ..outbounds.groups import create_balancer_group, create_chain_group
+from ..outbounds.groups import (
+    classify_ids,
+    create_balancer_group,
+    create_chain_group,
+)
 from ..subs.fetcher import FetchError
 from ..subs.parser import import_subscription, update_subscription
 from ..subs.share import ShareLinkError, decode_link, encode_link
@@ -13,6 +17,13 @@ from .settings_screen import run_updates
 
 def _split(text: str) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _member_choices(store) -> list[tuple[str, str]]:
+    """Profiles and subscriptions as (id, label) pairs for group pickers."""
+    choices = [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
+    choices += [(s.id, f"{'subscription':>10}  {s.name}") for s in store.list_subscriptions()]
+    return choices
 
 
 def run(store, controller=None) -> None:
@@ -335,13 +346,16 @@ def _create_balancer(store) -> None:
     if not strategy:
         return
     members = widgets.multi_select(
-        "Members", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
+        "Members", _member_choices(store)
     )
     if not members:
-        widgets.show_message("No members", "Select at least one profile.")
+        widgets.show_message("No members", "Select at least one profile or subscription.")
         return
     try:
-        store.add_group(create_balancer_group(name, strategy, members, store))
+        profile_ids, sub_ids = classify_ids(store, members)
+        store.add_group(
+            create_balancer_group(name, strategy, profile_ids, store, subscription_ids=sub_ids)
+        )
     except ValueError as exc:
         widgets.show_message("Invalid", str(exc))
 
@@ -349,12 +363,15 @@ def _create_balancer(store) -> None:
 def _create_chain(store) -> None:
     name = widgets.input_text("Name")
     members = widgets.multi_select(
-        "Hops (in order)", [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
+        "Hops (in order)", _member_choices(store)
     )
     if not members:
-        widgets.show_message("No members", "Select at least one profile.")
+        widgets.show_message("No members", "Select at least one profile or subscription.")
         return
     try:
-        store.add_group(create_chain_group(name, members, store))
+        profile_ids, sub_ids = classify_ids(store, members)
+        store.add_group(
+            create_chain_group(name, profile_ids, store, subscription_ids=sub_ids)
+        )
     except ValueError as exc:
         widgets.show_message("Invalid", str(exc))
