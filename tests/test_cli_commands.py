@@ -150,6 +150,95 @@ def test_group_add_member_rejects_unknown_id(tmp_path, capsys):
     assert "unknown id: 999" in capsys.readouterr().err
 
 
+# -- uniform command shape (Phase 02) -------------------------------------
+
+
+def test_group_add_replaces_create_and_supports_nested_group(tmp_path, capsys):
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="vless", outbound=SOCKS))
+    leaf = store.add_group(Group(name="leaf", type="single", profile_ids=[p2.id]))
+    store.save()
+
+    # group add balancer with a nested group ref
+    args = app.build_parser().parse_args(
+        ["group", "add", "balancer", "pool", p1.id, leaf.id]
+    )
+    assert app._group_command(store, args) == 0
+    group = store.get_group(capsys.readouterr().out.strip())
+    assert group is not None
+    assert group.profile_ids == [p1.id]
+    assert group.group_ids == [leaf.id]
+
+    # legacy 'group create' alias still works
+    args = app.build_parser().parse_args(["group", "create", "single", "one", p2.id])
+    assert app._group_command(store, args) == 0
+    one = store.get_group(capsys.readouterr().out.strip())
+    assert one is not None and one.type == "single"
+
+
+def test_group_add_single(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    store.save()
+    args = app.build_parser().parse_args(["group", "add", "single", "one", p.id])
+    assert app._group_command(store, args) == 0
+    g = store.get_group(capsys.readouterr().out.strip())
+    assert g.type == "single"
+    assert g.profile_ids == [p.id]
+
+
+def test_group_edit(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    g = store.add_group(Group(name="g", type="balancer", strategy="latency", profile_ids=[p.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["group", "edit", g.id, "--name", "fast", "--strategy", "random"]
+    )
+    assert app._group_command(store, args) == 0
+    updated = store.get_group(g.id)
+    assert updated.name == "fast"
+    assert updated.strategy == "random"
+
+    args = app.build_parser().parse_args(["group", "edit", g.id, "--no-enabled"])
+    assert app._group_command(store, args) == 0
+    assert store.get_group(g.id).enabled is False
+
+
+def test_subscription_edit_and_rename(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub = store.add_subscription(Subscription(name="old", url="https://a"))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["subscription", "edit", sub.id, "--name", "new", "--auto-update-days", "2"]
+    )
+    assert app._subscription_command(store, args) == 0
+    updated = store.get_subscription(sub.id)
+    assert updated.name == "new"
+    assert updated.auto_update_days == 2
+
+    args = app.build_parser().parse_args(["subscription", "rename", sub.id, "renamed"])
+    assert app._subscription_command(store, args) == 0
+    assert store.get_subscription(sub.id).name == "renamed"
+
+
+def test_profile_edit_enabled_and_engine(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS, engine="auto"))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["profile", "edit", p.id, "--engine", "xray", "--no-enabled"]
+    )
+    assert app._profile_command(store, args) == 0
+    updated = store.get_profile(p.id)
+    assert updated.engine == "xray"
+    assert updated.enabled is False
+
+
 # -- routing CLI commands --------------------------------------------------
 
 

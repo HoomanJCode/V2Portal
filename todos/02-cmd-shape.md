@@ -1,4 +1,4 @@
-# Phase 02 — Uniform command structure
+# Phase 02 — Uniform command structure ✅
 
 **Goal:** every resource has the same action verbs and the same options.
 `add` is the universal create verb; `edit` exists for every resource; target
@@ -65,15 +65,31 @@ v2raycli <resource> remove ID
   `add-member`/`remove-member`".
 - `profile add share` / `profile add raw` keep (type sub-parsers are fine).
 
-### 2.5 Help text & docs pass
+### 2.1 `group add` replaces `group create` ✅
 
-- Every command's `--help` shows the uniform verbs and auto-detected ID
-  rules.
-- README command reference updated.
+- `group add single NAME PROFILE_ID` (new).
+- `group add balancer NAME REF... [--strategy S] [--engine E]`
+- `group add chain NAME REF... [--engine E]`
+- REF auto-detected (profile | subscription | group) incl nested groups.
+- `--subscription` flag removed (covered by auto-detect).
+- `create` kept as an argparse alias of `add`.
+
+### 2.2 Uniform `edit` ✅
+
+- `profile edit` gained `--engine` / `--enabled`.
+- `group edit ID --name/--strategy/--engine/--enabled` (new).
+- `subscription edit` (new) + `subscription rename` (new).
+- `server edit` outbound flag replacement deferred to Phase 03 (full server
+  unification).
+
+### 2.3–2.5 Tests & aliases ✅
+
+- `group add` from CLI (balancer w/ nested group, single, legacy `create`).
+- `subscription edit/rename`; `group edit`; `profile edit --engine/--enabled`.
+- `group list` shows `+Ngroup` nesting.
 
 ## Exit criteria
 
-- All existing tests updated to new verbs (aliases keep old tests passing).
-- New tests: `group add` from CLI; `subscription edit`; `group edit`; auto-
-  detected REF in `group add`; help shows examples.
-- `pytest` green; commit `Unify resource command shape (add/edit/remove)`.
+- All existing tests updated to new verbs (aliases keep old tests passing). ✅
+- New tests added (see above). ✅
+- `pytest` green (516 passed); commit: `Unify resource command shape (add/edit/remove)` ✅

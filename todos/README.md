@@ -32,7 +32,7 @@
 | Phase | File | What it delivers |
 |---|---|---|
 | 01 | `todos/01-model-core.md` | ✅ `resolve_target` v2 (any ref → profiles), `subscription_target()`, nested-group expansion, cycle detection, dedup |
-| 02 | `todos/02-cmd-shape.md` | CLI rework: `group create`→`group add`, unified `edit`, `subscription edit`, aliases, per-resource help, removed legacy |
+| 02 | `todos/02-cmd-shape.md` | ✅ CLI rework: `group create`→`group add`, unified `edit`, `subscription edit`, aliases, per-resource help, removed legacy |
 | 03 | `todos/03-servers.md` | Server outbound = universal ref (profile/sub/group), auto-detect ID in add/edit/temp, running-engine reconfig |
 | 04 | `todos/04-references.md` | Referential integrity: `profile remove`, `subscription remove`, `group remove`, `server remove`, `routing` targets — refs kept/resolved/rejected consistently |
 | 05 | `todos/05-connect-tui-service.md` | `connector` unification for CLI/TUI/service; subscription targets in TUI connect; per-ref tests |

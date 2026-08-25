@@ -175,7 +175,8 @@ def classify_ids(store, ids: list[str]) -> tuple[list[str], list[str]]:
     """Split IDs into (profile_ids, subscription_ids), detecting the type.
 
     Raises ValueError for any ID that matches neither a profile nor a
-    subscription.
+    subscription. Nested-group IDs are rejected here; use ``classify_refs``
+    when group members are allowed.
     """
     if not isinstance(ids, list):
         raise ValueError("ids must be a list")
@@ -192,6 +193,31 @@ def classify_ids(store, ids: list[str]) -> tuple[list[str], list[str]]:
                 f"unknown id: {entity_id} (not a profile or subscription)"
             )
     return profile_ids, subscription_ids
+
+
+def classify_refs(
+    store, ids: list[str]
+) -> tuple[list[str], list[str], list[str]]:
+    """Split IDs into (profile_ids, subscription_ids, group_ids).
+
+    Raises ValueError for any ID that matches no known entity type.
+    """
+    if not isinstance(ids, list):
+        raise ValueError("ids must be a list")
+    profile_ids: list[str] = []
+    subscription_ids: list[str] = []
+    group_ids: list[str] = []
+    for entity_id in ids:
+        kind = classify_id(store, entity_id)
+        if kind == "profile":
+            profile_ids.append(entity_id)
+        elif kind == "subscription":
+            subscription_ids.append(entity_id)
+        elif kind == "group":
+            group_ids.append(entity_id)
+        else:
+            raise ValueError(f"unknown id: {entity_id} (not a profile, subscription, or group)")
+    return profile_ids, subscription_ids, group_ids
 
 
 def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[str]:
