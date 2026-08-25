@@ -1213,6 +1213,36 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_restart.add_argument("--all", action="store_true", dest="restart_all",
                                help="restart all enabled servers")
 
+    server_edit = server_commands.add_parser(
+        "edit",
+        help="edit a server's settings",
+        description=(
+            "Change fields on an existing server. You can update the name,\n"
+            "port, protocol, listen address, or outbound (profile/group).\n\n"
+            "If the server is running, it is restarted automatically.\n\n"
+            "Examples:\n"
+            "  v2raycli server edit abc --name 'US proxy'\n"
+            "  v2raycli server edit abc --port 8180\n"
+            "  v2raycli server edit abc --profile NEW_PROFILE_ID\n"
+            "  v2raycli server edit abc --group NEW_GROUP_ID\n"
+            "  v2raycli server edit abc --protocol http"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_edit.add_argument("id", help="server ID to edit")
+    server_edit.add_argument("--name", default=None, help="new display name")
+    server_edit.add_argument("--port", type=int, default=None, help="new port")
+    server_edit.add_argument("--protocol", choices=("mixed", "socks", "http"), default=None,
+                            help="new inbound protocol")
+    server_edit.add_argument("--listen", default=None, help="new listen address")
+    server_outbound_edit = server_edit.add_mutually_exclusive_group()
+    server_outbound_edit.add_argument("--profile", default=None,
+                                      help="switch outbound to this profile ID")
+    server_outbound_edit.add_argument("--group", default=None,
+                                      help="switch outbound to this group ID")
+    server_outbound_edit.add_argument("--direct", action="store_true", default=False,
+                                      help="switch outbound to direct (no proxy)")
+
     server_remove = server_commands.add_parser(
         "remove",
         help="remove a server from config",
@@ -2059,6 +2089,53 @@ def _server_command(store: ConfigStore, args) -> int:
             return 1
         server = store.get_server(args.id)
         _status_line(state.server_id, "restarted", f":{server.port}")
+        return 0
+
+    if action == "edit":
+        from .servers import ServerManager
+
+        server = store.get_server(args.id)
+        if server is None:
+            _not_found("server", args.id, store)
+            return 1
+        if args.name is not None:
+            server.name = args.name
+        if args.port is not None:
+            server.port = args.port
+        if args.protocol is not None:
+            server.protocol = args.protocol
+        if args.listen is not None:
+            server.listen = args.listen
+        if args.profile:
+            profile = store.get_profile(args.profile)
+            if profile is None:
+                _not_found("profile", args.profile, store)
+                return 1
+            server.outbound_id = args.profile
+            server.outbound_type = "profile"
+        elif args.group:
+            group = store.get_group(args.group)
+            if group is None:
+                _not_found("group", args.group, store)
+                return 1
+            server.outbound_id = args.group
+            server.outbound_type = "group"
+        elif args.direct:
+            server.outbound_id = ""
+            server.outbound_type = "direct"
+        store.save()
+        # Restart if the server was running so changes take effect.
+        mgr = ServerManager(store)
+        state = mgr.get_state(args.id)
+        if state and state.is_running():
+            mgr.stop(args.id)
+            try:
+                mgr.start(args.id)
+                print(f"edited and restarted server {args.id}")
+            except (ValueError, OSError) as exc:
+                print(f"edited server {args.id} but restart failed: {exc}", file=sys.stderr)
+        else:
+            print(f"edited server {args.id}")
         return 0
 
     if action == "remove":

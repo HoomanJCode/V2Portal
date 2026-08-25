@@ -310,3 +310,98 @@ def test_server_start_reports_immediate_crash(tmp_path, monkeypatch):
     assert state.error is not None
     assert "immediately" in state.error
     assert "FATAL" in state.error
+
+
+def test_server_edit_name_and_port(tmp_path, capsys):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    server = store.add_server(
+        Server(name="old", port=1080, outbound_id=profile.id, outbound_type="profile")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--name", "new", "--port", "8180"]
+    )
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.name == "new"
+    assert updated.port == 8180
+    assert "edited" in capsys.readouterr().out
+
+
+def test_server_edit_switch_profile(tmp_path, capsys):
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="socks", outbound=SOCKS))
+    server = store.add_server(
+        Server(name="s", port=1080, outbound_id=p1.id, outbound_type="profile")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--profile", p2.id]
+    )
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.outbound_id == p2.id
+    assert updated.outbound_type == "profile"
+
+
+def test_server_edit_switch_to_direct(tmp_path, capsys):
+    from v2raycli.models import Group
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="g", type="balancer", strategy="latency", profile_ids=[profile.id, profile.id])
+    )
+    server = store.add_server(
+        Server(name="s", port=1080, outbound_id=group.id, outbound_type="group")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--direct"]
+    )
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.outbound_type == "direct"
+    assert updated.outbound_id == ""
+
+
+def test_server_edit_unknown_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["server", "edit", "nope", "--name", "x"])
+    assert app._server_command(store, args) == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_server_edit_unknown_profile(tmp_path, capsys):
+    store = _store(tmp_path)
+    server = store.add_server(
+        Server(name="s", port=1080, outbound_id="abc", outbound_type="profile")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--profile", "nope"]
+    )
+    assert app._server_command(store, args) == 1
+    assert "unknown" in capsys.readouterr().err
+
+
+def test_server_edit_protocol_and_listen(tmp_path, capsys):
+    store = _store(tmp_path)
+    server = store.add_server(
+        Server(name="s", port=1080, protocol="mixed", listen="0.0.0.0", outbound_type="direct")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--protocol", "http", "--listen", "127.0.0.1"]
+    )
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.protocol == "http"
+    assert updated.listen == "127.0.0.1"
