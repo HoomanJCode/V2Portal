@@ -147,7 +147,7 @@ class TestConnectionErrorToStatus:
 
         assert status.state == "error"
         assert status.target_name == "stale"
-        assert "unknown profile id" in status.error
+        assert "unknown id" in status.error
 
     def test_vpn_missing_config_maps_to_error(self, tmp_path):
         store = _store(tmp_path)

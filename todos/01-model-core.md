@@ -1,4 +1,4 @@
-# Phase 01 — Universal target resolution core
+# Phase 01 — Universal target resolution core ✅
 
 **Goal:** one function resolves *any* reference (profile | subscription |
 group) into the concrete profile list at use time — dynamic, deduped,
@@ -81,17 +81,16 @@ def resolve_outbound(store, server) -> Target
   the model-wrapped selection). Phase 3 wires servers onto it; for now add a
   thin helper so Phase 3 is trivial.
 
-### 1.5 Tests (tests/test_groups.py, new tests/test_resolve_refs.py)
+### 1.5 Tests (tests/test_groups.py, new tests/test_resolve_refs.py) ✅
 
-- `resolve_refs` mixed list (profile+sub+group), dedup in-place.
-- subscription dynamic: sub with 2 profiles via `subscription_target` →
-  balancer; strategy honored; no-profiles error.
-- nested group: balancer > group > profiles; dedup across branches.
-- cycle: `a→b→a` → ValueError circular.
-- `resolve_target` with a `Subscription` model → balancer target.
-- routing enrichment with a subscription target id resolves its profiles.
+- `resolve_refs` mixed (profile+sub+group), dedup in-place. ✅
+- subscription → `subscription_target` balancer; strategy honored; no-profiles error. ✅
+- nested group: balancer > group > profiles; dedup across branches. ✅
+- cycle: `a→b→a` → ValueError circular. ✅
+- `resolve_target` with a `Subscription` model → balancer target. ✅
+- routing enrichment with a subscription target id resolves its profiles. ✅
 
 ## Exit criteria
 
-- `pytest` green.
-- Commit: `Add universal ref resolution for profiles/subscriptions/groups`.
+- `pytest` green ✅ (511 passed).
+- Commit: `Add universal ref resolution for profiles/subscriptions/groups` ✅

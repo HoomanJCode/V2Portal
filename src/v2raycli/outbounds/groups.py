@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..engines import AUTO, SINGBOX, XRAY, get_adapter, resolve_engine, strategy_supported
-from ..models import Group, Profile, RoutingConfig
+from ..models import Group, Profile, RoutingConfig, Subscription
 from .vpn import is_vpn
 
 VALID_STRATEGIES = {"latency", "random", "roundRobin", "leastLoad"}
@@ -75,46 +75,63 @@ def _assert_engine_compatible(profiles: list[Profile], engine: str) -> None:
             raise ValueError(f"engine {engine} does not support profile kind {profile.kind}")
 
 
+def _group_ref(
+    name: str, gtype: str, strategy: str, refs: list[str], store,
+    engine: str = AUTO, subscription_ids: list[str] | None = None,
+    group_ids: list[str] | None = None,
+) -> Group:
+    """Shared validation/construction for balancer and chain groups.
+
+    *refs* are the concrete profile ids; *subscription_ids* / *group_ids*
+    are the dynamic members that are resolved at use time (kept on the
+    Group for refreshability).
+    """
+    if gtype == "balancer" and strategy not in VALID_STRATEGIES:
+        raise ValueError(f"invalid strategy: {strategy}")
+    all_ids = list(refs)
+    if subscription_ids:
+        all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
+    if group_ids:
+        # Validate nested groups exist; their profiles resolve at use time.
+        for gid in group_ids:
+            if store.get_group(gid) is None:
+                raise ValueError(f"unknown group id: {gid}")
+    if not all_ids and not group_ids:
+        raise ValueError("group requires at least one profile, subscription, or group")
+    profiles = resolve_refs(store, all_ids) if all_ids else []
+    _assert_non_vpn(profiles)
+    if gtype == "balancer":
+        _resolve_group_engine(profiles, strategy, engine, SINGBOX)  # validates strategy support
+    else:
+        _resolve_group_engine(profiles, "", engine, SINGBOX)
+    return Group(
+        name=name, type=gtype, strategy=strategy,
+        profile_ids=list(refs),
+        subscription_ids=list(subscription_ids) if subscription_ids else [],
+        group_ids=list(group_ids) if group_ids else [],
+        engine=engine,
+    )
+
+
 def create_balancer_group(
     name: str, strategy: str, profile_ids: list[str], store, engine: str = AUTO,
-    subscription_ids: list[str] | None = None,
+    subscription_ids: list[str] | None = None, group_ids: list[str] | None = None,
 ) -> Group:
     if strategy not in VALID_STRATEGIES:
         raise ValueError(f"invalid strategy: {strategy}")
-    # Merge static + subscription profiles for validation.
-    all_ids = list(profile_ids)
-    if subscription_ids:
-        all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
-    if not all_ids:
-        raise ValueError("group requires at least one profile or subscription")
-    profiles = _resolve_members(store, all_ids)
-    _assert_non_vpn(profiles)
-    _resolve_group_engine(profiles, strategy, engine, SINGBOX)  # validates strategy support
-    return Group(
-        name=name, type="balancer", strategy=strategy,
-        profile_ids=list(profile_ids),
-        subscription_ids=list(subscription_ids) if subscription_ids else [],
-        engine=engine,
+    return _group_ref(
+        name, "balancer", strategy, list(profile_ids), store,
+        engine=engine, subscription_ids=subscription_ids, group_ids=group_ids,
     )
 
 
 def create_chain_group(
     name: str, ordered_profile_ids: list[str], store, engine: str = AUTO,
-    subscription_ids: list[str] | None = None,
+    subscription_ids: list[str] | None = None, group_ids: list[str] | None = None,
 ) -> Group:
-    all_ids = list(ordered_profile_ids)
-    if subscription_ids:
-        all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
-    if not all_ids:
-        raise ValueError("group requires at least one profile or subscription")
-    profiles = _resolve_members(store, all_ids)
-    _assert_non_vpn(profiles)
-    _resolve_group_engine(profiles, "", engine, SINGBOX)
-    return Group(
-        name=name, type="chain",
-        profile_ids=list(ordered_profile_ids),
-        subscription_ids=list(subscription_ids) if subscription_ids else [],
-        engine=engine,
+    return _group_ref(
+        name, "chain", "", list(ordered_profile_ids), store,
+        engine=engine, subscription_ids=subscription_ids, group_ids=group_ids,
     )
 
 
@@ -140,7 +157,7 @@ def remove_member(group: Group, profile_id: str) -> Group:
 
 
 def classify_id(store, entity_id: str) -> str | None:
-    """Return the entity type of an ID: "profile", "subscription", or None.
+    """Return the entity type of an ID: "profile", "subscription", "group", or None.
 
     IDs are globally unique across entity types (single counter), so the
     type can be detected by looking the ID up in the store.
@@ -149,6 +166,8 @@ def classify_id(store, entity_id: str) -> str | None:
         return "profile"
     if store.get_subscription(entity_id) is not None:
         return "subscription"
+    if store.get_group(entity_id) is not None:
+        return "group"
     return None
 
 
@@ -186,8 +205,114 @@ def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[s
     return profile_ids
 
 
+def resolve_refs(store, refs: list[str]) -> list[Profile]:
+    """Resolve a mixed list of profile | subscription | group IDs into the
+    deduped, ordered list of concrete profiles.
+
+    - profile id   -> that profile
+    - sub id       -> subscription's current profile_ids (dynamic)
+    - group id     -> that group's members (recursive, deduped)
+
+    Raises ValueError for unknown ids and for reference cycles.
+    """
+    if not isinstance(refs, list):
+        raise ValueError("refs must be a list")
+    seen: set[str] = set()
+    result: list[Profile] = []
+
+    def _append(profile: Profile) -> None:
+        if profile.id in seen:
+            return
+        seen.add(profile.id)
+        result.append(profile)
+
+    def _walk(ref: str, visiting: set[str]) -> None:
+        if not isinstance(ref, str) or not ref:
+            raise ValueError("refs must be non-empty strings")
+        profile = store.get_profile(ref)
+        if profile is not None:
+            _append(profile)
+            return
+        sub = store.get_subscription(ref)
+        if sub is not None:
+            for pid in sub.profile_ids:
+                p = store.get_profile(pid)
+                if p is not None:
+                    _append(p)
+                else:
+                    raise ValueError(f"subscription {ref} references unknown profile {pid}")
+            return
+        group = store.get_group(ref)
+        if group is not None:
+            if ref in visiting:
+                raise ValueError(f"circular group reference: {' -> '.join(visiting | {ref})}")
+            # Preserve member order: profiles, subscriptions, then nested groups.
+            for member_ref in (
+                list(group.profile_ids)
+                + list(group.subscription_ids)
+                + list(group.group_ids)
+            ):
+                _walk(member_ref, visiting | {ref})
+            return
+        raise ValueError(f"unknown id: {ref} (not a profile, subscription, or group)")
+
+    for ref in refs:
+        _walk(ref, set())
+    return result
+
+
+def subscription_target(
+    store, sub_id: str, strategy: str = "latency", engine: str = AUTO,
+    default_engine: str = SINGBOX,
+) -> Target:
+    """Resolve a subscription into a balancer target over its current profiles."""
+    sub = store.get_subscription(sub_id)
+    if sub is None:
+        raise ValueError(f"unknown subscription id: {sub_id}")
+    profiles = resolve_refs(store, list(sub.profile_ids))
+    if not profiles:
+        raise ValueError(f"subscription {sub_id} has no profiles")
+    if strategy not in VALID_STRATEGIES:
+        raise ValueError(f"invalid strategy: {strategy}")
+    resolved_engine = _resolve_group_engine(profiles, strategy, engine, default_engine)
+    return Target(
+        type="balancer",
+        name=sub.name,
+        engine=resolved_engine,
+        strategy=strategy,
+        profile_ids=[p.id for p in profiles],
+        profiles=profiles,
+    )
+
+
+def resolve_outbound(store, outbound_type: str, outbound_id: str,
+                     default_engine: str = SINGBOX) -> Target:
+    """Resolve a server's outbound reference into a Target.
+
+    ``outbound_type`` ∈ {profile, subscription, group, direct}. Direct
+    returns an empty target (engine = default).
+    """
+    if outbound_type == "direct":
+        return Target(type="single", engine=default_engine, profiles=[])
+    if outbound_type == "profile":
+        profile = store.get_profile(outbound_id)
+        if profile is None:
+            raise ValueError(f"unknown profile id: {outbound_id}")
+        return resolve_target(store, profile, default_engine)
+    if outbound_type == "subscription":
+        return subscription_target(store, outbound_id, default_engine=default_engine)
+    if outbound_type == "group":
+        group = store.get_group(outbound_id)
+        if group is None:
+            raise ValueError(f"unknown group id: {outbound_id}")
+        return resolve_target(store, group, default_engine)
+    raise ValueError(f"unknown outbound type: {outbound_type}")
+
+
 def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
-    """Resolve a Profile or Group into a concrete Target."""
+    """Resolve a Profile, Subscription, or Group into a concrete Target."""
+    if isinstance(selection, Subscription):
+        return subscription_target(store, selection.id, default_engine=default_engine)
     if isinstance(selection, Profile):
         return Target(
             type="single",
@@ -199,11 +324,16 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
     if isinstance(selection, Group):
         if selection.type not in ("single", "balancer", "chain"):
             raise ValueError(f"unsupported group type: {selection.type}")
-        # Merge static profile IDs with dynamically resolved subscription profiles.
-        all_profile_ids = list(selection.profile_ids)
-        if selection.subscription_ids:
-            all_profile_ids.extend(_resolve_subscription_profiles(store, selection.subscription_ids))
-        profiles = _resolve_members(store, all_profile_ids)
+        # Resolve ALL members dynamically (profiles + subs + nested groups),
+        # deduped, ordered.
+        refs = (
+            list(selection.profile_ids)
+            + list(selection.subscription_ids)
+            + list(selection.group_ids)
+        )
+        profiles = resolve_refs(store, refs)
+        if not profiles:
+            raise ValueError(f"group {selection.name!r} resolves to no profiles")
         if selection.type == "single":
             if len(profiles) != 1:
                 raise ValueError("a single group requires exactly 1 profile")
@@ -230,7 +360,7 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             profile_ids=[p.id for p in profiles],
             profiles=profiles,
         )
-    raise TypeError("selection must be a Profile or Group")
+    raise TypeError("selection must be a Profile, Subscription, or Group")
 
 
 def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) -> Target:
@@ -238,8 +368,8 @@ def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) ->
 
     This ensures the engine config includes outbounds for every profile and
     group that a split-routing rule routes to, even if they aren't part of
-    the main connection target.  Group members are also resolved so the
-    engine can emit the required outbounds for balancers/chains.
+    the main connection target.  References are resolved through the same
+    universal resolution, so subscriptions and nested groups work too.
     """
     if routing.mode != "split" or not routing.rules:
         return target
@@ -252,30 +382,33 @@ def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) ->
         g.id: g for g in target.extra_groups
     }
 
-    for rule in routing.rules:
-        if rule.action != "proxy" or not rule.target_id:
-            continue
-        tid = rule.target_id
-        if tid in main_ids:
-            continue
-        if tid in extra_profiles_by_id or tid in extra_groups_by_id:
-            continue
-        profile = store.get_profile(tid)
-        if profile is not None:
-            extra_profiles_by_id[tid] = profile
-            continue
+    # Collect referenced target ids from routing rules.
+    rule_target_ids = {
+        rule.target_id
+        for rule in routing.rules
+        if rule.action == "proxy" and rule.target_id
+    }
+    rule_target_ids -= main_ids
+    rule_target_ids -= set(extra_profiles_by_id)
+    rule_target_ids -= set(extra_groups_by_id)
+    if not rule_target_ids:
+        return target
+
+    # For each target id, resolve its full profile tree via resolve_refs.
+    for tid in rule_target_ids:
         group = store.get_group(tid)
         if group is not None:
             extra_groups_by_id[tid] = group
-
-    # Resolve members of referenced groups so their outbounds are available.
-    for group in list(extra_groups_by_id.values()):
-        for pid in group.profile_ids:
-            if pid in main_ids or pid in extra_profiles_by_id:
+        try:
+            resolved = resolve_refs(store, [tid])
+        except ValueError:
+            # Unknown/dangling reference — skip; resolution at connect will
+            # surface it with a clear error.
+            continue
+        for profile in resolved:
+            if profile.id in main_ids or profile.id in extra_profiles_by_id:
                 continue
-            profile = store.get_profile(pid)
-            if profile is not None:
-                extra_profiles_by_id[pid] = profile
+            extra_profiles_by_id[profile.id] = profile
 
     return Target(
         type=target.type,

@@ -184,6 +184,7 @@ class Group:
     strategy: str = "latency"
     profile_ids: list[str] = field(default_factory=list)
     subscription_ids: list[str] = field(default_factory=list)
+    group_ids: list[str] = field(default_factory=list)  # nested groups (Phase 01)
     engine: str = "auto"
     enabled: bool = True
     traffic_up: int = 0

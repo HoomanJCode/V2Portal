@@ -134,10 +134,18 @@ def test_persisted_group_engine_rejects_unsupported_member(tmp_path):
             outbound={"protocol": "vmess", "settings": {}},
         )
     )
+    manual2 = store.add_profile(
+        Profile(
+            name="raw2",
+            kind="manual",
+            engine="xray",
+            outbound={"protocol": "vmess", "settings": {}},
+        )
+    )
     group = Group(
         name="broken",
         type="chain",
-        profile_ids=[manual.id, manual.id],
+        profile_ids=[manual.id, manual2.id],
         engine="sing-box",
     )
 
@@ -180,7 +188,7 @@ def test_subscription_membership(tmp_path):
 def test_persisted_group_shape_is_validated(tmp_path):
     store, a, b = _store(tmp_path)
 
-    with pytest.raises(ValueError, match="at least one profile"):
+    with pytest.raises(ValueError, match="resolves to no profiles"):
         resolve_target(store, Group(name="empty", type="single", profile_ids=[]))
 
     with pytest.raises(ValueError, match="non-empty strings"):

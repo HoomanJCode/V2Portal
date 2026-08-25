@@ -100,7 +100,7 @@ def test_stale_group_maps_to_error_status(tmp_path):
 
     assert status.state == "error"
     assert status.target_name == "stale"
-    assert "unknown profile id" in status.error
+    assert "unknown id" in status.error
 
 
 def test_engine_immediate_exit_maps_to_error(tmp_path):

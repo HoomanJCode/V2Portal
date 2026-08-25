@@ -23,7 +23,7 @@ do these todos in priority and mark as down if passed.
 > Plan: `todos/README.md`, phases `todos/01-*.md` … `todos/06-*.md`. Execute in order.
 
 - [x] Phase 01 core: sample of resolution helpers landed earlier (classify_id / classify_ids)
-- [ ] Phase 01 — `resolve_refs` / `subscription_target` / `resolve_target` v2 (nested groups, cycles, dedup)
+- [x] Phase 01 — `resolve_refs` / `subscription_target` / `resolve_target` v2 (nested groups, cycles, dedup)
 - [ ] Phase 02 — uniform command shape (`group add`, per-resource `edit`, flags removed)
 - [ ] Phase 03 — servers accept profile | subscription | group outbound refs
 - [ ] Phase 04 — referential integrity on every remove path
