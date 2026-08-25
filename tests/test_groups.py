@@ -1,8 +1,10 @@
 import pytest
 
-from v2raycli.models import Group, Profile
+from v2raycli.models import Group, Profile, Subscription
 from v2raycli.storage import ConfigStore
 from v2raycli.outbounds.groups import (
+    classify_id,
+    classify_ids,
     create_balancer_group,
     create_chain_group,
     create_single_group,
@@ -208,3 +210,41 @@ def test_persisted_group_shape_is_validated(tmp_path):
 
     with pytest.raises(ValueError, match="unsupported group type"):
         resolve_target(store, Group(name="bad-type", type="selector", profile_ids=[a.id]))
+
+
+# -- ID auto-detection -----------------------------------------------------
+
+
+def test_classify_id_detects_profile_subscription_and_unknown(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p = store.add_profile(Profile(name="p", kind="vmess"))
+    s = store.add_subscription(Subscription(name="s"))
+    assert classify_id(store, p.id) == "profile"
+    assert classify_id(store, s.id) == "subscription"
+    assert classify_id(store, "999") is None
+
+
+def test_classify_ids_splits_mixed_ids_and_rejects_unknown(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p = store.add_profile(Profile(name="p", kind="vmess"))
+    s = store.add_subscription(Subscription(name="s"))
+    profile_ids, sub_ids = classify_ids(store, [s.id, p.id])
+    assert profile_ids == [p.id]
+    assert sub_ids == [s.id]
+    with pytest.raises(ValueError, match="unknown id: 999"):
+        classify_ids(store, [p.id, "999"])
+
+
+def test_balancer_accepts_subscription_id_positionally(tmp_path):
+    """A subscription ID can be passed where profile IDs are expected."""
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_profile(Profile(name="a", kind="vmess"))
+    b = store.add_profile(Profile(name="b", kind="trojan"))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[b.id]))
+    profile_ids, sub_ids = classify_ids(store, [a.id, sub.id])
+    g = create_balancer_group("pool", "latency", profile_ids, store, subscription_ids=sub_ids)
+    assert g.profile_ids == [a.id]
+    assert g.subscription_ids == [sub.id]

@@ -139,6 +139,42 @@ def remove_member(group: Group, profile_id: str) -> Group:
     return group
 
 
+def classify_id(store, entity_id: str) -> str | None:
+    """Return the entity type of an ID: "profile", "subscription", or None.
+
+    IDs are globally unique across entity types (single counter), so the
+    type can be detected by looking the ID up in the store.
+    """
+    if store.get_profile(entity_id) is not None:
+        return "profile"
+    if store.get_subscription(entity_id) is not None:
+        return "subscription"
+    return None
+
+
+def classify_ids(store, ids: list[str]) -> tuple[list[str], list[str]]:
+    """Split IDs into (profile_ids, subscription_ids), detecting the type.
+
+    Raises ValueError for any ID that matches neither a profile nor a
+    subscription.
+    """
+    if not isinstance(ids, list):
+        raise ValueError("ids must be a list")
+    profile_ids: list[str] = []
+    subscription_ids: list[str] = []
+    for entity_id in ids:
+        kind = classify_id(store, entity_id)
+        if kind == "subscription":
+            subscription_ids.append(entity_id)
+        elif kind == "profile":
+            profile_ids.append(entity_id)
+        else:
+            raise ValueError(
+                f"unknown id: {entity_id} (not a profile or subscription)"
+            )
+    return profile_ids, subscription_ids
+
+
 def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[str]:
     """Expand subscription IDs into their current profile IDs."""
     profile_ids: list[str] = []
