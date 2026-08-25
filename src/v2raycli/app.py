@@ -1151,16 +1151,35 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Start a server's engine process. The server must be added first.\n"
             "Without arguments starts all enabled servers.\n\n"
+            "Use --temp to start a one-shot server without saving it to config.\n"
+            "The temporary server runs until you press Ctrl+C.\n\n"
             "Examples:\n"
             "  v2raycli server start\n"
             "  v2raycli server start SERVER_ID\n"
-            "  v2raycli server start --all"
+            "  v2raycli server start --all\n"
+            "  v2raycli server start --temp --profile PROFILE_ID\n"
+            "  v2raycli server start --temp --proxy socks5://192.168.1.2:10804\n"
+            "  v2raycli server start --temp --proxy http://10.0.0.1:8080 --port 8180"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     server_start.add_argument("id", nargs="?", help="server ID to start (or use --all)")
     server_start.add_argument("--all", action="store_true", dest="start_all",
                              help="start all enabled servers")
+    server_start.add_argument("--temp", action="store_true", dest="temp",
+                             help="start a temporary server (not saved; runs until Ctrl+C)")
+    server_start.add_argument("--port", type=int, default=1080,
+                             help="port for temporary server (default: 1080)")
+    server_start.add_argument("--protocol", choices=("mixed", "socks", "http"), default="mixed",
+                             help="inbound protocol for temporary server (default: mixed)")
+    server_start.add_argument("--profile",
+                             help="profile ID for temporary server")
+    server_start.add_argument("--group",
+                             help="group ID for temporary server")
+    server_start.add_argument("--proxy",
+                             help="upstream proxy URL for temporary server (e.g. socks5://host:port)")
+    server_start.add_argument("--listen", default="0.0.0.0",
+                             help="listen address for temporary server (default: 0.0.0.0)")
 
     server_stop = server_commands.add_parser(
         "stop",
@@ -1942,6 +1961,8 @@ def _server_command(store: ConfigStore, args) -> int:
         return 0
 
     if action == "start":
+        if getattr(args, "temp", False):
+            return _temp_server_start(store, args)
         from .servers import ServerManager
 
         mgr = ServerManager(store)
@@ -2329,6 +2350,176 @@ def _tui_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+def _parse_proxy_url(proxy_url: str) -> tuple[str, int, str]:
+    """Parse a proxy URL like socks5://host:port or http://host:port.
+
+    Returns (host, port, protocol) where protocol is 'socks' or 'http'.
+    """
+    url = proxy_url.strip()
+    # Determine protocol
+    if url.startswith("socks5://"):
+        protocol = "socks"
+        url = url[len("socks5://") :]
+    elif url.startswith("socks://"):
+        protocol = "socks"
+        url = url[len("socks://") :]
+    elif url.startswith("http://"):
+        protocol = "http"
+        url = url[len("http://") :]
+    elif url.startswith("https://"):
+        protocol = "http"
+        url = url[len("https://") :]
+    else:
+        raise ValueError(f"unsupported proxy scheme (use socks5:// or http://)")
+    # Strip trailing slash
+    url = url.rstrip("/")
+    # Handle IPv6 [host]:port
+    if url.startswith("["):
+        bracket_end = url.find("]")
+        if bracket_end < 0:
+            raise ValueError("malformed proxy URL: missing ]")
+        host = url[1:bracket_end]
+        rest = url[bracket_end + 1 :]
+        if rest.startswith(":"):
+            port = int(rest[1:])
+        else:
+            raise ValueError("proxy URL requires port")
+    else:
+        # host:port
+        if ":" not in url:
+            raise ValueError("proxy URL requires port")
+        host, port_str = url.rsplit(":", 1)
+        port = int(port_str)
+    if not host:
+        raise ValueError("proxy URL requires a host")
+    if not 1 <= port <= 65535:
+        raise ValueError(f"proxy port must be 1-65535")
+    return host, port, protocol
+
+
+def _temp_server_start(store: ConfigStore, args) -> int:
+    """Start a temporary server that runs until Ctrl+C."""
+    from .models import Server, Settings
+    from .servers import ServerManager
+    from .outbounds.manual import add_socks_proxy, add_http_proxy
+
+    # Build an in-memory Server object (never saved to config)
+    server = Server(
+        name="temporary",
+        port=args.port,
+        protocol=args.protocol,
+        listen=args.listen,
+    )
+
+    if args.profile:
+        profile = store.get_profile(args.profile)
+        if profile is None:
+            _not_found("profile", args.profile, store)
+            return 1
+        server.outbound_id = args.profile
+        server.outbound_type = "profile"
+    elif args.group:
+        group = store.get_group(args.group)
+        if group is None:
+            _not_found("group", args.group, store)
+            return 1
+        server.outbound_id = args.group
+        server.outbound_type = "group"
+    elif args.proxy:
+        host, port, proto = _parse_proxy_url(args.proxy)
+        # Create a temporary in-memory profile for this proxy
+        if proto == "socks":
+            tmp_profile = add_socks_proxy("temp-proxy", host, port)
+        else:
+            tmp_profile = add_http_proxy("temp-proxy", host, port)
+        store.add_profile(tmp_profile)
+        server.outbound_id = tmp_profile.id
+        server.outbound_type = "profile"
+    else:
+        print("--temp requires --profile, --group, or --proxy", file=sys.stderr)
+        return 2
+
+    mgr = ServerManager(store)
+    # Generate config and start the engine
+    try:
+        config_json, target_engine = mgr._generate_server_config(server)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    import json as _json
+    from pathlib import Path
+    from .engines import get_adapter
+    from .engines.binary import locate_binary
+
+    runtime_dir = mgr.runtime_dir / "temp"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    config_path = runtime_dir / "config.json"
+    config_path.write_text(_json.dumps(config_json, indent=2) + "\n", encoding="utf-8")
+
+    try:
+        binary = locate_binary(
+            target_engine,
+            store.config.engines.get(target_engine, {}),
+        )
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    adapter = get_adapter(target_engine)
+    argv = [str(binary), *adapter.run_args(str(config_path))]
+
+    proc = mgr._spawn(argv, runtime_dir, capture_stderr=True)
+    # Brief pause to catch engines that crash immediately
+    for _ in range(10):
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    if proc.poll() is not None:
+        stderr_lines = getattr(proc, "_captured_stderr", [])
+        detail = " ".join(stderr_lines[-3:]) if stderr_lines else f"exit code {proc.returncode}"
+        print(f"error: engine exited immediately: {detail}", file=sys.stderr)
+        _cleanup_temp_proxy(store, args)
+        return 1
+
+    proto_display = args.protocol
+    print(f"temporary {proto_display} server listening on {args.listen}:{args.port}")
+    print(f"engine: {target_engine}  pid: {proc.pid}")
+    print("press Ctrl+C to stop")
+
+    try:
+        while proc.poll() is None:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        import signal
+        try:
+            os.kill(proc.pid, signal.SIGTERM)
+            for _ in range(20):
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+            if proc.poll() is None:
+                os.kill(proc.pid, signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+        _cleanup_temp_proxy(store, args)
+        print("stopped")
+    return 0
+
+
+def _cleanup_temp_proxy(store: ConfigStore, args) -> None:
+    """Remove temporary proxy profile created by --proxy."""
+    if args.proxy:
+        # Find and remove the temp profile we added
+        for p in list(store.config.profiles):
+            if p.name == "temp-proxy" and p.source == "manual":
+                store.remove_profile(p.id)
+                break
 
 
 def _status_line(server_id: str, action: str, detail: str = "") -> None:
