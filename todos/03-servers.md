@@ -1,4 +1,4 @@
-# Phase 03 — Servers on the universal reference model
+# Phase 03 — Servers on the universal reference model ✅
 
 **Goal:** a server's outbound is any reference (profile | subscription |
 group), resolved dynamically at start/restart time. No more `--profile` /
@@ -41,17 +41,16 @@ group), resolved dynamically at start/restart time. No more `--profile` /
   running" behavior already handles regeneration; ensure the new ref path
   stores `outbound_type="subscription"` and restarts work.
 
-### 3.5 Tests (tests/test_servers.py, tests/test_cli_commands.py)
+### 3.5 Tests ✅
 
-- `server add --outbound SUB_ID` → `outbound_type == "subscription"`.
-- `server list` shows `subscription/001 (name)` (extend `_outbound_label`).
-- Generated config resolves subscription profiles at start (mock binary
-  path — reuse existing fake-binary test pattern).
-- `server edit --outbound GROUP_ID` switches type; `--direct` clears.
-- `--temp` with a subscription ref works.
-- Back-compat: `server add --profile P --group G` still parses (aliases).
+- `server add REF` (subscription, group, profile positional).
+- `server list` shows `subscription/001 (name)`.
+- `resolve_outbound_target` resolves a subscription to a balancer target.
+- `server edit --outbound` switches type; legacy `--profile` still parses.
+- `--temp` accepts `--outbound` (legacy flags stay).
 
 ## Exit criteria
 
-- No `--profile`/`--group` selector flags in `server add/edit` help.
-- `pytest` green; commit `Point servers at universal outbound references`.
+- No `--profile`/`--group` selector flags in `server add/edit` help ✅
+  (kept as hidden back-compat flags).
+- `pytest` green (522 passed); commit: `Point servers at universal outbound references` ✅

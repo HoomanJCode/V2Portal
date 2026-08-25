@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from v2raycli import app
-from v2raycli.models import Profile, Server
+from v2raycli.models import Group, Profile, Server, Subscription
 from v2raycli.servers import ServerManager, ServerState
 from v2raycli.storage import ConfigStore
 
@@ -29,6 +31,87 @@ def test_server_model_persists(tmp_path):
     assert len(store2.config.servers) == 1
     assert store2.config.servers[0].port == 1080
     assert store2.config.servers[0].outbound_id == "abc"
+
+
+# -- universal outbound refs (Phase 03) -----------------------------------
+
+
+def test_server_add_accepts_subscription_ref(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub_node = store.add_profile(Profile(name="sub-node", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="myprovider", profile_ids=[sub_node.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "add", "--port", "1080", sub.id])
+    assert app._server_command(store, args) == 0
+    server = store.get_server(capsys.readouterr().out.strip())
+    assert server is not None
+    assert server.outbound_type == "subscription"
+    assert server.outbound_id == sub.id
+
+
+def test_server_add_accepts_group_ref(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    g = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "add", "--port", "1080", g.id])
+    assert app._server_command(store, args) == 0
+    server = store.get_server(capsys.readouterr().out.strip())
+    assert server.outbound_type == "group"
+
+
+def test_server_add_legacy_profile_flag_still_works(tmp_path, capsys):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    store.save()
+    args = app.build_parser().parse_args(["server", "add", "--port", "1080", "--profile", profile.id])
+    assert app._server_command(store, args) == 0
+    server = store.get_server(capsys.readouterr().out.strip())
+    assert server.outbound_type == "profile"
+
+
+def test_server_list_shows_subscription_label(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub_node = store.add_profile(Profile(name="n", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="myprovider", profile_ids=[sub_node.id]))
+    server = Server(name="s1", port=1080, outbound_id=sub.id, outbound_type="subscription")
+    store.add_server(server)
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "list"])
+    assert app._server_command(store, args) == 0
+    assert f"subscription/{sub.id} (myprovider)" in capsys.readouterr().out
+
+
+def test_server_edit_switches_outbound_ref(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sub_node = store.add_profile(Profile(name="n2", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="s", profile_ids=[sub_node.id]))
+    server = store.add_server(Server(name="s1", port=1080, outbound_id=p.id, outbound_type="profile"))
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "edit", server.id, "--outbound", sub.id])
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.outbound_type == "subscription"
+    assert updated.outbound_id == sub.id
+
+
+def test_server_resolve_subscription_outbound_target(tmp_path):
+    """Subscription outbound resolves to a balancer over current profiles."""
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[p1.id, p2.id]))
+    server = store.add_server(Server(name="s1", port=1080, outbound_id=sub.id, outbound_type="subscription"))
+
+    manager = ServerManager(store)
+    target = manager.resolve_outbound_target(server)
+    assert target.type == "balancer"
+    assert set(target.profile_ids) == {p1.id, p2.id}
 
 
 def test_server_crud(tmp_path):

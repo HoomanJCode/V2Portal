@@ -117,33 +117,28 @@ class ServerManager:
         self._save_states()
         return running
 
+    def resolve_outbound_target(self, server: "Server"):
+        """Resolve a server's outbound reference into a Target.
+
+        Accepts profile | subscription | group | direct via the universal
+        resolver; a subscription resolves dynamically as a strategy-based
+        balancer over its current profiles.
+        """
+        from .outbounds.groups import resolve_outbound
+
+        return resolve_outbound(
+            self.store,
+            server.outbound_type,
+            server.outbound_id,
+            default_engine=self.store.config.settings.default_engine,
+        )
+
     def _generate_server_config(self, server: "Server") -> dict:
         """Generate engine config for a single server."""
-        from .engines import get_adapter, resolve_engine
-        from .models import Profile, Group
-        from .outbounds.groups import Target, enrich_target_with_routing, resolve_target
+        from .engines import get_adapter
+        from .outbounds.groups import enrich_target_with_routing
 
-        # Resolve the outbound
-        if server.outbound_type == "direct":
-            # No proxy — traffic goes directly through the engine.
-            target = Target(
-                type="single",
-                engine=self.store.config.settings.default_engine,
-                profiles=[],
-            )
-        elif server.outbound_type == "profile":
-            profile = self.store.get_profile(server.outbound_id)
-            if profile is None:
-                raise ValueError(f"unknown profile id: {server.outbound_id}")
-            target = resolve_target(self.store, profile, self.store.config.settings.default_engine)
-        elif server.outbound_type == "group":
-            group = self.store.get_group(server.outbound_id)
-            if group is None:
-                raise ValueError(f"unknown group id: {server.outbound_id}")
-            target = resolve_target(self.store, group, self.store.config.settings.default_engine)
-        else:
-            raise ValueError(f"unknown outbound type: {server.outbound_type}")
-
+        target = self.resolve_outbound_target(server)
         target = enrich_target_with_routing(target, self.store.config.routing, self.store)
 
         # Build settings for this server

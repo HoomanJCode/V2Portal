@@ -1217,20 +1217,26 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  socks  — SOCKS5 only\n"
             "  http   — HTTP only\n\n"
             "Examples:\n"
-            "  v2raycli server add --port 1080 --profile abc --name 'US proxy'\n"
-            "  v2raycli server add --port 1081 --group def --protocol http\n"
-            "  v2raycli server add --port 1082 --profile abc --protocol socks"
+            "  v2raycli server add --port 1080 REF --name 'US proxy'\n"
+            "  v2raycli server add --port 1081 REF --protocol http\n"
+            "  v2raycli server add --port 1082 --direct\n"
+            "  REF = profile, subscription, or group ID (auto-detected)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     server_add.add_argument("--port", type=int, required=True, help="port to listen on")
     server_outbound = server_add.add_mutually_exclusive_group()
-    server_outbound.add_argument("--profile", help="profile ID to forward to")
-    server_outbound.add_argument("--group", help="group ID to forward to")
+    server_outbound.add_argument("out", nargs="?", default=None,
+                                 help="profile, subscription, or group ID to forward to (auto-detected)")
+    server_outbound.add_argument("--direct", action="store_true", default=False,
+                                 help="forward directly (no proxy outbound)")
     server_add.add_argument("--name", default="", help="display name for this server")
     server_add.add_argument("--protocol", choices=("mixed", "socks", "http"), default="mixed",
                            help="inbound protocol (default: mixed)")
     server_add.add_argument("--listen", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
+    # Back-compat: --profile/--group flags (deprecated, auto-detected now).
+    server_outbound.add_argument("--profile", help=argparse.SUPPRESS, dest="legacy_profile")
+    server_outbound.add_argument("--group", help=argparse.SUPPRESS, dest="legacy_group")
 
     server_start = server_commands.add_parser(
         "start",
@@ -1259,10 +1265,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                              help="port for temporary server (default: 1080)")
     server_start.add_argument("--protocol", choices=("mixed", "socks", "http"), default="mixed",
                              help="inbound protocol for temporary server (default: mixed)")
+    server_start.add_argument("--outbound", metavar="REF",
+                             help="profile/subscription/group ID for temporary server (auto-detected)")
     server_start.add_argument("--profile",
-                             help="profile ID for temporary server")
+                             help=argparse.SUPPRESS)  # legacy: use --outbound
     server_start.add_argument("--group",
-                             help="group ID for temporary server")
+                             help=argparse.SUPPRESS)  # legacy: use --outbound
     server_start.add_argument("--proxy",
                              help="upstream proxy URL for temporary server (e.g. socks5://host:port)")
     server_start.add_argument("--listen", default="0.0.0.0",
@@ -1323,12 +1331,15 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                             help="new inbound protocol")
     server_edit.add_argument("--listen", default=None, help="new listen address")
     server_outbound_edit = server_edit.add_mutually_exclusive_group()
-    server_outbound_edit.add_argument("--profile", default=None,
-                                      help="switch outbound to this profile ID")
-    server_outbound_edit.add_argument("--group", default=None,
-                                      help="switch outbound to this group ID")
+    server_outbound_edit.add_argument("--outbound", default=None, metavar="REF",
+                                      help="switch outbound to a profile/subscription/group ID (auto-detected)")
     server_outbound_edit.add_argument("--direct", action="store_true", default=False,
                                       help="switch outbound to direct (no proxy)")
+    # Back-compat flags (deprecated; --outbound auto-detects).
+    server_outbound_edit.add_argument("--profile", default=None, dest="legacy_profile",
+                                      help=argparse.SUPPRESS)
+    server_outbound_edit.add_argument("--group", default=None, dest="legacy_group",
+                                      help=argparse.SUPPRESS)
 
     server_remove = server_commands.add_parser(
         "remove",
@@ -2086,6 +2097,23 @@ def _routing_command(store: ConfigStore, args) -> int:
     return _command_help(args, "routing")
 
 
+def _detect_outbound(store: ConfigStore, ref: str) -> tuple[str, str]:
+    """Auto-detect an outbound reference's type: (type, id).
+
+    ``type`` ∈ {profile, subscription, group}; raises for unknown ids.
+    """
+    from .outbounds.groups import classify_id
+
+    kind = classify_id(store, ref)
+    if kind == "subscription":
+        return "subscription", ref
+    if kind == "group":
+        return "group", ref
+    if kind == "profile":
+        return "profile", ref
+    raise ValueError(f"unknown id: {ref} (not a profile, subscription, or group)")
+
+
 def _outbound_label(row: dict) -> str:
     """Render a server's outbound target including its ID.
 
@@ -2124,6 +2152,9 @@ def _server_command(store: ConfigStore, args) -> int:
             elif s.outbound_type == "group":
                 g = store.get_group(s.outbound_id)
                 target_name = g.name if g else s.outbound_id
+            elif s.outbound_type == "subscription":
+                sub = store.get_subscription(s.outbound_id)
+                target_name = sub.name if sub else s.outbound_id
             elif s.outbound_type == "direct":
                 target_name = "direct (device)"
             rows.append({
@@ -2166,22 +2197,16 @@ def _server_command(store: ConfigStore, args) -> int:
             protocol=args.protocol,
             listen=args.listen,
         )
-        if args.profile:
-            profile = store.get_profile(args.profile)
-            if profile is None:
-                _not_found("profile", args.profile, store)
+        ref = getattr(args, "out", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
+        if ref:
+            try:
+                server.outbound_type, server.outbound_id = _detect_outbound(store, ref)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
                 return 1
-            server.outbound_id = args.profile
-            server.outbound_type = "profile"
-        elif args.group:
-            group = store.get_group(args.group)
-            if group is None:
-                _not_found("group", args.group, store)
-                return 1
-            server.outbound_id = args.group
-            server.outbound_type = "group"
         else:
             server.outbound_type = "direct"
+            server.outbound_id = ""
         store.add_server(server)
         store.save()
         print(server.id)
@@ -2303,20 +2328,13 @@ def _server_command(store: ConfigStore, args) -> int:
             server.protocol = args.protocol
         if args.listen is not None:
             server.listen = args.listen
-        if args.profile:
-            profile = store.get_profile(args.profile)
-            if profile is None:
-                _not_found("profile", args.profile, store)
+        ref = getattr(args, "outbound", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
+        if ref:
+            try:
+                server.outbound_type, server.outbound_id = _detect_outbound(store, ref)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
                 return 1
-            server.outbound_id = args.profile
-            server.outbound_type = "profile"
-        elif args.group:
-            group = store.get_group(args.group)
-            if group is None:
-                _not_found("group", args.group, store)
-                return 1
-            server.outbound_id = args.group
-            server.outbound_type = "group"
         elif args.direct:
             server.outbound_id = ""
             server.outbound_type = "direct"
@@ -2687,20 +2705,9 @@ def _temp_server_start(store: ConfigStore, args) -> int:
         listen=args.listen,
     )
 
-    if args.profile:
-        profile = store.get_profile(args.profile)
-        if profile is None:
-            _not_found("profile", args.profile, store)
-            return 1
-        server.outbound_id = args.profile
-        server.outbound_type = "profile"
-    elif args.group:
-        group = store.get_group(args.group)
-        if group is None:
-            _not_found("group", args.group, store)
-            return 1
-        server.outbound_id = args.group
-        server.outbound_type = "group"
+    ref = getattr(args, "outbound", None) or getattr(args, "profile", None) or getattr(args, "group", None)
+    if ref:
+        server.outbound_type, server.outbound_id = _detect_outbound(store, ref)
     elif args.proxy:
         host, port, proto = _parse_proxy_url(args.proxy)
         # Create a temporary in-memory profile for this proxy
@@ -2712,7 +2719,7 @@ def _temp_server_start(store: ConfigStore, args) -> int:
         server.outbound_id = tmp_profile.id
         server.outbound_type = "profile"
     else:
-        print("--temp requires --profile, --group, or --proxy", file=sys.stderr)
+        print("--temp requires --outbound or --proxy", file=sys.stderr)
         return 2
 
     mgr = ServerManager(store)
