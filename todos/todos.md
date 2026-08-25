@@ -14,3 +14,4 @@ do these todos in priority and mark as down if passed.
 > * [x] checkout for more beautifull texts over all the app, and if can make better make it better. its menu and text review.
 > * [x] tell me how can i do it and write a doc page about this: i want pass epicgames traffic using berlin profile and youtube traffic from group 1, then other from a sub2 (subscription) and about some specific russian websites i want direct traffic not proxy over any profile.
 > * [x] for server list should write what profile its redirecting and the path is going
+> * [x] don't ask profile or subscription dedicated in commands — IDs are unique so detect automatically (group create / add-member / remove-member now accept mixed profile+subscription IDs)

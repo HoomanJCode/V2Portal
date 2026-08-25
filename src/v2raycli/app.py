@@ -509,23 +509,25 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="create a balanced group (strategy: latency|random|roundRobin|leastLoad)",
         description=(
             "Create a balancer group. Requires a name and 2+ profile IDs or\n"
-            "subscription IDs. Subscription profiles are resolved dynamically.\n\n"
+            "subscription IDs. IDs are detected automatically — pass profile\n"
+            "and subscription IDs together and they are sorted by type.\n"
+            "Subscription profiles are resolved dynamically.\n\n"
             "  latency      — pick the lowest-latency profile (sing-box urltest)\n"
             "  random       — pick a random profile\n"
             "  roundRobin   — rotate through profiles in order\n"
             "  leastLoad    — pick the least-loaded (forces xray engine)\n\n"
             "Examples:\n"
             "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
-            "  v2raycli group create balancer pool ID_A --subscription SUB_ID\n"
-            "  v2raycli group create balancer fromsub --subscription SUB_A --subscription SUB_B"
+            "  v2raycli group create balancer pool ID_A SUB_ID\n"
+            "  v2raycli group create balancer fromsub SUB_A SUB_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     balancer.add_argument("name", help="display name for this group")
     balancer.add_argument("profile_ids", nargs="*", default=[],
-                         help="profile IDs that are candidates for this balancer")
+                         help="profile or subscription IDs (auto-detected) to include in this balancer")
     balancer.add_argument("--subscription", action="append", default=[], dest="subscription_ids",
-                         help="subscription ID whose profiles are included (repeatable)")
+                         help="subscription ID whose profiles are included (repeatable; optional — positional IDs are auto-detected)")
     balancer.add_argument("--strategy",
                          choices=("latency", "random", "roundRobin", "leastLoad"),
                          default="latency",
@@ -540,19 +542,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="create a proxy chain (traffic flows through each hop in order)",
         description=(
             "Create a chain group. Requires a name and 2+ profile IDs\n"
-            "or subscription IDs. Subscription profiles are resolved dynamically.\n"
+            "or subscription IDs. IDs are detected automatically — pass profile\n"
+            "and subscription IDs together and they are sorted by type.\n"
+            "Subscription profiles are resolved dynamically.\n"
             "Traffic flows through the first proxy, then the second, and so on.\n\n"
             "Examples:\n"
             "  v2raycli group create chain tunnel ID_A ID_B\n"
-            "  v2raycli group create chain tunnel ID_A --subscription SUB_ID"
+            "  v2raycli group create chain tunnel ID_A SUB_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     chain.add_argument("name", help="display name for this group")
     chain.add_argument("profile_ids", nargs="*", default=[],
-                      help="ordered list of profile IDs forming the chain")
+                      help="ordered profile or subscription IDs (auto-detected) forming the chain")
     chain.add_argument("--subscription", action="append", default=[], dest="subscription_ids",
-                      help="subscription ID whose profiles are included (repeatable)")
+                      help="subscription ID whose profiles are included (repeatable; optional — positional IDs are auto-detected)")
     chain.add_argument("--engine",
                       choices=("auto", "sing-box", "xray"),
                       default="auto",
@@ -574,36 +578,42 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "add-member",
         help="add a profile to a group",
         description=(
-            "Add a profile to an existing group.\n\n"
+            "Add profiles and/or subscriptions to an existing group.\n"
+            "IDs are detected automatically (profile or subscription).\n\n"
             "Examples:\n"
             "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group add-member GROUP_ID PROFILE_A PROFILE_B"
+            "  v2raycli group add-member GROUP_ID PROFILE_A SUB_ID PROFILE_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_add_member.add_argument("id", help="group ID to modify")
-    group_add_member.add_argument("profile_ids", nargs="+", help="profile ID(s) to add")
+    group_add_member.add_argument("profile_ids", nargs="+",
+                                  help="profile or subscription ID(s) to add (auto-detected)")
 
     group_remove_member = group_commands.add_parser(
         "remove-member",
         help="remove a profile from a group",
         description=(
-            "Remove a profile from an existing group.\n\n"
+            "Remove profiles and/or subscriptions from an existing group.\n"
+            "IDs are detected automatically (profile or subscription).\n\n"
             "Examples:\n"
             "  v2raycli group remove-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group remove-member GROUP_ID PROFILE_A PROFILE_B"
+            "  v2raycli group remove-member GROUP_ID PROFILE_A SUB_ID PROFILE_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_remove_member.add_argument("id", help="group ID to modify")
-    group_remove_member.add_argument("profile_ids", nargs="+", help="profile ID(s) to remove")
+    group_remove_member.add_argument("profile_ids", nargs="+",
+                                  help="profile or subscription ID(s) to remove (auto-detected)")
 
     group_add_sub = group_commands.add_parser(
         "add-sub",
         help="add a subscription to a group",
         description=(
             "Add a subscription to a group. Its profiles are resolved\n"
-            "dynamically and update when the subscription is refreshed.\n\n"
+            "dynamically and update when the subscription is refreshed.\n"
+            "Note: 'group add-member' already auto-detects subscription IDs,\n"
+            "so this command is only kept for convenience.\n\n"
             "Examples:\n"
             "  v2raycli group add-sub GROUP_ID SUB_ID\n"
             "  v2raycli group add-sub GROUP_ID SUB_A SUB_B"
@@ -1680,17 +1690,26 @@ def _group_command(store: ConfigStore, args) -> int:
             print("no groups")
         return 0
     if action == "create":
-        from .outbounds.groups import create_balancer_group, create_chain_group
+        from .outbounds.groups import (
+            classify_ids,
+            create_balancer_group,
+            create_chain_group,
+        )
 
-        sub_ids = getattr(args, "subscription_ids", []) or []
+        # Auto-detect profile vs subscription IDs; --subscription flags are
+        # still accepted and merged in for backward compatibility.
+        profile_ids, sub_ids = classify_ids(store, args.profile_ids)
+        for sid in getattr(args, "subscription_ids", []) or []:
+            if sid not in sub_ids:
+                sub_ids.append(sid)
         if args.group_create_command == "balancer":
             group = create_balancer_group(
-                args.name, args.strategy, args.profile_ids, store,
+                args.name, args.strategy, profile_ids, store,
                 engine=args.engine, subscription_ids=sub_ids,
             )
         elif args.group_create_command == "chain":
             group = create_chain_group(
-                args.name, args.profile_ids, store,
+                args.name, profile_ids, store,
                 engine=args.engine, subscription_ids=sub_ids,
             )
         else:
@@ -1707,34 +1726,49 @@ def _group_command(store: ConfigStore, args) -> int:
         print(f"removed group {args.id}")
         return 0
     if action == "add-member":
-        from .outbounds.groups import add_member, _resolve_members
+        from .outbounds.groups import add_member, classify_id
 
         group = store.get_group(args.id)
         if group is None:
             _not_found("group", args.id, store)
             return 1
-        # Validate profiles exist before adding.
-        _resolve_members(store, args.profile_ids)
+        added_p, added_s = 0, 0
         for pid in args.profile_ids:
-            add_member(group, pid)
+            kind = classify_id(store, pid)
+            if kind == "subscription":
+                if pid not in group.subscription_ids:
+                    group.subscription_ids.append(pid)
+                    added_s += 1
+            elif kind == "profile":
+                if pid not in group.profile_ids:
+                    add_member(group, pid)
+                    added_p += 1
+            else:
+                raise ValueError(f"unknown id: {pid} (not a profile or subscription)")
         store.save()
-        print(f"added {len(args.profile_ids)} profile(s) to {args.id}")
+        print(f"added {added_p} profile(s), {added_s} subscription(s) to {args.id}")
         return 0
     if action == "remove-member":
-        from .outbounds.groups import remove_member
+        from .outbounds.groups import classify_id, remove_member
 
         group = store.get_group(args.id)
         if group is None:
             _not_found("group", args.id, store)
             return 1
-        removed = 0
+        removed_p, removed_s = 0, 0
         for pid in args.profile_ids:
-            before = len(group.profile_ids)
-            remove_member(group, pid)
-            if len(group.profile_ids) < before:
-                removed += 1
+            kind = classify_id(store, pid)
+            if kind == "subscription":
+                if pid in group.subscription_ids:
+                    group.subscription_ids.remove(pid)
+                    removed_s += 1
+            elif kind == "profile":
+                before = len(group.profile_ids)
+                remove_member(group, pid)
+                if len(group.profile_ids) < before:
+                    removed_p += 1
         store.save()
-        print(f"removed {removed} profile(s) from {args.id}")
+        print(f"removed {removed_p} profile(s), {removed_s} subscription(s) from {args.id}")
         return 0
     if action == "add-sub":
         group = store.get_group(args.id)

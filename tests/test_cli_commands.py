@@ -5,7 +5,7 @@ import json
 import pytest
 
 from v2raycli import app
-from v2raycli.models import Profile, Subscription
+from v2raycli.models import Group, Profile, Subscription
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -91,6 +91,63 @@ def test_profile_list_filter_by_kind(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "a-socks" in out
     assert "a-vless" not in out
+
+
+# -- group CLI auto-detection ---------------------------------------------
+
+
+def test_group_create_detects_mixed_profile_and_subscription_ids(tmp_path, capsys):
+    store = _store(tmp_path)
+    manual = store.add_profile(Profile(name="manual", kind="socks", outbound=SOCKS))
+    sub_node = store.add_profile(Profile(name="sub-node", kind="vless", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="myprovider", profile_ids=[sub_node.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["group", "create", "balancer", "pool", manual.id, sub.id]
+    )
+    assert app._group_command(store, args) == 0
+    group = store.get_group(capsys.readouterr().out.strip())
+    assert group is not None
+    assert group.profile_ids == [manual.id]
+    assert group.subscription_ids == [sub.id]
+
+
+def test_group_add_member_detects_subscription_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub"))
+    group = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add-member", group.id, sub.id])
+    assert app._group_command(store, args) == 0
+    assert store.get_group(group.id).subscription_ids == [sub.id]
+
+
+def test_group_remove_member_detects_subscription_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub"))
+    group = store.add_group(Group(
+        name="g", type="single", profile_ids=[p.id], subscription_ids=[sub.id],
+    ))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "remove-member", group.id, sub.id])
+    assert app._group_command(store, args) == 0
+    assert store.get_group(group.id).subscription_ids == []
+
+
+def test_group_add_member_rejects_unknown_id(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    group = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add-member", group.id, "999"])
+    assert app._command(store, args) == 1
+    assert "unknown id: 999" in capsys.readouterr().err
 
 
 # -- routing CLI commands --------------------------------------------------
