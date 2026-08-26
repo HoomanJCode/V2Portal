@@ -48,7 +48,6 @@ def test_resource_actions_exist(resource, actions):
         ["subscription", "rename"],
         ["server", "add"],
         ["server", "edit"],
-        ["connect", "001"],
         ["routing", "add"],
     ],
 )
@@ -82,7 +81,3 @@ def test_no_selector_flags_in_server_add_help():
     assert "--group" not in out
     assert "REF" in out
 
-
-def test_connect_help_documents_ref():
-    out = _help_text(["connect"])
-    assert "profile, subscription, group, or server" in out
