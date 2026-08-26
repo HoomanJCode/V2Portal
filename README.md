@@ -31,7 +31,7 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
   WS/WSS handshake and ping/pong; `--test` measures real proxy request delay
   through the engine.
 - **Traffic stats** — cumulative per-profile/group up/down usage (sing-box),
-  recorded on disconnect.
+  recorded when a server stops.
 - **Config on disk** — a single JSON file in your platform config dir.
 
 ## Install
@@ -320,10 +320,10 @@ v2raycli routing remove RULE_ID
 | GeoIP | `--geoip cn` | `--geoip cn --geoip private` |
 | GeoSite | `--geosite category-ads-all` | `--geosite gfw` |
 
-### Target profiles, groups, and servers
+### Target any reference
 
 Proxy rules can target any profile, subscription, group, or server by ID —
-not just the currently connected target. A server target routes matching
+not just the server's default outbound. A server target routes matching
 traffic through that server's local inbound. This lets you route different
 traffic through different outbounds:
 
@@ -334,7 +334,7 @@ v2raycli routing add proxy --domain netflix.com --target US_PROFILE_ID
 # Route streaming through a low-latency balancer group
 v2raycli routing add proxy --geosite streaming --target BALANCER_GROUP_ID
 
-# Route all traffic through the connected target (default)
+# No --target: the rule follows the server's own outbound
 v2raycli routing add proxy --domain example.com
 ```
 
@@ -360,9 +360,9 @@ devices on your network can use `socks5://<your-ip>:1080` /
 Enable **Settings → Traffic stats** (or set `settings.traffic_api: true` in the
 config) to have sing-box expose its Clash API on `127.0.0.1`
 (`traffic_api_port`, default 9090). The CLI polls cumulative up/down bytes and
-adds them to the connected profile or group on disconnect. Works with sing-box
-(the default engine); xray has no Clash-compatible HTTP API so its traffic is
-not counted.
+adds them to the server's outbound target when the server stops. Works with
+sing-box (the default engine); xray has no Clash-compatible HTTP API so its
+traffic is not counted.
 
 ## Run as a service
 
