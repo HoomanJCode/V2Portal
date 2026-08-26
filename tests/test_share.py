@@ -133,6 +133,13 @@ def test_hysteria2_tuic_wireguard():
     assert w.outbound["settings"]["secretKey"] == "k"
 
 
+def test_wireguard_binary_payload_reports_clean_error():
+    # base64 of raw binary that is not UTF-8 text (corrupt subscription link)
+    payload = base64.b64encode(b"7P\xa1'>\xa6\xd0\xc0A\x11\x9f\xe0\xcd\xbf\x8f8<V").decode()
+    with pytest.raises(ShareLinkError, match="not valid base64-encoded JSON"):
+        decode_link("wireguard://" + payload)
+
+
 def test_unknown_scheme_raises():
     with pytest.raises(ShareLinkError):
         decode_link("foo://bar")

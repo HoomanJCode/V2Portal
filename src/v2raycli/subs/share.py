@@ -13,6 +13,7 @@ adapters in a later phase translate these to the target engine's config.
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from urllib.parse import parse_qs, quote, unquote
 
@@ -518,10 +519,15 @@ def parse_wireguard(raw: str) -> Profile:
     payload = unquote(raw[len("wireguard://") :])
     if "#" in payload:
         payload, _ = payload.split("#", 1)
-    if payload.startswith("{"):
-        data = json.loads(payload)
-    else:
-        data = json.loads(_b64decode(payload).decode("utf-8"))
+    try:
+        if payload.startswith("{"):
+            data = json.loads(payload)
+        else:
+            data = json.loads(_b64decode(payload).decode("utf-8"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ShareLinkError(
+            "wireguard payload is not valid base64-encoded JSON"
+        ) from exc
 
     peers = []
     for peer in data.get("peers", []):
