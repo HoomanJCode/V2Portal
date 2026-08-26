@@ -6,11 +6,9 @@ refresh flows through servers/groups, nesting, dedup, and removals.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
-from v2raycli.models import Group, Profile, Subscription
+from v2raycli.models import Group, Profile, Server, Subscription
 from v2raycli.outbounds.groups import resolve_refs, resolve_target
 from v2raycli.storage import ConfigStore
 
@@ -133,26 +131,19 @@ def test_remove_subscription_prunes_group_and_server_errors_clearly(tmp_path):
         resolve_outbound(store, "subscription", sub.id)
 
 
-def test_connect_by_any_ref(tmp_path):
+def test_resolve_ref_entity_by_any_ref(tmp_path):
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
     sub, _ = _make_sub(store, "s", 1)
     g = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    sv = store.add_server(Server(name="local", port=1081))
     store.save()
 
-    from v2raycli.connector import connect_ref, resolve_ref_entity
+    from v2raycli.outbounds.groups import resolve_ref_entity
 
     assert resolve_ref_entity(store, p.id) is p
     assert resolve_ref_entity(store, sub.id) is sub
     assert resolve_ref_entity(store, g.id) is g
-
-    for ref in (p.id, sub.id, g.id):
-        connected = []
-
-        class FakeController:
-            def connect(self, selection):
-                connected.append(selection)
-                return SimpleNamespace(state="ok")
-
-        assert connect_ref(store, ref, FakeController()).state == "ok"
-        assert len(connected) == 1
+    assert resolve_ref_entity(store, sv.id) is sv
+    with pytest.raises(ValueError, match="unknown id"):
+        resolve_ref_entity(store, "999")

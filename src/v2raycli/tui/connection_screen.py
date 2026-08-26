@@ -24,7 +24,7 @@ def run(store, controller, selection) -> None:
                 controller.disconnect()
                 break
             if command == "s":
-                from ..connector import resolve_ref_entity
+                from ..outbounds.groups import resolve_ref_entity
 
                 selection = widgets.pick_profile(
                     store.list_profiles(), store.list_groups(), store.list_subscriptions()

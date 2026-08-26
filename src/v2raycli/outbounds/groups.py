@@ -263,6 +263,28 @@ def classify_refs(
     return profile_ids, subscription_ids, group_ids, server_ids
 
 
+def resolve_ref_entity(store, ref: str):
+    """Return the Profile / Subscription / Group / Server for ``ref``.
+
+    Type is auto-detected from the globally unique ID space. Raises
+    ValueError for unknown ids.
+    """
+    if not isinstance(ref, str) or not ref:
+        raise ValueError("ref must be a non-empty id string")
+    kind = classify_id(store, ref)
+    if kind == "profile":
+        return store.get_profile(ref)
+    if kind == "subscription":
+        return store.get_subscription(ref)
+    if kind == "group":
+        return store.get_group(ref)
+    if kind == "server":
+        return store.get_server(ref)
+    raise ValueError(
+        f"unknown id: {ref} (not a profile, subscription, group, or server)"
+    )
+
+
 def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[str]:
     """Expand subscription IDs into their current profile IDs."""
     profile_ids: list[str] = []

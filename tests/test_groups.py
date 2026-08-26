@@ -10,6 +10,7 @@ from v2raycli.outbounds.groups import (
     create_chain_group,
     create_single_group,
     group_tree_lines,
+    resolve_ref_entity,
     resolve_refs,
     resolve_target,
     server_profile,
@@ -280,6 +281,18 @@ def test_classify_id_detects_server(tmp_path):
     store, _, _, sv, _ = _store_with_server(tmp_path)
     assert classify_id(store, sv.id) == "server"
     assert classify_id(store, "999") is None
+
+
+def test_resolve_ref_entity_detects_kind(tmp_path):
+    store, a, _, sv, _ = _store_with_server(tmp_path)
+    sub = store.add_subscription(Subscription(name="sub"))
+    g = store.add_group(Group(name="g"))
+    assert resolve_ref_entity(store, a.id) is a
+    assert resolve_ref_entity(store, sub.id) is sub
+    assert resolve_ref_entity(store, g.id) is g
+    assert resolve_ref_entity(store, sv.id) is sv
+    with pytest.raises(ValueError, match="unknown id: 999"):
+        resolve_ref_entity(store, "999")
 
 
 def test_classify_refs_splits_four_ways(tmp_path):

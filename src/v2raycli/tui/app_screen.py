@@ -72,7 +72,7 @@ def _connect(store, controller) -> None:
     if selection is None:
         return
     kind, key = selection
-    from ..connector import resolve_ref_entity
+    from ..outbounds.groups import resolve_ref_entity
 
     chosen = resolve_ref_entity(store, key)
     if chosen is not None:
