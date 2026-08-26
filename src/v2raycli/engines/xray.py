@@ -366,11 +366,17 @@ class XrayAdapter(EngineAdapter):
         if settings.dns:
             config["dns"] = {"servers": settings.dns}
         if target.type == "balancer" and target.strategy in ("latency", "leastLoad"):
-            # xray's leastPing/leastLoad balancers require the observatory.
+            # xray's leastPing balancer requires the observatory; probeInterval
+            # is used for both health and failover cadence. When failover is on
+            # we probe at the configured interval and drop/flag dead nodes so
+            # leastPing switches to a healthy peer quickly.
+            probe_interval = (
+                f"{target.health_interval}s" if target.health_interval else "1m"
+            )
             config["observatory"] = {
                 "subjectSelector": [p.id for p in target.profiles],
                 "probeURL": settings.test_url,
-                "probeInterval": "1m",
+                "probeInterval": probe_interval,
             }
         return config
 

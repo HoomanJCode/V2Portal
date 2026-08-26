@@ -298,7 +298,14 @@ class SingBoxAdapter(EngineAdapter):
         if target.type == "balancer":
             tags = [p.id for p in target.profiles]
             if target.strategy == "latency":
-                outbounds.append({"type": "urltest", "tag": BALANCER_TAG, "outbounds": tags})
+                urltest: dict = {"type": "urltest", "tag": BALANCER_TAG, "outbounds": tags}
+                if target.health_interval:
+                    # Fail over quickly when the active node stops answering:
+                    # probe on the interval and cut live connections to the dead
+                    # node so clients switch without waiting.
+                    urltest["interval"] = f"{target.health_interval}s"
+                    urltest["interrupt_exist_connections"] = True
+                outbounds.append(urltest)
             else:
                 outbounds.append(
                     {"type": "selector", "tag": BALANCER_TAG, "outbounds": tags, "default": tags[0]}
