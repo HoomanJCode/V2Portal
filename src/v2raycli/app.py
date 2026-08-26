@@ -1222,6 +1222,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_add.add_argument("--protocol", choices=("mixed", "socks", "http"), default="mixed",
                            help="inbound protocol (default: mixed)")
     server_add.add_argument("--listen", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
+    server_add.add_argument("--api-port", type=int, default=0,
+                            help="Clash API port to expose the live active outbound (0 = disabled)")
+    server_add.add_argument("--failover", action="store_true", default=False,
+                            help="auto-switch to another node when the active one stops responding")
+    server_add.add_argument("--failover-timeout", type=int, default=0,
+                            help="seconds between health probes; 0 = engine default (10s) when --failover is set")
     # Back-compat: --profile/--group flags (deprecated, auto-detected now).
     server_outbound.add_argument("--profile", help=argparse.SUPPRESS, dest="legacy_profile")
     server_outbound.add_argument("--group", help=argparse.SUPPRESS, dest="legacy_group")
@@ -1318,6 +1324,14 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_edit.add_argument("--protocol", choices=("mixed", "socks", "http"), default=None,
                             help="new inbound protocol")
     server_edit.add_argument("--listen", default=None, help="new listen address")
+    server_edit.add_argument("--api-port", type=int, default=None,
+                            help="Clash API port (0 disables; −1 leaves unchanged)")
+    server_edit.add_argument("--failover", action="store_true", default=False,
+                            help="enable auto-switch to a healthy node on timeout")
+    server_edit.add_argument("--failover-off", action="store_true", default=False,
+                            help="disable failover (pin to a single node)")
+    server_edit.add_argument("--failover-timeout", type=int, default=None,
+                            help="seconds between health probes (−1 leaves unchanged)")
     server_outbound_edit = server_edit.add_mutually_exclusive_group()
     server_outbound_edit.add_argument("--outbound", default=None, metavar="REF",
                                       help="switch outbound to a profile/subscription/group ID (auto-detected)")
@@ -2156,9 +2170,13 @@ def _detect_outbound(store: ConfigStore, ref: str) -> tuple[str, str]:
 
 
 def _outbound_label(row: dict) -> str:
-    """Render a server's outbound target including its ID.
+    """Render a server's outbound target including resolved strategy and nodes.
 
-    Examples: 'profile/002 (US proxy)', 'group/001 (mygroup)', 'direct (device)'.
+    Examples:
+      'profile/002 (US proxy)'
+      'subscription/001 (my-sub) — latency, 19 nodes'
+      'group/001 (my-grp) — latency, 3 nodes → 007'
+      'direct (device)'
     """
     if row["outbound_type"] == "direct":
         return "direct (device)"
@@ -2166,6 +2184,23 @@ def _outbound_label(row: dict) -> str:
     name = row.get("outbound_name") or ""
     if name and name != row["outbound_id"]:
         label += f" ({name})"
+    kind = row.get("outbound_kind") or ""
+    profiles = row.get("outbound_profiles") or []
+    if kind == "single" and len(profiles) == 1:
+        label += f" → {profiles[0]['id']} ({profiles[0]['name']})"
+    elif kind in ("balancer", "chain") and profiles:
+        strategy = row.get("outbound_strategy") or ""
+        detail = f"    {strategy}, {len(profiles)} nodes".lstrip()
+        label += f" — {detail}"
+        active = row.get("active_outbound")
+        if active:
+            by_id = {p["id"]: p["name"] for p in profiles}
+            if active in by_id:
+                label += f" → {active} ({by_id[active]})"
+            elif active != "direct":
+                label += f" → {active}"
+    if row.get("failover"):
+        label += f"  [failover:{row.get('failover_timeout') or 'default'}s]"
     return label
 
 
@@ -2183,9 +2218,13 @@ def _server_command(store: ConfigStore, args) -> int:
         if getattr(args, 'running', False):
             running_ids = set(mgr.list_running())
             servers = [s for s in servers if s.id in running_ids]
+        from .outbounds.groups import resolve_outbound
+
         rows = []
         for s in servers:
             state = mgr.get_state(s.id)
+            running = state.is_running() if state else False
+
             target_name = ""
             if s.outbound_type == "profile":
                 p = store.get_profile(s.outbound_id)
@@ -2198,12 +2237,47 @@ def _server_command(store: ConfigStore, args) -> int:
                 target_name = sub.name if sub else s.outbound_id
             elif s.outbound_type == "direct":
                 target_name = "direct (device)"
+
+            # Resolve what the server actually forwards to so the list shows
+            # the strategy and the concrete set of nodes (single / balancer /
+            # chain), not just the raw reference.
+            outbound_kind = "direct"
+            outbound_strategy = ""
+            outbound_profiles: list[dict] = []
+            try:
+                resolved = resolve_outbound(
+                    store, s.outbound_type, s.outbound_id,
+                    default_engine=store.config.settings.default_engine,
+                )
+            except ValueError:
+                resolved = None
+            if resolved is not None:
+                outbound_kind = resolved.type  # single | balancer | chain
+                outbound_strategy = resolved.strategy or ""
+                outbound_profiles = [
+                    {"id": p.id, "name": p.name} for p in resolved.profiles
+                ]
+
+            active_outbound = None
+            if running and s.traffic_api_port:
+                from .traffic import read_active_outbound
+
+                active_outbound = read_active_outbound(
+                    "127.0.0.1", s.traffic_api_port
+                )
+
             rows.append({
                 "id": s.id, "name": s.name, "port": s.port,
                 "protocol": s.protocol, "outbound_type": s.outbound_type,
                 "outbound_id": s.outbound_id, "outbound_name": target_name,
+                "outbound_kind": outbound_kind,
+                "outbound_strategy": outbound_strategy,
+                "outbound_profiles": outbound_profiles,
+                "active_outbound": active_outbound,
                 "enabled": s.enabled,
-                "running": state.is_running() if state else False,
+                "running": running,
+                "failover": getattr(s, "failover", False),
+                "failover_timeout": getattr(s, "failover_timeout", 0),
             })
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
@@ -2232,11 +2306,18 @@ def _server_command(store: ConfigStore, args) -> int:
         return 0
 
     if action == "add":
+        from .servers import DEFAULT_FAILOVER_TIMEOUT
+
         server = Server(
             name=args.name,
             port=args.port,
             protocol=args.protocol,
             listen=args.listen,
+            traffic_api_port=getattr(args, "api_port", 0) or 0,
+            failover=getattr(args, "failover", False),
+            failover_timeout=(
+                getattr(args, "failover_timeout", 0) or DEFAULT_FAILOVER_TIMEOUT
+            ) if getattr(args, "failover", False) else 0,
         )
         ref = getattr(args, "out", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
@@ -2275,7 +2356,7 @@ def _server_command(store: ConfigStore, args) -> int:
                         failed = True
                         _status_line(s.id, "FAILED", state.error)
                     else:
-                        _status_line(s.id, "started", f":{s.port}")
+                        _status_line(s.id, "started", f":{s.port}{_pinned_detail(mgr)}")
                 except (ValueError, OSError) as exc:
                     failed = True
                     _status_line(s.id, "FAILED", str(exc))
@@ -2292,7 +2373,7 @@ def _server_command(store: ConfigStore, args) -> int:
             _status_line(state.server_id, "FAILED", state.error)
             return 1
         server = store.get_server(args.id)
-        _status_line(state.server_id, "started", f":{server.port}")
+        _status_line(state.server_id, "started", f":{server.port}{_pinned_detail(mgr)}")
         return 0
 
     if action == "stop":
@@ -2333,7 +2414,7 @@ def _server_command(store: ConfigStore, args) -> int:
                         failed = True
                         _status_line(s.id, "FAILED", state.error)
                     else:
-                        _status_line(s.id, "restarted", f":{s.port}")
+                        _status_line(s.id, "restarted", f":{s.port}{_pinned_detail(mgr)}")
                 except (ValueError, OSError) as exc:
                     failed = True
                     _status_line(s.id, "FAILED", str(exc))
@@ -2351,7 +2432,7 @@ def _server_command(store: ConfigStore, args) -> int:
             _status_line(state.server_id, "FAILED", state.error)
             return 1
         server = store.get_server(args.id)
-        _status_line(state.server_id, "restarted", f":{server.port}")
+        _status_line(state.server_id, "restarted", f":{server.port}{_pinned_detail(mgr)}")
         return 0
 
     if action == "edit":
@@ -2369,6 +2450,22 @@ def _server_command(store: ConfigStore, args) -> int:
             server.protocol = args.protocol
         if args.listen is not None:
             server.listen = args.listen
+        api_port = getattr(args, "api_port", None)
+        if api_port is not None and api_port != -1:
+            server.traffic_api_port = api_port
+        from .servers import DEFAULT_FAILOVER_TIMEOUT
+
+        ft = getattr(args, "failover_timeout", None)
+        if getattr(args, "failover", False):
+            server.failover = True
+            server.failover_timeout = (ft or DEFAULT_FAILOVER_TIMEOUT) if ft is not None else (
+                server.failover_timeout or DEFAULT_FAILOVER_TIMEOUT
+            )
+        if getattr(args, "failover_off", False):
+            server.failover = False
+            server.failover_timeout = 0
+        elif ft is not None and ft != -1:
+            server.failover_timeout = ft
         ref = getattr(args, "outbound", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
             try:
@@ -2527,6 +2624,22 @@ def _uninstall_service() -> int:
         return 0
     print(f"removed service -> {removed}")
     return 0
+
+
+def _resolve_server_scope(store: ConfigStore, server):
+    """Resolve a server's outbound target into its testable profiles.
+
+    A server forwards to a profile, subscription, group, or direct; test
+    the underlying outbound(s) it points to.
+    """
+    if server.outbound_type == "direct":
+        return []
+    from .outbounds.groups import resolve_refs
+
+    try:
+        return resolve_refs(store, [server.outbound_id])
+    except ValueError:
+        return []
 
 
 def _resolve_test_scope(store: ConfigStore, scope: str):
@@ -2852,6 +2965,19 @@ def _cleanup_temp_proxy(store: ConfigStore, args) -> None:
             if p.name == "temp-proxy" and p.source == "manual":
                 store.remove_profile(p.id)
                 break
+
+
+def _pinned_detail(mgr) -> str:
+    """Return ', via <node>' / ', failover N@Ts' for the last selection."""
+    failover = getattr(mgr, "failover_active", None)
+    if failover:
+        count, timeout = failover
+        return f", failover over {count} nodes (probe {timeout}s)"
+    pinned = getattr(mgr, "selected_pinned", None)
+    if pinned is None:
+        return ""
+    label = pinned.name or pinned.id
+    return f", via {pinned.id} ({label})"
 
 
 def _status_line(server_id: str, action: str, detail: str = "") -> None:
