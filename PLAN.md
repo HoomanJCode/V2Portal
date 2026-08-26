@@ -29,10 +29,10 @@ A fully-interactive command-line client that wraps two proxy engines
 | Decision | Choice |
 |---|---|
 | **Universal ID space** | Profiles, subscriptions, groups, servers share **one counter** — an ID alone is unambiguous. Every target reference is auto-detected (no `--profile` / `--group` / `--subscription` selector flags). |
-| **Dynamic graph, resolved at use time** | Any entity that contains outbounds (server, group, routing rule, connect target, service) accepts **profile | subscription | group**. Resolved recursively to concrete profiles at connect/start/test; subscriptions refresh → new profiles flow automatically; deduped. |
+| **Dynamic graph, resolved at use time** | Any entity that contains outbounds (server, group, routing rule, service) accepts **profile | subscription | group**. Resolved recursively to concrete profiles at start/test; subscriptions refresh → new profiles flow automatically; deduped. |
 | **Subscription as outbound target** | Resolves as a strategy-based balancer over its current profiles (strategy configurable, default `latency`). |
 | **Nested groups** | Groups can hold profiles + subscriptions + other groups; cycles rejected, members deduped. |
-| Uniform CLI | Every resource uses `list` / `add` / `edit` / `remove` + resource-specific actions (`group add` unifies `group create`; `subscription edit`/`rename`; `server edit --outbound REF`; `connect REF`). |
+| Uniform CLI | Every resource uses `list` / `add` / `edit` / `remove` + resource-specific actions (`group add` unifies `group create`; `subscription edit`/`rename`; `server edit --outbound REF`; `group tree`). Ad-hoc `connect` was dropped — connections are persistent servers. |
 | Language | **Python 3.10+** (Linux, Windows, Termux; fastest to iterate) |
 | Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
 | Protocol coverage | vmess, vless, trojan, ss, ssr, wireguard, hysteria2, tuic, socks, http |
@@ -264,9 +264,9 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
 - **Server** outbound: `profile | subscription | group | server | direct`
   (`outbound_type` persisted; `outbound_id` holds the unique id).
 - **Routing rule** `target_id` may reference any of profile | subscription |
-  group. **Connect** (`v2raycli connect REF`), the TUI picker, and the boot
-  service accept the same set (a server ref is accepted by connect targets
-  via a group/`profile add server` when a plain local hop is wanted).
+  group. The TUI picker and the boot service resolve the same set (servers
+  are also pickable; a plain local hop is expressed via a group member or
+  `profile add server`).
 - `resolve_refs(store, refs)` → deduped, ordered `Profile` list; expands
   subscriptions to current `profile_ids`, nested groups recursively, and a
   server id to a socks/http profile pointing at that server's local inbound
@@ -274,7 +274,7 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
   reference`, server chains that reach a group containing them), raises on
   unknown ids.
 - `subscription_target(store, sub_id, strategy="latency")` → balancer Target.
-- `resolve_target` accepts `Profile | Subscription | Group` models.
+- `resolve_target` accepts `Profile | Subscription | Group | Server` models.
 
 ## 6. Config generation (per engine)
 
@@ -297,13 +297,18 @@ Common shape produced for **both** engines:
 - **Routing**: when `mode == "split"`, emit engine-native rules from
   `routing.rules`; final fallback = selected target.
 
-## 7. Connect flow
+## 7. Server start / connect flow
 
-1. User picks a profile / group / VPN from the interactive list.
-2. Resolve the engine (`auto` → from kind/strategy); download binary if needed.
-3. `engines.<engine>.generate(...)` → write `runtime/config.json`.
-4. Validate (`<binary> check` / `xray run -test`), then start via `runner`.
-5. For `openvpn`/`openconnect` profiles, instead launch the system client with
+There is no ad-hoc `connect` command: proxy connections are persistent
+**servers** (each a separate engine process on its own port). Starting a
+server (CLI `server start`, the TUI Servers dashboard, or the boot service):
+
+1. Resolve the server's outbound ref (profile | subscription | group | server
+   | direct) to a Target; engine `auto` → from kind/strategy; download binary
+   if needed.
+2. `engines.<engine>.generate(...)` → write `runtime/server-<id>/config.json`.
+3. Validate (`<binary> check` / `xray run -test`), then start via `runner`.
+4. For `openvpn`/`openconnect` profiles, instead launch the system client with
    the stored config; no inbound server is created (the VPN owns system routing
    — this is an explicit user choice, kept separate from proxy outbounds).
 6. TUI shows target, engine, inbound URL(s) + auth, and (stretch) live traffic.

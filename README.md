@@ -102,13 +102,17 @@ Engine binaries and geo assets still download on first run.
 ## Quickstart
 
 The primary interface is non-interactive and safe for scripts. Run
-`v2raycli --help` or `v2raycli COMMAND --help` for the complete tree:
+`v2raycli --help` or `v2raycli COMMAND --help` for the complete tree. The
+interactive TUI (run `v2raycli` with no arguments) is a modern rich-styled
+panel UI with screens for Connect, a Servers dashboard (live status +
+start/stop), a Groups tree, Subscriptions, Test, Routing, and Settings:
 
 ```bash
 v2raycli status
 v2raycli profile list
 v2raycli subscription list
 v2raycli group list
+v2raycli group tree
 v2raycli test latency all
 ```
 
@@ -118,9 +122,8 @@ validation. The full command layout is:
 ```text
 profile       list | add | rename | edit | remove | export
 subscription  list | add | edit | rename | update | remove  (aliases: sub, subscriptions)
-group         list | add | edit | remove | add-member | remove-member  (alias: groups)
+group         list | add | tree | edit | remove | add-member | remove-member  (alias: groups)
 server        list | add | edit | start | stop | restart | remove  (alias: sv)
-connect       REF
 routing       list | mode | add | move | enable | disable | remove
 backup        create | list | restore
 config        show | set | export | import
@@ -181,9 +184,6 @@ v2raycli profile list --kind socks
 # Test by group, subscription, or profile ID
 v2raycli test latency GROUP_ID
 v2raycli test endpoint SUB_ID
-
-# Connect by any reference (runs until Ctrl+C)
-v2raycli connect SUB_ID
 
 # Routing rules can target any reference
 v2raycli routing add block --domain 'keyword:ads'
@@ -267,8 +267,8 @@ You can add proxies via CLI:
   nested groups) plus any subscription/server/profile no group references.
 - VPN profiles cannot join balancers/chains.
 
-A **subscription used as a target** (server outbound, connect, routing rule,
-group member) resolves as a strategy-based balancer over its *current*
+A **subscription used as a target** (server outbound, routing rule, group
+member) resolves as a strategy-based balancer over its *current*
 profiles — refresh the subscription and the target follows automatically.
 
 ## Split routing
@@ -363,12 +363,13 @@ not counted.
 
 ## Run as a service
 
-Keep a connection running across reboots — any reference works:
+Keep all enabled servers running across reboots (no ad-hoc `connect` command
+— connections are servers):
 
 ```bash
 v2raycli server add --port 1080 REF
-v2raycli server start SERVER_ID
-v2raycli service install REF
+v2raycli server start --all
+v2raycli service install
 ```
 
 - **Linux** — writes a systemd *user* unit to
