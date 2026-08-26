@@ -1208,14 +1208,14 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  v2raycli server add --port 1080 REF --name 'US proxy'\n"
             "  v2raycli server add --port 1081 REF --protocol http\n"
             "  v2raycli server add --port 1082 --direct\n"
-            "  REF = profile, subscription, or group ID (auto-detected)"
+            "  REF = profile, subscription, group, or server ID (auto-detected)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     server_add.add_argument("--port", type=int, required=True, help="port to listen on")
     server_outbound = server_add.add_mutually_exclusive_group()
     server_outbound.add_argument("out", nargs="?", default=None,
-                                 help="profile, subscription, or group ID to forward to (auto-detected)")
+                                 help="profile, subscription, group, or server ID to forward to (auto-detected)")
     server_outbound.add_argument("--direct", action="store_true", default=False,
                                  help="forward directly (no proxy outbound)")
     server_add.add_argument("--name", default="", help="display name for this server")
@@ -1289,10 +1289,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     server_restart = server_commands.add_parser(
         "restart",
-        help="restart a server (or --all)",
+        help="restart a server, or all servers when no ID is given",
         description=(
-            "Restart a server. Equivalent to stop + start.\n\n"
+            "Restart a server. Equivalent to stop + start.\n"
+            "Without arguments restarts all enabled servers.\n\n"
             "Examples:\n"
+            "  v2raycli server restart\n"
             "  v2raycli server restart SERVER_ID\n"
             "  v2raycli server restart --all"
         ),
@@ -1334,7 +1336,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                             help="seconds between health probes (−1 leaves unchanged)")
     server_outbound_edit = server_edit.add_mutually_exclusive_group()
     server_outbound_edit.add_argument("--outbound", default=None, metavar="REF",
-                                      help="switch outbound to a profile/subscription/group ID (auto-detected)")
+                                      help="switch outbound to a profile/subscription/group/server ID (auto-detected)")
     server_outbound_edit.add_argument("--direct", action="store_true", default=False,
                                       help="switch outbound to direct (no proxy)")
     # Back-compat flags (deprecated; --outbound auto-detects).
@@ -2152,21 +2154,28 @@ def _routing_command(store: ConfigStore, args) -> int:
     return _command_help(args, "routing")
 
 
-def _detect_outbound(store: ConfigStore, ref: str) -> tuple[str, str]:
+def _detect_outbound(store: ConfigStore, ref: str, from_server_id: str | None = None) -> tuple[str, str]:
     """Auto-detect an outbound reference's type: (type, id).
 
-    ``type`` ∈ {profile, subscription, group}; raises for unknown ids.
+    ``type`` ∈ {profile, subscription, group, server}; raises for unknown ids
+    and for circular server references. *from_server_id* is the server being
+    configured, used to reject self-references and loops.
     """
-    from .outbounds.groups import classify_id
+    from .outbounds.groups import classify_id, validate_server_chain
 
     kind = classify_id(store, ref)
+    if kind is None and store.get_server(ref) is not None:
+        kind = "server"
+    if kind == "server":
+        validate_server_chain(store, ref, from_server_id=from_server_id)
+        return "server", ref
     if kind == "subscription":
         return "subscription", ref
     if kind == "group":
         return "group", ref
     if kind == "profile":
         return "profile", ref
-    raise ValueError(f"unknown id: {ref} (not a profile, subscription, or group)")
+    raise ValueError(f"unknown id: {ref} (not a profile, subscription, group, or server)")
 
 
 def _outbound_label(row: dict) -> str:
@@ -2237,6 +2246,9 @@ def _server_command(store: ConfigStore, args) -> int:
                 target_name = sub.name if sub else s.outbound_id
             elif s.outbound_type == "direct":
                 target_name = "direct (device)"
+            elif s.outbound_type == "server":
+                sv = store.get_server(s.outbound_id)
+                target_name = sv.name if sv else s.outbound_id
 
             # Resolve what the server actually forwards to so the list shows
             # the strategy and the concrete set of nodes (single / balancer /
@@ -2400,6 +2412,9 @@ def _server_command(store: ConfigStore, args) -> int:
         from .servers import ServerManager
 
         mgr = ServerManager(store)
+        # Default to --all when no specific ID is given.
+        if not args.id and not args.restart_all:
+            args.restart_all = True
         if args.restart_all:
             servers = [s for s in store.list_servers() if s.enabled]
             if not servers:
@@ -2469,7 +2484,7 @@ def _server_command(store: ConfigStore, args) -> int:
         ref = getattr(args, "outbound", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
             try:
-                server.outbound_type, server.outbound_id = _detect_outbound(store, ref)
+                server.outbound_type, server.outbound_id = _detect_outbound(store, ref, from_server_id=args.id)
             except ValueError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
