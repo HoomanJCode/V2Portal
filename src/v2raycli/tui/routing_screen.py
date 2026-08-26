@@ -25,6 +25,12 @@ def _resolve_target_name(store, rule) -> str:
     group = store.get_group(rule.target_id)
     if group:
         return f"group {group.name}"
+    subscription = store.get_subscription(rule.target_id)
+    if subscription:
+        return f"subscription {subscription.name}"
+    server = store.get_server(rule.target_id)
+    if server:
+        return f"server {server.name} :{server.port}"
     return rule.target_id[:8]
 
 
@@ -56,13 +62,17 @@ def _rule_label(store, rule) -> str:
 
 
 def _pick_target(store):
-    """Let the user pick a profile or group as a routing target. Returns the ID or None."""
+    """Let the user pick a profile/subscription/group/server target."""
     profiles = store.list_profiles()
     groups = store.list_groups()
-    if not profiles and not groups:
-        widgets.show_message("No targets", "Add a profile or group first.")
+    subscriptions = store.list_subscriptions()
+    servers = store.list_servers()
+    if not profiles and not groups and not subscriptions and not servers:
+        widgets.show_message("No targets", "Add a profile, group, subscription, or server first.")
         return None
-    selection = widgets.pick_profile(profiles, groups, include_vpn=False)
+    selection = widgets.pick_profile(
+        profiles, groups, subscriptions, servers, include_vpn=False
+    )
     if selection is None:
         return None
     _kind, key = selection

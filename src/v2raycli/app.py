@@ -1105,7 +1105,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     routing_add.add_argument("action", choices=("proxy", "direct", "block"),
                             help="what to do with matching traffic")
     routing_add.add_argument("--target",
-                            help="profile/group ID (required for proxy action)")
+                            help="profile, subscription, group, or server ID (required for proxy action)")
     routing_add.add_argument("--domain", action="append", default=[],
                             help="domain to match (repeatable; prefix with keyword: or regex:)")
     routing_add.add_argument("--ip", action="append", default=[],

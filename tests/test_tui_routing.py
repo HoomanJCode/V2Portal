@@ -202,6 +202,41 @@ def test_resolve_target_name_group(tmp_path):
     assert "Auto" in routing_screen._resolve_target_name(store, rule)
 
 
+def test_resolve_target_name_server(tmp_path):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081))
+    rule = RoutingRule(action="proxy", target_id=sv.id)
+    assert "local" in routing_screen._resolve_target_name(store, rule)
+    assert "1081" in routing_screen._resolve_target_name(store, rule)
+
+
+def test_pick_target_includes_servers(tmp_path, monkeypatch):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081))
+    captured = []
+    monkeypatch.setattr(
+        routing_screen.widgets,
+        "pick_profile",
+        lambda *args, **kwargs: captured.extend((args, kwargs)) or ("server", sv.id),
+    )
+    assert routing_screen._pick_target(store) == sv.id
+    assert captured[0][3] == [sv]  # servers passed to the picker
+
+
+def test_pick_target_no_targets_shows_message(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    messages = []
+    monkeypatch.setattr(
+        routing_screen.widgets, "show_message", lambda t, m: messages.append((t, m))
+    )
+    assert routing_screen._pick_target(store) is None
+    assert messages == [("No targets", "Add a profile, group, subscription, or server first.")]
+
+
 def test_edit_rule_no_rules_shows_message(tmp_path, monkeypatch):
     store = _store(tmp_path)
     messages = []
