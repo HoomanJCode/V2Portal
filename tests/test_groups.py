@@ -8,7 +8,6 @@ from v2raycli.outbounds.groups import (
     classify_refs,
     create_balancer_group,
     create_chain_group,
-    create_single_group,
     group_tree_lines,
     resolve_ref_entity,
     resolve_refs,
@@ -27,18 +26,52 @@ def _store(tmp_path):
     return store, a, b
 
 
-def test_balancer_requires_two_profiles_at_resolve(tmp_path):
-    """Balancer creation allows 1 profile, but resolve requires 2+."""
+def test_balancer_rejects_lone_profile_at_create(tmp_path):
+    """A single profile cannot form a group; a lone profile is rejected."""
     store, a, b = _store(tmp_path)
     g = create_balancer_group("bal", "latency", [a.id, b.id], store)
     assert g.type == "balancer"
     assert g.strategy == "latency"
-    # Creating with 1 profile is allowed now (subscription may add more later).
-    g_single = create_balancer_group("bal", "latency", [a.id], store)
-    assert g_single.type == "balancer"
-    # But resolving a balancer with only 1 profile should fail.
+    # One profile alone is not a group.
+    with pytest.raises(ValueError, match="only one profile"):
+        create_balancer_group("bal", "latency", [a.id], store)
+    with pytest.raises(ValueError, match="only one profile"):
+        create_chain_group("chain", [a.id], store)
+
+
+def test_balancer_requires_two_profiles_at_resolve(tmp_path):
+    """A persisted balancer that resolves to a single profile fails at resolve."""
+    store, a, _ = _store(tmp_path)
+    g = Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id])
     with pytest.raises(ValueError, match="at least 2"):
-        resolve_target(store, g_single, default_engine="sing-box")
+        resolve_target(store, g, default_engine="sing-box")
+
+
+def test_lone_subscription_or_group_is_valid_sole_member(tmp_path):
+    """A single subscription or nested group can be the only member."""
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_profile(Profile(name="a", kind="vmess"))
+    b = store.add_profile(Profile(name="b", kind="vmess"))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[a.id, b.id]))
+
+    bal = create_balancer_group("pool", "latency", [], store, subscription_ids=[sub.id])
+    assert bal.subscription_ids == [sub.id]
+    t = resolve_target(store, bal, default_engine="sing-box")
+    assert a.id in t.profile_ids and b.id in t.profile_ids
+
+    chain = create_chain_group("tunnel", [], store, subscription_ids=[sub.id])
+    assert chain.subscription_ids == [sub.id]
+    t = resolve_target(store, chain, default_engine="sing-box")
+    assert a.id in t.profile_ids and b.id in t.profile_ids
+
+    leaf = store.add_group(Group(
+        name="leaf", type="balancer", strategy="latency", profile_ids=[a.id, b.id],
+    ))
+    wrap = create_balancer_group("wrap", "latency", [], store, group_ids=[leaf.id])
+    assert wrap.group_ids == [leaf.id]
+    t = resolve_target(store, wrap, default_engine="sing-box")
+    assert a.id in t.profile_ids and b.id in t.profile_ids
 
 
 def test_least_load_resolves_to_xray(tmp_path):
@@ -55,9 +88,10 @@ def test_chain_group_and_resolve(tmp_path):
     assert t.profile_ids == [a.id, b.id]
 
 
-def test_single_group(tmp_path):
+def test_legacy_single_group_still_resolves(tmp_path):
+    """Groups persisted with the removed 'single' type still connect."""
     store, a, _ = _store(tmp_path)
-    g = create_single_group("one", a.id)
+    g = Group(name="one", type="single", profile_ids=[a.id])
     t = resolve_target(store, g, default_engine="sing-box")
     assert t.type == "single"
     assert t.profile_ids == [a.id]
@@ -161,7 +195,7 @@ def test_persisted_group_engine_rejects_unsupported_member(tmp_path):
 
 def test_add_member(tmp_path):
     store, a, b = _store(tmp_path)
-    g = create_single_group("single", a.id)
+    g = Group(name="g", type="balancer", profile_ids=[a.id])
     store.add_group(g)
     from v2raycli.outbounds.groups import add_member
 
@@ -171,8 +205,7 @@ def test_add_member(tmp_path):
 
 def test_remove_member(tmp_path):
     store, a, b = _store(tmp_path)
-    g = create_single_group("single", a.id)
-    g.profile_ids.append(b.id)
+    g = Group(name="g", type="balancer", profile_ids=[a.id, b.id])
     from v2raycli.outbounds.groups import remove_member
 
     remove_member(g, b.id)
@@ -212,9 +245,14 @@ def test_persisted_group_shape_is_validated(tmp_path):
             Group(name="short-balancer", type="balancer", strategy="latency", profile_ids=[a.id]),
         )
 
-    # Creating a group with 1 profile is allowed (subscription may expand later).
-    g_ok = create_balancer_group("ok", "latency", [a.id], store)
+    # A lone subscription is a valid sole member (it expands to many).
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[a.id]))
+    g_ok = create_balancer_group("ok", "latency", [], store, subscription_ids=[sub.id])
     assert g_ok.type == "balancer"
+
+    # A lone profile is rejected at creation.
+    with pytest.raises(ValueError, match="only one profile"):
+        create_balancer_group("bad", "latency", [a.id], store)
 
     with pytest.raises(ValueError, match="invalid strategy"):
         resolve_target(

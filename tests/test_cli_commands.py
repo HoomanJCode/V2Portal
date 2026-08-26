@@ -171,21 +171,51 @@ def test_group_add_replaces_create_and_supports_nested_group(tmp_path, capsys):
     assert group.group_ids == [leaf.id]
 
     # legacy 'group create' alias still works
-    args = app.build_parser().parse_args(["group", "create", "single", "one", p2.id])
+    args = app.build_parser().parse_args(
+        ["group", "create", "balancer", "two", p1.id, p2.id]
+    )
     assert app._group_command(store, args) == 0
-    one = store.get_group(capsys.readouterr().out.strip())
-    assert one is not None and one.type == "single"
+    two = store.get_group(capsys.readouterr().out.strip())
+    assert two is not None and two.type == "balancer"
 
 
-def test_group_add_single(tmp_path, capsys):
+def test_group_add_has_no_single_type(tmp_path, capsys):
+    """The 'single' group type was removed; only balancer/chain exist."""
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
     store.save()
-    args = app.build_parser().parse_args(["group", "add", "single", "one", p.id])
+    with pytest.raises(SystemExit) as excinfo:
+        app.build_parser().parse_args(["group", "add", "single", "one", p.id])
+    assert excinfo.value.code == 2
+
+
+def test_group_add_balancer_rejects_lone_profile(tmp_path, capsys):
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    store.save()
+    args = app.build_parser().parse_args(["group", "add", "balancer", "one", p.id])
+    assert app._command(store, args) == 1
+    assert "only one profile" in capsys.readouterr().err
+
+
+def test_group_add_accepts_single_subscription(tmp_path, capsys):
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="vless", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[p1.id, p2.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add", "balancer", "pool", sub.id])
     assert app._group_command(store, args) == 0
-    g = store.get_group(capsys.readouterr().out.strip())
-    assert g.type == "single"
-    assert g.profile_ids == [p.id]
+    bal = store.get_group(capsys.readouterr().out.strip())
+    assert bal is not None and bal.type == "balancer"
+    assert bal.subscription_ids == [sub.id]
+
+    args = app.build_parser().parse_args(["group", "add", "chain", "tunnel", sub.id])
+    assert app._group_command(store, args) == 0
+    chain = store.get_group(capsys.readouterr().out.strip())
+    assert chain is not None and chain.type == "chain"
+    assert chain.subscription_ids == [sub.id]
 
 
 # -- servers as group members (nested hierarchy) ---------------------------

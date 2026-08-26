@@ -523,8 +523,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
         "A group lets you connect to multiple profiles at once.\n\n"
         "  balancer  — pick the fastest/random/round-robin from a set\n"
-        "  chain     — route traffic through proxies in order\n"
-        "  single    — wrap one profile as a named group\n\n"
+        "  chain     — route traffic through proxies in order\n\n"
+        "A lone profile cannot form a group on its own; the sole member must\n"
+        "be a subscription or nested group that expands to several profiles.\n\n"
         "VPN profiles (OpenVPN, OpenConnect) cannot join groups.\n\n"
         "Examples:\n"
         "  v2raycli group list\n"
@@ -554,41 +555,25 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         aliases=["create"],
         help="create a group (pick single, balancer, or chain)",
         description=(
-            "Add a group. Use 'single', 'balancer', or 'chain' as the next argument.\n"
-            "('create' is an accepted alias.)\n\n"
-            "Examples:\n"
-            "  v2raycli group add single one PROFILE_ID\n"
-            "  v2raycli group add balancer fast ID_A SUB_GROUP/GROUP_ID --strategy latency\n"
-            "  v2raycli group add chain tunnel ID_A ID_B"
+        "Add a group. Use 'balancer' or 'chain' as the next argument.\n"
+        "('create' is an accepted alias.)\n\n"
+        "A single profile cannot form a group on its own — pass 2+ profiles\n"
+        "or one subscription/nested group that expands to several.\n\n"
+        "Examples:\n"
+        "  v2raycli group add balancer fast ID_A SUB_GROUP/GROUP_ID --strategy latency\n"
+        "  v2raycli group add chain tunnel ID_A ID_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_add_commands = group_add.add_subparsers(dest="group_add_command", metavar="TYPE")
 
-    single = group_add_commands.add_parser(
-        "single",
-        help="create a single group wrapping one ref (profile/sub/group/server)",
-        description=(
-            "Create a single group wrapping one profile, subscription, group,\n"
-            "or server. The ref is auto-detected; the group must currently\n"
-            "resolve to exactly one node. Useful with servers that take a\n"
-            "group reference.\n\n"
-            "Example:\n"
-            "  v2raycli group add single one PROFILE_ID\n"
-            "  v2raycli group add single via-server SERVER_ID"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    single.add_argument("name", help="display name for this group")
-    single.add_argument("profile_id", metavar="REF",
-                        help="profile, subscription, group, or server ID to wrap")
 
     balancer = group_add_commands.add_parser(
         "balancer",
         help="create a balanced group (strategy: latency|random|roundRobin|leastLoad)",
         description=(
-            "Create a balancer group. Requires a name and 2+ refs: profile,\n"
-            "subscription, group, or server IDs. IDs are auto-detected — pass\n"
+            "Create a balancer group. Requires a name and at least one profile,\n"
+            "subscription, group, or server ID. IDs are auto-detected — pass\n"
             "profiles, subscriptions, nested groups, and servers together.\n"
             "Subscription profiles are resolved dynamically; servers resolve\n"
             "to socks/http profiles through their local inbound.\n\n"
@@ -604,7 +589,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     balancer.add_argument("name", help="display name for this group")
-    balancer.add_argument("refs", nargs="*", default=[],
+    balancer.add_argument("refs", nargs="+",
                          help="profile, subscription, group, or server IDs (auto-detected) to include in this balancer")
     balancer.add_argument("--engine",
                          choices=("auto", "sing-box", "xray"),
@@ -619,8 +604,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "chain",
         help="create a proxy chain (traffic flows through each hop in order)",
         description=(
-            "Create a chain group. Requires a name and 2+ refs: profile,\n"
-            "subscription, group, or server IDs. IDs are auto-detected;\n"
+            "Create a chain group. Requires a name and at least one profile,\n"
+            "subscription, group, or server ID. IDs are auto-detected;\n"
             "subscription profiles resolve dynamically; servers resolve to\n"
             "socks/http profiles through their local inbound.\n"
             "Traffic flows through the first proxy, then the second, and so on.\n\n"
@@ -632,7 +617,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     chain.add_argument("name", help="display name for this group")
-    chain.add_argument("refs", nargs="*", default=[],
+    chain.add_argument("refs", nargs="+",
                       help="ordered profile, subscription, group, or server IDs (auto-detected) forming the chain")
     chain.add_argument("--engine",
                       choices=("auto", "sing-box", "xray"),
@@ -1860,40 +1845,27 @@ def _group_command(store: ConfigStore, args) -> int:
             classify_refs,
             create_balancer_group,
             create_chain_group,
-            create_single_group,
-            resolve_target,
         )
 
         gtype = args.group_add_command
-        if gtype == "single":
-            if not getattr(args, "profile_id", None):
-                return _command_help(args, "group add")
-            # One ref of any type: profile, subscription, group, or server.
-            group = create_single_group(args.name, args.profile_id, store)
-            # Fail fast: a single group must currently resolve to one node.
-            resolve_target(
-                store, group,
-                default_engine=store.config.settings.default_engine,
+        # Auto-detect profile vs subscription vs group vs server IDs.
+        profile_ids, sub_ids, group_ids, server_ids = classify_refs(
+            store, getattr(args, "refs", []) or []
+        )
+        if gtype == "balancer":
+            group = create_balancer_group(
+                args.name, args.strategy, profile_ids, store,
+                engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
+                server_ids=server_ids,
+            )
+        elif gtype == "chain":
+            group = create_chain_group(
+                args.name, profile_ids, store,
+                engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
+                server_ids=server_ids,
             )
         else:
-            # Auto-detect profile vs subscription vs group vs server IDs.
-            profile_ids, sub_ids, group_ids, server_ids = classify_refs(
-                store, getattr(args, "refs", []) or []
-            )
-            if gtype == "balancer":
-                group = create_balancer_group(
-                    args.name, args.strategy, profile_ids, store,
-                    engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
-                    server_ids=server_ids,
-                )
-            elif gtype == "chain":
-                group = create_chain_group(
-                    args.name, profile_ids, store,
-                    engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
-                    server_ids=server_ids,
-                )
-            else:
-                return _command_help(args, "group add")
+            return _command_help(args, "group add")
         store.add_group(group)
         store.save()
         print(group.id)

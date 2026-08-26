@@ -1,4 +1,4 @@
-"""Group builders (balancer/chain/single) and target resolution."""
+"""Group builders (balancer/chain) and target resolution."""
 
 from __future__ import annotations
 
@@ -157,22 +157,6 @@ def create_chain_group(
         server_ids=server_ids,
     )
 
-
-def create_single_group(name: str, ref: str, store=None) -> Group:
-    """Create a single group wrapping one ref of any entity type.
-
-    Without *store* (legacy callers) the ref is treated as a profile id.
-    With a store the ref is auto-detected: profile | subscription | group |
-    server, stored on the matching member list.
-    """
-    if store is None:
-        return Group(name=name, type="single", profile_ids=[ref])
-    profile_ids, sub_ids, group_ids, server_ids = classify_refs(store, [ref])
-    return Group(
-        name=name, type="single",
-        profile_ids=profile_ids, subscription_ids=sub_ids,
-        group_ids=group_ids, server_ids=server_ids,
-    )
 
 
 def rename_group(group: Group, name: str) -> Group:
