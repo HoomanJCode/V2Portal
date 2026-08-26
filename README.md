@@ -20,8 +20,9 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **Groups** — `balancer` (latency / random / roundRobin / leastLoad), `chain`
   (proxy through proxy), and `single`.
 - **Split routing** — domain/keyword/regex rules, IP CIDR, and geoip/geosite.
-  Rules can target any profile, group, `direct`, or `block`. Stale rules
-  are auto-cleaned when a profile or group is deleted.
+  Rules can target any profile, subscription, group, or server, plus
+  `direct` or `block`. Stale rules are auto-cleaned when a profile, group,
+  or server is deleted.
 - **LAN proxy inbound** — sing-box serves SOCKS5 *and* HTTP on one port;
   xray exposes SOCKS5 plus HTTP CONNECT on adjacent ports, with optional
   username/password auth.
@@ -290,9 +291,10 @@ v2raycli routing add block --geosite category-ads-all
 v2raycli routing add direct --ip 192.168.0.0/16
 v2raycli routing add direct --geoip cn --geoip private
 
-# Route specific sites through a profile
+# Route specific sites through a profile, group, or server
 v2raycli routing add proxy --domain netflix.com --target PROFILE_ID
 v2raycli routing add proxy --geosite gfw --target GROUP_ID
+v2raycli routing add proxy --domain intranet.corp --target SERVER_ID
 
 # List all rules
 v2raycli routing list
@@ -318,11 +320,12 @@ v2raycli routing remove RULE_ID
 | GeoIP | `--geoip cn` | `--geoip cn --geoip private` |
 | GeoSite | `--geosite category-ads-all` | `--geosite gfw` |
 
-### Target profiles and groups
+### Target profiles, groups, and servers
 
-Proxy rules can target any profile or group by ID — not just the currently
-connected target. This lets you route different traffic through different
-outbounds:
+Proxy rules can target any profile, subscription, group, or server by ID —
+not just the currently connected target. A server target routes matching
+traffic through that server's local inbound. This lets you route different
+traffic through different outbounds:
 
 ```bash
 # Route Netflix through a US profile

@@ -203,7 +203,7 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
 {
   "id": "…",
   "action": "proxy|direct|block",
-  "target_id": null,              // profile/group id; null = currently selected
+  "target_id": null,              // profile/subscription/group/server id; null = currently selected
   "match": {
     "domains": ["example.com", "keyword:ads", "regex:^x\\."],
     "ips": ["10.0.0.0/8", "192.168.0.0/16"],
@@ -264,9 +264,8 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
 - **Server** outbound: `profile | subscription | group | server | direct`
   (`outbound_type` persisted; `outbound_id` holds the unique id).
 - **Routing rule** `target_id` may reference any of profile | subscription |
-  group. The TUI picker and the boot service resolve the same set (servers
-  are also pickable; a plain local hop is expressed via a group member or
-  `profile add server`).
+  group | server (a server target is a socks/http hop through its local
+  inbound). The TUI picker and the boot service resolve the same set.
 - `resolve_refs(store, refs)` → deduped, ordered `Profile` list; expands
   subscriptions to current `profile_ids`, nested groups recursively, and a
   server id to a socks/http profile pointing at that server's local inbound
