@@ -253,20 +253,26 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
   "profile_ids": ["…"],           // static members
   "subscription_ids": ["…"],      // dynamic: resolved to current profiles
   "group_ids": ["…"],             // nested groups (Phase 01)
+  "server_ids": ["…"],            // servers as members: resolved to socks/http
+                                    // profiles via their local inbound
   "engine": "auto"
 }
 ```
 
 ### References & resolution
 
-- **Server** outbound: `profile | subscription | group | direct`
+- **Server** outbound: `profile | subscription | group | server | direct`
   (`outbound_type` persisted; `outbound_id` holds the unique id).
 - **Routing rule** `target_id` may reference any of profile | subscription |
   group. **Connect** (`v2raycli connect REF`), the TUI picker, and the boot
-  service accept the same set.
+  service accept the same set (a server ref is accepted by connect targets
+  via a group/`profile add server` when a plain local hop is wanted).
 - `resolve_refs(store, refs)` → deduped, ordered `Profile` list; expands
-  subscriptions to current `profile_ids`, nested groups recursively,
-  rejects cycles (`circular group reference`), raises on unknown ids.
+  subscriptions to current `profile_ids`, nested groups recursively, and a
+  server id to a socks/http profile pointing at that server's local inbound
+  (server→server chains loop-checked). Rejects cycles (`circular group
+  reference`, server chains that reach a group containing them), raises on
+  unknown ids.
 - `subscription_target(store, sub_id, strategy="latency")` → balancer Target.
 - `resolve_target` accepts `Profile | Subscription | Group` models.
 

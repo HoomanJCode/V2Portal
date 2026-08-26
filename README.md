@@ -132,11 +132,12 @@ completion    bash | zsh
 
 **One ID space, auto-detected references.** Every entity — profile,
 subscription, group, server — has a unique ID from a single counter. Any
-command that takes a *target reference* accepts a **profile, subscription, or
-group ID** and detects the type automatically. References are resolved at use
-time: a subscription always contributes its *current* profiles, nested groups
-expand recursively (with dedup and cycle protection), so updated
-subscriptions flow everywhere automatically.
+command that takes a *target reference* accepts a **profile, subscription,
+group, or server ID** and detects the type automatically. References are
+resolved at use time: a subscription always contributes its *current*
+profiles, nested groups expand recursively (with dedup and cycle protection),
+and a server member resolves to a socks/http profile through its local
+inbound — so updated subscriptions flow everywhere automatically.
 
 Examples:
 
@@ -151,10 +152,14 @@ v2raycli subscription add my-provider https://example.com/sub
 v2raycli subscription edit SUB_ID --name 'Renamed provider'
 v2raycli profile list --subscription SUB_ID
 
-# Groups accept profiles, subscriptions, and other groups (auto-detected)
-v2raycli group add balancer fastest PROFILE_A SUB_ID GROUP_B --strategy latency
+# Groups accept profiles, subscriptions, groups, and servers (auto-detected)
+v2raycli group add balancer fastest PROFILE_A SUB_ID GROUP_B SERVER_ID --strategy latency
 v2raycli group add chain chained PROFILE_A PROFILE_B
+v2raycli group add single one SERVER_ID
 v2raycli group edit GROUP_ID --strategy random
+
+# Add a running server as a local socks/http profile
+v2raycli profile add server via-server SERVER_ID
 
 # Start a proxy server on a port — REF is auto-detected
 v2raycli server add --port 1080 REF --name 'US proxy'
@@ -207,7 +212,10 @@ Engine updates are never automatic. Use `v2raycli engine update sing-box`,
 configured with `binary_path: "auto"` are replaceable; custom and system paths
 are protected. Downloads are staged, version-checked, atomically replaced, and
 rolled back if verification fails. For restricted networks, the CLI accepts an
-ephemeral HTTP/SOCKS proxy with `--proxy`; it is never stored.
+ephemeral proxy with `--proxy` — either a URL (`socks5://host:port`,
+`http://host:port`) or a local server ID to fetch through; it is never stored.
+`subscription add` / `subscription update --proxy` and the stored
+`settings.subscription_proxy` accept the same two forms.
 
 ### Auto-update
 
@@ -240,13 +248,17 @@ You can add proxies via CLI:
 
 ## Groups
 
-- **Single** — wrap one profile as a named group.
-- **Balancer** — pick 2+ references (profiles, subscriptions, other groups)
+- **Single** — wrap one reference (profile, subscription, group, or server)
+  as a named group.
+- **Balancer** — pick 2+ references (profiles, subscriptions, groups, servers)
   and a strategy (`latency`, `random`, `roundRobin`, `leastLoad`).
   `leastLoad` forces xray-core. Everything resolves dynamically.
 - **Chain** — pick an ordered list; traffic flows through each in order.
-- Groups can **nest**: a balancer can contain other groups. Members are
-  resolved recursively at use time, deduplicated, and cycles are rejected.
+- Groups can **nest**: a balancer can contain other groups, and a server
+  member resolves to a socks/http profile pointing at that server's local
+  inbound ("localhost calling") — traffic physically passes through it.
+  Members are resolved recursively at use time, deduplicated, and cycles
+  (group→group and server→group→server) are rejected.
 - VPN profiles cannot join balancers/chains.
 
 A **subscription used as a target** (server outbound, connect, routing rule,

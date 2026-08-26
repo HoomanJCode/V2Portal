@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from v2raycli.connector import connect_ref, resolve_ref_entity
-from v2raycli.models import Group, Profile, Subscription
+from v2raycli.models import Group, Profile, Server, Subscription
 from v2raycli.storage import ConfigStore
 
 
@@ -29,6 +29,29 @@ def test_resolve_ref_entity_unknown(tmp_path):
     store, _, _, _ = _store(tmp_path)
     with pytest.raises(ValueError, match="unknown id: 999"):
         resolve_ref_entity(store, "999")
+
+
+def test_resolve_ref_entity_detects_server(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    sv = store.add_server(Server(name="local", port=1081))
+    assert resolve_ref_entity(store, sv.id) is sv
+
+
+def test_connect_ref_server_passes_server_model(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    sv = store.add_server(Server(name="local", port=1081))
+
+    calls = []
+
+    class FakeController:
+        def connect(self, selection):
+            calls.append(selection)
+            return "status"
+
+    assert connect_ref(store, sv.id, FakeController()) == "status"
+    assert calls == [sv]
 
 
 def test_connect_ref_subscription_routes_to_controller(tmp_path):

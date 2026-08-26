@@ -185,6 +185,7 @@ class Group:
     profile_ids: list[str] = field(default_factory=list)
     subscription_ids: list[str] = field(default_factory=list)
     group_ids: list[str] = field(default_factory=list)  # nested groups (Phase 01)
+    server_ids: list[str] = field(default_factory=list)  # servers as members: resolved to socks/http profiles via their local inbound
     engine: str = "auto"
     enabled: bool = True
     traffic_up: int = 0

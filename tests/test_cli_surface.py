@@ -85,4 +85,4 @@ def test_no_selector_flags_in_server_add_help():
 
 def test_connect_help_documents_ref():
     out = _help_text(["connect"])
-    assert "profile, subscription, or group" in out
+    assert "profile, subscription, group, or server" in out

@@ -281,12 +281,16 @@ def auto_update_subscriptions(store, now: datetime | None = None) -> list[dict]:
     so one failing URL never blocks the others. Callers should ``store.save()``
     if any result has ``updated=True``.
     """
-    proxy = store.config.settings.subscription_proxy or None
+    from .fetcher import resolve_proxy_arg
+
     results: list[dict] = []
     for sub in list(store.config.subscriptions):
         if not is_stale(sub, now):
             continue
         try:
+            proxy = resolve_proxy_arg(
+                store, store.config.settings.subscription_proxy or None
+            )
             update_subscription(store, sub.id, proxy=proxy)
             results.append(
                 {"subscription_id": sub.id, "name": sub.name, "updated": True, "error": None}

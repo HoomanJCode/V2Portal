@@ -1,9 +1,10 @@
-"""Connect by any reference (profile | subscription | group).
+"""Connect by any reference (profile | subscription | group | server).
 
 One code path is shared by the CLI ``connect`` command, the TUI connect
 screen, and the boot service. Type auto-detection relies on the globally
 unique ID space; resolution goes through the universal resolver so
-subscriptions refresh dynamically and nested groups expand.
+subscriptions refresh dynamically, nested groups expand, and a server
+reference becomes a socks/http hop through that server's local inbound.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from .outbounds.groups import classify_id
 
 
 def resolve_ref_entity(store, ref: str):
-    """Return the Profile / Subscription / Group for ``ref`` (auto-detected).
+    """Return the Profile / Subscription / Group / Server for ``ref``.
 
     Raises ValueError for unknown ids.
     """
@@ -25,7 +26,11 @@ def resolve_ref_entity(store, ref: str):
         return store.get_subscription(ref)
     if kind == "group":
         return store.get_group(ref)
-    raise ValueError(f"unknown id: {ref} (not a profile, subscription, or group)")
+    if kind == "server":
+        return store.get_server(ref)
+    raise ValueError(
+        f"unknown id: {ref} (not a profile, subscription, group, or server)"
+    )
 
 
 def connect_ref(store, ref: str, controller) -> object:

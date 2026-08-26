@@ -174,12 +174,13 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Add a profile by type. Each type has its own required arguments.\n\n"
             "Supported types: share, raw, socks, http, wireguard, hysteria2,\n"
-            "tuic, openvpn, openconnect.\n\n"
+            "tuic, openvpn, openconnect, server.\n\n"
             "Examples:\n"
             "  v2raycli profile add socks office 127.0.0.1 1080\n"
             "  v2raycli profile add socks office 127.0.0.1 1080 --username u --password p\n"
             "  v2raycli profile add share us 'vless://...'\n"
-            "  v2raycli profile add http proxy 10.0.0.1 8080"
+            "  v2raycli profile add http proxy 10.0.0.1 8080\n"
+            "  v2raycli profile add server via-server SERVER_ID  # socks/http profile on localhost"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -322,6 +323,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     openconnect.add_argument("name", help="display name for this profile")
     openconnect.add_argument("server", help="VPN server address")
 
+    server_profile_parser = profile_add_commands.add_parser(
+        "server",
+        help="reference a local server as a socks/http profile (localhost calling)",
+        description=(
+            "Add a profile that points at an existing server's local inbound\n"
+            "(a socks/http profile on 127.0.0.1). Traffic routed through it\n"
+            "passes through that server's configured outbound.\n\n"
+            "Example:\n"
+            "  v2raycli profile add server via-server 005"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    server_profile_parser.add_argument("name", help="display name for this profile")
+    server_profile_parser.add_argument("server_id", help="ID of the server to reference")
+
     profile_remove = profile_commands.add_parser(
         "remove",
         help="delete a profile by ID",
@@ -387,22 +403,24 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     # -- connect --------------------------------------------------------------
     connect_cmd = commands.add_parser(
         "connect",
-        help="connect to a profile, subscription, or group (runs until Ctrl+C)",
+        help="connect to a profile, subscription, group, or server (runs until Ctrl+C)",
         description=(
             "Start the engine for the given reference and run the local\n"
             "mixed inbound until you press Ctrl+C. The reference is\n"
-            "auto-detected: profile, subscription, or group ID.\n"
+            "auto-detected: profile, subscription, group, or server ID.\n"
             "Subscriptions connect as a strategy-based balancer over\n"
-            "their current profiles.\n\n"
+            "their current profiles; a server connects as a socks/http hop\n"
+            "through that server's local inbound.\n\n"
             "Examples:\n"
             "  v2raycli connect PROFILE_ID\n"
             "  v2raycli connect SUB_ID\n"
-            "  v2raycli connect GROUP_ID"
+            "  v2raycli connect GROUP_ID\n"
+            "  v2raycli connect SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     connect_cmd.add_argument("ref",
-                             help="profile, subscription, or group ID (auto-detected)")
+                             help="profile, subscription, group, or server ID (auto-detected)")
 
     # -- subscription ---------------------------------------------------------
     subscription = commands.add_parser(
@@ -452,7 +470,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     subscription_add.add_argument("url", help="subscription URL (https, http, file, or paste)")
     subscription_add.add_argument("--user-agent", help="custom User-Agent header for HTTP requests")
     subscription_add.add_argument("--proxy",
-                                 help="HTTP/SOCKS proxy for this request (e.g. socks5://127.0.0.1:1080)")
+                                 help="proxy URL (socks5://host:port, http://host:port) or a local server ID to fetch through")
 
     subscription_update = subscription_commands.add_parser(
         "update",
@@ -472,7 +490,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     subscription_update.add_argument("--all", action="store_true", dest="update_all",
                                      help="update all enabled subscriptions")
     subscription_update.add_argument("--proxy",
-                                     help="HTTP/SOCKS proxy for the request")
+                                     help="proxy URL (socks5://host:port, http://host:port) or a local server ID to fetch through")
 
     subscription_edit = subscription_commands.add_parser(
         "edit",
@@ -575,26 +593,31 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     single = group_add_commands.add_parser(
         "single",
-        help="create a single-profile group (wrap one profile)",
+        help="create a single group wrapping one ref (profile/sub/group/server)",
         description=(
-            "Create a single group wrapping one profile. Useful with servers\n"
-            "that take a group reference.\n\n"
+            "Create a single group wrapping one profile, subscription, group,\n"
+            "or server. The ref is auto-detected; the group must currently\n"
+            "resolve to exactly one node. Useful with servers that take a\n"
+            "group reference.\n\n"
             "Example:\n"
-            "  v2raycli group add single one PROFILE_ID"
+            "  v2raycli group add single one PROFILE_ID\n"
+            "  v2raycli group add single via-server SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     single.add_argument("name", help="display name for this group")
-    single.add_argument("profile_id", help="profile ID to wrap")
+    single.add_argument("profile_id", metavar="REF",
+                        help="profile, subscription, group, or server ID to wrap")
 
     balancer = group_add_commands.add_parser(
         "balancer",
         help="create a balanced group (strategy: latency|random|roundRobin|leastLoad)",
         description=(
-            "Create a balancer group. Requires a name and 2+ profile IDs,\n"
-            "subscription IDs, or group IDs. IDs are auto-detected — pass\n"
-            "profiles, subscriptions, and nested groups together.\n"
-            "Subscription profiles are resolved dynamically.\n\n"
+            "Create a balancer group. Requires a name and 2+ refs: profile,\n"
+            "subscription, group, or server IDs. IDs are auto-detected — pass\n"
+            "profiles, subscriptions, nested groups, and servers together.\n"
+            "Subscription profiles are resolved dynamically; servers resolve\n"
+            "to socks/http profiles through their local inbound.\n\n"
             "  latency      — pick the lowest-latency profile (sing-box urltest)\n"
             "  random       — pick a random profile\n"
             "  roundRobin   — rotate through profiles in order\n"
@@ -608,7 +631,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     balancer.add_argument("name", help="display name for this group")
     balancer.add_argument("refs", nargs="*", default=[],
-                         help="profile, subscription, or group IDs (auto-detected) to include in this balancer")
+                         help="profile, subscription, group, or server IDs (auto-detected) to include in this balancer")
     balancer.add_argument("--engine",
                          choices=("auto", "sing-box", "xray"),
                          default="auto",
@@ -622,19 +645,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "chain",
         help="create a proxy chain (traffic flows through each hop in order)",
         description=(
-            "Create a chain group. Requires a name and 2+ profile/\n"
-            "subscription/group IDs. IDs are auto-detected; subscription\n"
-            "profiles resolve dynamically.\n"
+            "Create a chain group. Requires a name and 2+ refs: profile,\n"
+            "subscription, group, or server IDs. IDs are auto-detected;\n"
+            "subscription profiles resolve dynamically; servers resolve to\n"
+            "socks/http profiles through their local inbound.\n"
             "Traffic flows through the first proxy, then the second, and so on.\n\n"
             "Examples:\n"
             "  v2raycli group add chain tunnel ID_A ID_B\n"
-            "  v2raycli group add chain tunnel ID_A SUB_ID"
+            "  v2raycli group add chain tunnel ID_A SUB_ID\n"
+            "  v2raycli group add chain tunnel ID_A SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     chain.add_argument("name", help="display name for this group")
     chain.add_argument("refs", nargs="*", default=[],
-                      help="ordered profile, subscription, or group IDs (auto-detected) forming the chain")
+                      help="ordered profile, subscription, group, or server IDs (auto-detected) forming the chain")
     chain.add_argument("--engine",
                       choices=("auto", "sing-box", "xray"),
                       default="auto",
@@ -678,35 +703,35 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     group_add_member = group_commands.add_parser(
         "add-member",
-        help="add profiles/subscriptions/groups to a group",
+        help="add profiles/subscriptions/groups/servers to a group",
         description=(
-            "Add profiles, subscriptions, and/or nested groups to an existing\n"
-            "group. IDs are detected automatically.\n\n"
+            "Add profiles, subscriptions, nested groups, and/or servers to\n"
+            "an existing group. IDs are detected automatically.\n\n"
             "Examples:\n"
             "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group add-member GROUP_ID PROFILE_A SUB_ID GROUP_ID"
+            "  v2raycli group add-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_add_member.add_argument("id", help="group ID to modify")
     group_add_member.add_argument("profile_ids", nargs="+",
-                                  help="profile, subscription, or group ID(s) to add (auto-detected)")
+                                  help="profile, subscription, group, or server ID(s) to add (auto-detected)")
 
     group_remove_member = group_commands.add_parser(
         "remove-member",
-        help="remove profiles/subscriptions/groups from a group",
+        help="remove profiles/subscriptions/groups/servers from a group",
         description=(
-            "Remove profiles, subscriptions, and/or nested groups from an\n"
-            "existing group. IDs are detected automatically.\n\n"
+            "Remove profiles, subscriptions, nested groups, and/or servers\n"
+            "from an existing group. IDs are detected automatically.\n\n"
             "Examples:\n"
             "  v2raycli group remove-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group remove-member GROUP_ID PROFILE_A SUB_ID GROUP_ID"
+            "  v2raycli group remove-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group_remove_member.add_argument("id", help="group ID to modify")
     group_remove_member.add_argument("profile_ids", nargs="+",
-                                  help="profile, subscription, or group ID(s) to remove (auto-detected)")
+                                  help="profile, subscription, group, or server ID(s) to remove (auto-detected)")
 
     group_add_sub = group_commands.add_parser(
         "add-sub",
@@ -948,7 +973,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     engine_update.add_argument("engine", choices=("sing-box", "xray", "both"),
                              help="which engine to update")
     engine_update.add_argument("--proxy",
-                             help="HTTP/SOCKS proxy for the download (not stored)")
+                             help="proxy URL (socks5://host:port, http://host:port) or a local server ID (not stored)")
 
     # -- completion -----------------------------------------------------------
     completion_cmd = commands.add_parser(
@@ -1694,6 +1719,12 @@ def _profile_add_command(store: ConfigStore, args) -> int:
         profile = vpn.add_openvpn(args.name, config_path=args.config_path, inline=args.inline)
     elif kind == "openconnect":
         profile = vpn.add_openconnect(args.name, args.server)
+    elif kind == "server":
+        from .outbounds.groups import server_profile
+
+        # Reference a running server as a socks/http profile on localhost.
+        profile = server_profile(store, args.server_id, name=args.name)
+        profile.source = "manual"
     else:
         return _command_help(args, "profile add")
 
@@ -1735,10 +1766,12 @@ def _subscription_command(store: ConfigStore, args) -> int:
             print("no subscriptions")
         return 0
     if action == "add":
+        from .subs.fetcher import resolve_proxy_arg
         from .subs.parser import import_subscription
 
+        proxy = resolve_proxy_arg(store, args.proxy)
         sub, profiles, errors = import_subscription(
-            args.name, args.url, user_agent=args.user_agent, proxy=args.proxy
+            args.name, args.url, user_agent=args.user_agent, proxy=proxy
         )
         store.add_subscription(sub)
         for profile in profiles:
@@ -1749,8 +1782,10 @@ def _subscription_command(store: ConfigStore, args) -> int:
             print(f"warning: {error}", file=sys.stderr)
         return 0
     if action == "update":
+        from .subs.fetcher import resolve_proxy_arg
         from .subs.parser import update_subscription
 
+        proxy = resolve_proxy_arg(store, args.proxy)
         if args.update_all:
             if args.id:
                 print("use either ID or --all, not both", file=sys.stderr)
@@ -1764,7 +1799,7 @@ def _subscription_command(store: ConfigStore, args) -> int:
         failed = False
         for sub_id in targets:
             try:
-                profiles, errors = update_subscription(store, sub_id, proxy=args.proxy)
+                profiles, errors = update_subscription(store, sub_id, proxy=proxy)
                 print(f"{sub_id}  updated {len(profiles)} profiles")
                 for error in errors:
                     print(f"warning: {error}", file=sys.stderr)
@@ -1827,13 +1862,16 @@ def _group_command(store: ConfigStore, args) -> int:
         for g in store.list_groups():
             sub_label = f"+{len(g.subscription_ids)}sub" if g.subscription_ids else ""
             group_label = f"+{len(g.group_ids)}group" if g.group_ids else ""
+            server_label = f"+{len(g.server_ids)}srv" if g.server_ids else ""
             rows.append({
                 "id": g.id, "name": g.name, "type": g.type, "strategy": g.strategy,
                 "profiles": len(g.profile_ids),
                 "subscription_ids": g.subscription_ids,
                 "group_ids": g.group_ids,
+                "server_ids": g.server_ids,
                 "sub_label": sub_label,
                 "group_label": group_label,
+                "server_label": server_label,
             })
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
@@ -1851,14 +1889,16 @@ def _group_command(store: ConfigStore, args) -> int:
                 for row in rows:
                     subs = row["sub_label"]
                     groups = row["group_label"]
-                    tag = f"{row['profiles']}p" + (f" +{subs}" if subs else "") + (f" +{groups}" if groups else "")
+                    servers = row["server_label"]
+                    tag = f"{row['profiles']}p" + (f" +{subs}" if subs else "") + (f" +{groups}" if groups else "") + (f" +{servers}" if servers else "")
                     table.add_row(row["id"], row["type"], row["strategy"], tag, row["name"])
                 Console().print(table)
             else:
                 for row in rows:
                     subs = row["sub_label"]
                     groups = row["group_label"]
-                    tag = f"{row['profiles']:>2}p" + (f" {subs}" if subs else "") + (f" {groups}" if groups else "")
+                    servers = row["server_label"]
+                    tag = f"{row['profiles']:>2}p" + (f" {subs}" if subs else "") + (f" {groups}" if groups else "") + (f" {servers}" if servers else "")
                     print(f"{row['id']}  {row['type']:<8} {row['strategy']:<10} {tag:<10} {row['name']}")
         else:
             print("no groups")
@@ -1869,27 +1909,36 @@ def _group_command(store: ConfigStore, args) -> int:
             create_balancer_group,
             create_chain_group,
             create_single_group,
+            resolve_target,
         )
 
         gtype = args.group_add_command
         if gtype == "single":
             if not getattr(args, "profile_id", None):
                 return _command_help(args, "group add")
-            if store.get_profile(args.profile_id) is None:
-                raise ValueError(f"unknown profile id: {args.profile_id}")
-            group = create_single_group(args.name, args.profile_id)
+            # One ref of any type: profile, subscription, group, or server.
+            group = create_single_group(args.name, args.profile_id, store)
+            # Fail fast: a single group must currently resolve to one node.
+            resolve_target(
+                store, group,
+                default_engine=store.config.settings.default_engine,
+            )
         else:
-            # Auto-detect profile vs subscription vs group IDs.
-            profile_ids, sub_ids, group_ids = classify_refs(store, getattr(args, "refs", []) or [])
+            # Auto-detect profile vs subscription vs group vs server IDs.
+            profile_ids, sub_ids, group_ids, server_ids = classify_refs(
+                store, getattr(args, "refs", []) or []
+            )
             if gtype == "balancer":
                 group = create_balancer_group(
                     args.name, args.strategy, profile_ids, store,
                     engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
+                    server_ids=server_ids,
                 )
             elif gtype == "chain":
                 group = create_chain_group(
                     args.name, profile_ids, store,
                     engine=args.engine, subscription_ids=sub_ids, group_ids=group_ids,
+                    server_ids=server_ids,
                 )
             else:
                 return _command_help(args, "group add")
@@ -1930,13 +1979,13 @@ def _group_command(store: ConfigStore, args) -> int:
         print(f"edited group {args.id}")
         return 0
     if action == "add-member":
-        from .outbounds.groups import add_member, classify_id
+        from .outbounds.groups import add_member, classify_id, server_reaches_group
 
         group = store.get_group(args.id)
         if group is None:
             _not_found("group", args.id, store)
             return 1
-        added_p, added_s, added_g = 0, 0, 0
+        added_p, added_s, added_g, added_srv = 0, 0, 0, 0
         for pid in args.profile_ids:
             kind = classify_id(store, pid)
             if kind == "subscription":
@@ -1949,16 +1998,27 @@ def _group_command(store: ConfigStore, args) -> int:
                 if pid not in group.group_ids:
                     group.group_ids.append(pid)
                     added_g += 1
+            elif kind == "server":
+                if server_reaches_group(store, pid, args.id):
+                    raise ValueError(
+                        f"server {pid} forwards to this group — circular reference"
+                    )
+                if pid not in group.server_ids:
+                    group.server_ids.append(pid)
+                    added_srv += 1
             elif kind == "profile":
                 if pid not in group.profile_ids:
                     add_member(group, pid)
                     added_p += 1
             else:
                 raise ValueError(
-                    f"unknown id: {pid} (not a profile, subscription, or group)"
+                    f"unknown id: {pid} (not a profile, subscription, group, or server)"
                 )
         store.save()
-        print(f"added {added_p} profile(s), {added_s} subscription(s), {added_g} group(s) to {args.id}")
+        print(
+            f"added {added_p} profile(s), {added_s} subscription(s), "
+            f"{added_g} group(s), {added_srv} server(s) to {args.id}"
+        )
         return 0
     if action == "remove-member":
         from .outbounds.groups import classify_id, remove_member
@@ -1967,7 +2027,7 @@ def _group_command(store: ConfigStore, args) -> int:
         if group is None:
             _not_found("group", args.id, store)
             return 1
-        removed_p, removed_s, removed_g = 0, 0, 0
+        removed_p, removed_s, removed_g, removed_srv = 0, 0, 0, 0
         for pid in args.profile_ids:
             kind = classify_id(store, pid)
             if kind == "subscription":
@@ -1978,6 +2038,10 @@ def _group_command(store: ConfigStore, args) -> int:
                 if pid in group.group_ids:
                     group.group_ids.remove(pid)
                     removed_g += 1
+            elif kind == "server":
+                if pid in group.server_ids:
+                    group.server_ids.remove(pid)
+                    removed_srv += 1
             elif kind == "profile":
                 before = len(group.profile_ids)
                 remove_member(group, pid)
@@ -1986,7 +2050,7 @@ def _group_command(store: ConfigStore, args) -> int:
         store.save()
         print(
             f"removed {removed_p} profile(s), {removed_s} subscription(s), "
-            f"{removed_g} group(s) from {args.id}"
+            f"{removed_g} group(s), {removed_srv} server(s) from {args.id}"
         )
         return 0
     if action == "add-sub":
@@ -2511,11 +2575,16 @@ def _server_command(store: ConfigStore, args) -> int:
 
         mgr = ServerManager(store)
         mgr.stop(args.id)  # stop if running (ignore result)
-        if not store.remove_server(args.id):
+        summary = store.remove_server(args.id)
+        if not summary:
             _not_found("server", args.id, store)
             return 1
         store.save()
-        print(f"removed server {args.id}")
+        parts = []
+        if summary.get("pruned_groups"):
+            parts.append(f"pruned from {summary['pruned_groups']} group(s)")
+        suffix = f" ({'; '.join(parts)})" if parts else ""
+        print(f"removed server {args.id}{suffix}")
         return 0
 
     return _command_help(args, "server")
@@ -2713,7 +2782,10 @@ def _ws_test(store: ConfigStore, scope: str) -> int:
 
 def _update(store: ConfigStore, selection: str, proxy: str | None = None) -> int:
     from .engines.binary import BinaryError, update_binary
+    from .subs.fetcher import resolve_proxy_arg
 
+    # Accept a proxy URL or a local server id (running a socks/http inbound).
+    proxy = resolve_proxy_arg(store, proxy)
     engines = ["sing-box", "xray"] if selection == "both" else [selection]
     failed = False
     for engine in engines:

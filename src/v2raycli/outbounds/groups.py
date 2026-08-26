@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..engines import AUTO, SINGBOX, XRAY, get_adapter, resolve_engine, strategy_supported
-from ..models import Group, Profile, RoutingConfig, Subscription
+from ..models import Group, Profile, RoutingConfig, Server, Subscription
 from .vpn import is_vpn
 
 VALID_STRATEGIES = {"latency", "random", "roundRobin", "leastLoad"}
@@ -79,13 +79,14 @@ def _assert_engine_compatible(profiles: list[Profile], engine: str) -> None:
 def _group_ref(
     name: str, gtype: str, strategy: str, refs: list[str], store,
     engine: str = AUTO, subscription_ids: list[str] | None = None,
-    group_ids: list[str] | None = None,
+    group_ids: list[str] | None = None, server_ids: list[str] | None = None,
 ) -> Group:
     """Shared validation/construction for balancer and chain groups.
 
     *refs* are the concrete profile ids; *subscription_ids* / *group_ids*
-    are the dynamic members that are resolved at use time (kept on the
-    Group for refreshability).
+    / *server_ids* are the dynamic members that are resolved at use time
+    (kept on the Group for refreshability). Servers are validated to exist
+    and to not forward (transitively) back into this group.
     """
     if gtype == "balancer" and strategy not in VALID_STRATEGIES:
         raise ValueError(f"invalid strategy: {strategy}")
@@ -97,9 +98,25 @@ def _group_ref(
         for gid in group_ids:
             if store.get_group(gid) is None:
                 raise ValueError(f"unknown group id: {gid}")
-    if not all_ids and not group_ids:
-        raise ValueError("group requires at least one profile, subscription, or group")
+    if server_ids:
+        # Validate servers exist and their outbound chains stay acyclic.
+        for sid in server_ids:
+            if store.get_server(sid) is None:
+                raise ValueError(f"unknown server id: {sid}")
+            validate_server_chain(store, sid)
+            if server_reaches_group(store, sid, None):
+                raise ValueError(
+                    f"server {sid} forwards (transitively) to a group that contains it"
+                )
+    if not all_ids and not group_ids and not server_ids:
+        raise ValueError(
+            "group requires at least one profile, subscription, group, or server"
+        )
     profiles = resolve_refs(store, all_ids) if all_ids else []
+    if server_ids:
+        # Server members resolve to socks/http profiles — include them in the
+        # engine-compatibility checks so a forced engine is validated.
+        profiles.extend(server_profile(store, sid) for sid in server_ids)
     _assert_non_vpn(profiles)
     if gtype == "balancer":
         _resolve_group_engine(profiles, strategy, engine, SINGBOX)  # validates strategy support
@@ -110,6 +127,7 @@ def _group_ref(
         profile_ids=list(refs),
         subscription_ids=list(subscription_ids) if subscription_ids else [],
         group_ids=list(group_ids) if group_ids else [],
+        server_ids=list(server_ids) if server_ids else [],
         engine=engine,
     )
 
@@ -117,27 +135,44 @@ def _group_ref(
 def create_balancer_group(
     name: str, strategy: str, profile_ids: list[str], store, engine: str = AUTO,
     subscription_ids: list[str] | None = None, group_ids: list[str] | None = None,
+    server_ids: list[str] | None = None,
 ) -> Group:
     if strategy not in VALID_STRATEGIES:
         raise ValueError(f"invalid strategy: {strategy}")
     return _group_ref(
         name, "balancer", strategy, list(profile_ids), store,
         engine=engine, subscription_ids=subscription_ids, group_ids=group_ids,
+        server_ids=server_ids,
     )
 
 
 def create_chain_group(
     name: str, ordered_profile_ids: list[str], store, engine: str = AUTO,
     subscription_ids: list[str] | None = None, group_ids: list[str] | None = None,
+    server_ids: list[str] | None = None,
 ) -> Group:
     return _group_ref(
         name, "chain", "", list(ordered_profile_ids), store,
         engine=engine, subscription_ids=subscription_ids, group_ids=group_ids,
+        server_ids=server_ids,
     )
 
 
-def create_single_group(name: str, profile_id: str) -> Group:
-    return Group(name=name, type="single", profile_ids=[profile_id])
+def create_single_group(name: str, ref: str, store=None) -> Group:
+    """Create a single group wrapping one ref of any entity type.
+
+    Without *store* (legacy callers) the ref is treated as a profile id.
+    With a store the ref is auto-detected: profile | subscription | group |
+    server, stored on the matching member list.
+    """
+    if store is None:
+        return Group(name=name, type="single", profile_ids=[ref])
+    profile_ids, sub_ids, group_ids, server_ids = classify_refs(store, [ref])
+    return Group(
+        name=name, type="single",
+        profile_ids=profile_ids, subscription_ids=sub_ids,
+        group_ids=group_ids, server_ids=server_ids,
+    )
 
 
 def rename_group(group: Group, name: str) -> Group:
@@ -158,7 +193,7 @@ def remove_member(group: Group, profile_id: str) -> Group:
 
 
 def classify_id(store, entity_id: str) -> str | None:
-    """Return the entity type of an ID: "profile", "subscription", "group", or None.
+    """Return the entity type of an ID: profile|subscription|group|server, or None.
 
     IDs are globally unique across entity types (single counter), so the
     type can be detected by looking the ID up in the store.
@@ -169,6 +204,8 @@ def classify_id(store, entity_id: str) -> str | None:
         return "subscription"
     if store.get_group(entity_id) is not None:
         return "group"
+    if store.get_server(entity_id) is not None:
+        return "server"
     return None
 
 
@@ -198,8 +235,8 @@ def classify_ids(store, ids: list[str]) -> tuple[list[str], list[str]]:
 
 def classify_refs(
     store, ids: list[str]
-) -> tuple[list[str], list[str], list[str]]:
-    """Split IDs into (profile_ids, subscription_ids, group_ids).
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Split IDs into (profile_ids, subscription_ids, group_ids, server_ids).
 
     Raises ValueError for any ID that matches no known entity type.
     """
@@ -208,6 +245,7 @@ def classify_refs(
     profile_ids: list[str] = []
     subscription_ids: list[str] = []
     group_ids: list[str] = []
+    server_ids: list[str] = []
     for entity_id in ids:
         kind = classify_id(store, entity_id)
         if kind == "profile":
@@ -216,9 +254,13 @@ def classify_refs(
             subscription_ids.append(entity_id)
         elif kind == "group":
             group_ids.append(entity_id)
+        elif kind == "server":
+            server_ids.append(entity_id)
         else:
-            raise ValueError(f"unknown id: {entity_id} (not a profile, subscription, or group)")
-    return profile_ids, subscription_ids, group_ids
+            raise ValueError(
+                f"unknown id: {entity_id} (not a profile, subscription, group, or server)"
+            )
+    return profile_ids, subscription_ids, group_ids, server_ids
 
 
 def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[str]:
@@ -233,12 +275,15 @@ def _resolve_subscription_profiles(store, subscription_ids: list[str]) -> list[s
 
 
 def resolve_refs(store, refs: list[str]) -> list[Profile]:
-    """Resolve a mixed list of profile | subscription | group IDs into the
-    deduped, ordered list of concrete profiles.
+    """Resolve a mixed list of profile | subscription | group | server IDs
+    into the deduped, ordered list of concrete profiles.
 
     - profile id   -> that profile
     - sub id       -> subscription's current profile_ids (dynamic)
     - group id     -> that group's members (recursive, deduped)
+    - server id    -> a socks/http profile pointing at that server's local
+                      inbound (traffic passes through the server; its own
+                      outbound chain is loop-checked)
 
     Raises ValueError for unknown ids and for reference cycles.
     """
@@ -273,15 +318,26 @@ def resolve_refs(store, refs: list[str]) -> list[Profile]:
         if group is not None:
             if ref in visiting:
                 raise ValueError(f"circular group reference: {' -> '.join(visiting | {ref})}")
-            # Preserve member order: profiles, subscriptions, then nested groups.
+            # Preserve member order: profiles, subscriptions, groups, servers.
             for member_ref in (
                 list(group.profile_ids)
                 + list(group.subscription_ids)
                 + list(group.group_ids)
+                + list(group.server_ids)
             ):
                 _walk(member_ref, visiting | {ref})
             return
-        raise ValueError(f"unknown id: {ref} (not a profile, subscription, or group)")
+        server = store.get_server(ref)
+        if server is not None:
+            # A server member is a leaf: a socks/http hop to its inbound.
+            # Its own outbound chain is validated for server→server loops;
+            # group cycles through it are rejected when the member is added.
+            validate_server_chain(store, ref)
+            _append(server_profile(store, ref))
+            return
+        raise ValueError(
+            f"unknown id: {ref} (not a profile, subscription, group, or server)"
+        )
 
     for ref in refs:
         _walk(ref, set())
@@ -343,6 +399,73 @@ def validate_server_chain(
         cur = server.outbound_id
 
 
+def server_profile(store, server_id: str, name: str | None = None) -> Profile:
+    """Build a socks/http Profile that points at a server's local inbound.
+
+    Used when a server joins a group or is added as a profile: traffic goes
+    to the server's listen address/port, so it physically passes through the
+    server's configured outbound ("localhost calling"). mixed → socks.
+    """
+    server = store.get_server(server_id)
+    if server is None:
+        raise ValueError(f"unknown server id: {server_id}")
+    kind = "http" if server.protocol == "http" else "socks"  # mixed → socks
+    entry: dict = {"address": server.listen, "port": server.port}
+    auth = server.auth or {}
+    if auth.get("enabled") and auth.get("username") and auth.get("password"):
+        entry["users"] = [{"user": auth["username"], "pass": auth["password"]}]
+    return Profile(
+        id=server.id,
+        name=name or server.name or server.id,
+        kind=kind,
+        engine=AUTO,
+        outbound={"settings": {"servers": [entry]}},
+    )
+
+
+def server_reaches_group(store, server_id: str, group_id: str | None) -> bool:
+    """True if a server's outbound chain reaches *group_id* (or any group).
+
+    Walks server → server outbound edges and, for every group hop, the
+    group's nested ``group_ids`` closure. Passing ``group_id=None`` checks
+    for any group that already contains the server (a self-containing
+    group); passing an id checks whether the chain reaches that exact
+    group. Cycle-guarded, so it never loops on malformed configs.
+    """
+    seen_servers: set[str] = set()
+    seen_groups: set[str] = set()
+    cur = server_id
+    while True:
+        if cur in seen_servers:
+            return False  # server chain cycles are rejected elsewhere
+        seen_servers.add(cur)
+        server = store.get_server(cur)
+        if server is None:
+            return False
+        if server.outbound_type == "server":
+            cur = server.outbound_id
+            continue
+        if server.outbound_type == "group":
+            # Walk the group's nested-group closure looking for group_id (or
+            # any group containing this server when group_id is None).
+            stack = [server.outbound_id]
+            while stack:
+                gid = stack.pop()
+                if gid in seen_groups:
+                    continue
+                seen_groups.add(gid)
+                group = store.get_group(gid)
+                if group is None:
+                    continue
+                if group_id is not None and gid == group_id:
+                    return True
+                if group_id is None and server_id in group.server_ids:
+                    return True
+                stack.extend(group.group_ids)
+            return False
+        return False
+
+
 def server_outbound_target(
     store, server_id: str, default_engine: str = SINGBOX,
     from_server_id: str | None = None,
@@ -356,18 +479,7 @@ def server_outbound_target(
     validate_server_chain(store, server_id, from_server_id=from_server_id)
     server = store.get_server(server_id)
     assert server is not None  # validate_server_chain raises for unknown ids
-    kind = "http" if server.protocol == "http" else "socks"  # mixed → socks
-    entry: dict = {"address": server.listen, "port": server.port}
-    auth = server.auth or {}
-    if auth.get("enabled") and auth.get("username") and auth.get("password"):
-        entry["users"] = [{"user": auth["username"], "pass": auth["password"]}]
-    profile = Profile(
-        id=server.id,
-        name=server.name or server.id,
-        kind=kind,
-        engine=AUTO,
-        outbound={"settings": {"servers": [entry]}},
-    )
+    profile = server_profile(store, server_id)
     return Target(
         type="single",
         name=server.name or server.id,
@@ -409,9 +521,11 @@ def resolve_outbound(store, outbound_type: str, outbound_id: str,
 
 
 def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
-    """Resolve a Profile, Subscription, or Group into a concrete Target."""
+    """Resolve a Profile, Subscription, Group, or Server into a Target."""
     if isinstance(selection, Subscription):
         return subscription_target(store, selection.id, default_engine=default_engine)
+    if isinstance(selection, Server):
+        return server_outbound_target(store, selection.id, default_engine)
     if isinstance(selection, Profile):
         return Target(
             type="single",
@@ -429,6 +543,7 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             list(selection.profile_ids)
             + list(selection.subscription_ids)
             + list(selection.group_ids)
+            + list(selection.server_ids)
         )
         profiles = resolve_refs(store, refs)
         if not profiles:
@@ -459,7 +574,7 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             profile_ids=[p.id for p in profiles],
             profiles=profiles,
         )
-    raise TypeError("selection must be a Profile, Subscription, or Group")
+    raise TypeError("selection must be a Profile, Subscription, Group, or Server")
 
 
 def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) -> Target:

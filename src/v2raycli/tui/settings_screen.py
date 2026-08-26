@@ -69,7 +69,7 @@ def run(store, controller=None) -> None:
                     widgets.show_message("Invalid port", "Must be between 1 and 65535.")
         elif action == "subproxy":
             settings.subscription_proxy = widgets.input_text(
-                "Subscription proxy (e.g. socks5://127.0.0.1:1080)",
+                "Subscription proxy (URL or local server ID)",
                 settings.subscription_proxy,
             )
         elif action == "updates":

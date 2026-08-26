@@ -206,6 +206,31 @@ def test_remove_group_prunes_nested_members(tmp_path):
     assert b.group_ids == []
 
 
+def test_remove_server_prunes_group_server_members(tmp_path):
+    """Removing a server prunes it from groups that list it as a member."""
+    from v2raycli.models import Server
+
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    sv = store.add_server(Server(name="S", port=1080))
+    g = store.add_group(Group(name="G", server_ids=[sv.id]))
+
+    summary = store.remove_server(sv.id)
+    assert summary["pruned_groups"] == 1
+    assert g.server_ids == []
+    assert store.get_server(sv.id) is None
+    assert store.remove_server("missing") == {}
+
+
+def test_load_rejects_malformed_group_server_ids(tmp_path):
+    """Persisted groups must keep server_ids a list of text ids."""
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"groups": [{"server_ids": [123]}]}))
+
+    with pytest.raises(ConfigLoadError, match="groups\\[0\\].server_ids\\[0\\] must be text"):
+        ConfigStore(path).load()
+
+
 # -- numeric ID generation --------------------------------------------------
 
 

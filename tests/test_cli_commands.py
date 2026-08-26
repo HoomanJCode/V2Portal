@@ -188,6 +188,144 @@ def test_group_add_single(tmp_path, capsys):
     assert g.profile_ids == [p.id]
 
 
+# -- servers as group members (nested hierarchy) ---------------------------
+
+
+def test_group_add_balancer_detects_server_ref(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sv = store.add_server(Server(name="local", port=1081))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add", "balancer", "pool", p.id, sv.id])
+    assert app._group_command(store, args) == 0
+    g = store.get_group(capsys.readouterr().out.strip())
+    assert g.profile_ids == [p.id]
+    assert g.server_ids == [sv.id]
+
+
+def test_group_add_single_accepts_server_ref(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add", "single", "one", sv.id])
+    assert app._group_command(store, args) == 0
+    g = store.get_group(capsys.readouterr().out.strip())
+    assert g.type == "single"
+    assert g.server_ids == [sv.id]
+
+
+def test_group_add_single_rejects_multi_profile_sub(tmp_path, capsys):
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[p1.id, p2.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add", "single", "one", sub.id])
+    assert app._command(store, args) == 1
+    assert "exactly 1 profile" in capsys.readouterr().err
+
+
+def test_group_add_member_detects_server_id(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sv = store.add_server(Server(name="local", port=1081))
+    group = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add-member", group.id, sv.id])
+    assert app._group_command(store, args) == 0
+    assert store.get_group(group.id).server_ids == [sv.id]
+
+
+def test_group_remove_member_detects_server_id(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081))
+    group = store.add_group(Group(name="g", type="single", server_ids=[sv.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "remove-member", group.id, sv.id])
+    assert app._group_command(store, args) == 0
+    assert store.get_group(group.id).server_ids == []
+
+
+def test_group_add_member_rejects_server_forwarding_to_group(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sv = store.add_server(Server(name="local", port=1081))
+    group = store.add_group(Group(name="g", type="single", profile_ids=[p.id]))
+    sv.outbound_type = "group"
+    sv.outbound_id = group.id
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "add-member", group.id, sv.id])
+    assert app._command(store, args) == 1
+    assert "circular" in capsys.readouterr().err
+
+
+def test_profile_add_server_creates_localhost_profile(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081, protocol="mixed", listen="127.0.0.1"))
+    store.save()
+
+    args = app.build_parser().parse_args(["profile", "add", "server", "via-server", sv.id])
+    assert app._profile_command(store, args) == 0
+    profile = store.get_profile(capsys.readouterr().out.strip())
+    assert profile is not None
+    assert profile.kind == "socks"
+    assert profile.name == "via-server"
+    assert profile.outbound["settings"]["servers"][0]["address"] == "127.0.0.1"
+    assert profile.outbound["settings"]["servers"][0]["port"] == 1081
+
+
+def test_profile_add_server_unknown_id_fails(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["profile", "add", "server", "x", "999"])
+    assert app._command(store, args) == 1
+    assert "unknown server id" in capsys.readouterr().err
+
+
+def test_subscription_update_proxy_accepts_server_id(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    sv = store.add_server(Server(name="local", port=1081))
+    sub = store.add_subscription(
+        Subscription(name="sub", url="paste://socks://user:pass@1.2.3.4:1080")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(["subscription", "update", sub.id, "--proxy", sv.id])
+    assert app._subscription_command(store, args) == 0
+    assert "updated 1 profiles" in capsys.readouterr().out
+
+
+def test_subscription_update_proxy_unknown_id_fails(tmp_path, capsys):
+    store = _store(tmp_path)
+    sub = store.add_subscription(
+        Subscription(name="sub", url="paste://socks://user:pass@1.2.3.4:1080")
+    )
+    store.save()
+
+    args = app.build_parser().parse_args(["subscription", "update", sub.id, "--proxy", "nope"])
+    assert app._command(store, args) == 1
+    assert "proxy must be a URL" in capsys.readouterr().err
+
+
 def test_group_edit(tmp_path, capsys):
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))

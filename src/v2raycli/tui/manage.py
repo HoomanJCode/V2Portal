@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from ..outbounds import manual, vpn
 from ..outbounds.groups import (
-    classify_ids,
+    classify_refs,
     create_balancer_group,
     create_chain_group,
 )
-from ..subs.fetcher import FetchError
+from ..subs.fetcher import FetchError, resolve_proxy_arg
 from ..subs.parser import import_subscription, update_subscription
 from ..subs.share import ShareLinkError, decode_link, encode_link
 from . import widgets
@@ -20,9 +20,14 @@ def _split(text: str) -> list[str]:
 
 
 def _member_choices(store) -> list[tuple[str, str]]:
-    """Profiles and subscriptions as (id, label) pairs for group pickers."""
+    """Profiles, subscriptions, groups, and servers as picker choices."""
     choices = [(p.id, f"{p.kind:>10}  {p.name}") for p in store.list_profiles()]
     choices += [(s.id, f"{'subscription':>10}  {s.name}") for s in store.list_subscriptions()]
+    choices += [(g.id, f"{'group':>10}  {g.name}") for g in store.list_groups()]
+    choices += [
+        (sv.id, f"{'server':>10}  {sv.name} :{sv.port}")
+        for sv in store.list_servers()
+    ]
     return choices
 
 
@@ -85,7 +90,9 @@ def _add(store) -> None:
         default_proxy = store.config.settings.subscription_proxy or ""
         proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
         try:
-            sub, profiles, errors = import_subscription(name, url, proxy=proxy or None)
+            # Accept a proxy URL or a local server id.
+            resolved_proxy = resolve_proxy_arg(store, proxy or None)
+            sub, profiles, errors = import_subscription(name, url, proxy=resolved_proxy)
         except (FetchError, OSError, ValueError) as exc:
             widgets.show_message("Import failed", str(exc))
             return
@@ -283,7 +290,9 @@ def _do_update(store, sub_id: str) -> None:
     default_proxy = store.config.settings.subscription_proxy or ""
     proxy = widgets.input_text("Proxy (leave empty to use default)", default_proxy)
     try:
-        profiles, errors = update_subscription(store, sub_id, proxy=proxy or None)
+        # Accept a proxy URL or a local server id.
+        resolved_proxy = resolve_proxy_arg(store, proxy or None)
+        profiles, errors = update_subscription(store, sub_id, proxy=resolved_proxy)
     except (FetchError, OSError, ValueError) as exc:
         widgets.show_message("Update failed", str(exc))
         return
@@ -354,9 +363,12 @@ def _create_balancer(store) -> None:
         widgets.show_message("No members", "Select at least one profile or subscription.")
         return
     try:
-        profile_ids, sub_ids = classify_ids(store, members)
+        profile_ids, sub_ids, group_ids, server_ids = classify_refs(store, members)
         store.add_group(
-            create_balancer_group(name, strategy, profile_ids, store, subscription_ids=sub_ids)
+            create_balancer_group(
+                name, strategy, profile_ids, store,
+                subscription_ids=sub_ids, group_ids=group_ids, server_ids=server_ids,
+            )
         )
     except ValueError as exc:
         widgets.show_message("Invalid", str(exc))
@@ -371,9 +383,12 @@ def _create_chain(store) -> None:
         widgets.show_message("No members", "Select at least one profile or subscription.")
         return
     try:
-        profile_ids, sub_ids = classify_ids(store, members)
+        profile_ids, sub_ids, group_ids, server_ids = classify_refs(store, members)
         store.add_group(
-            create_chain_group(name, profile_ids, store, subscription_ids=sub_ids)
+            create_chain_group(
+                name, profile_ids, store,
+                subscription_ids=sub_ids, group_ids=group_ids, server_ids=server_ids,
+            )
         )
     except ValueError as exc:
         widgets.show_message("Invalid", str(exc))

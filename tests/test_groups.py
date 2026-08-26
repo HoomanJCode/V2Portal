@@ -1,14 +1,18 @@
 import pytest
 
-from v2raycli.models import Group, Profile, Subscription
+from v2raycli.models import Group, Profile, Server, Subscription
 from v2raycli.storage import ConfigStore
 from v2raycli.outbounds.groups import (
     classify_id,
     classify_ids,
+    classify_refs,
     create_balancer_group,
     create_chain_group,
     create_single_group,
+    resolve_refs,
     resolve_target,
+    server_profile,
+    server_reaches_group,
 )
 from v2raycli.outbounds.vpn import add_openvpn
 
@@ -256,3 +260,128 @@ def test_balancer_accepts_subscription_id_positionally(tmp_path):
     g = create_balancer_group("pool", "latency", profile_ids, store, subscription_ids=sub_ids)
     assert g.profile_ids == [a.id]
     assert g.subscription_ids == [sub.id]
+
+
+# -- server members --------------------------------------------------------
+
+
+def _store_with_server(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_profile(Profile(name="a", kind="vmess"))
+    b = store.add_profile(Profile(name="b", kind="trojan"))
+    sv = store.add_server(Server(name="local", port=1081, protocol="mixed"))
+    http_sv = store.add_server(Server(name="local-http", port=8080, protocol="http"))
+    return store, a, b, sv, http_sv
+
+
+def test_classify_id_detects_server(tmp_path):
+    store, _, _, sv, _ = _store_with_server(tmp_path)
+    assert classify_id(store, sv.id) == "server"
+    assert classify_id(store, "999") is None
+
+
+def test_classify_refs_splits_four_ways(tmp_path):
+    store, a, _, sv, _ = _store_with_server(tmp_path)
+    sub = store.add_subscription(Subscription(name="sub"))
+    g = store.add_group(Group(name="g"))
+    profile_ids, sub_ids, group_ids, server_ids = classify_refs(
+        store, [a.id, sub.id, g.id, sv.id]
+    )
+    assert profile_ids == [a.id]
+    assert sub_ids == [sub.id]
+    assert group_ids == [g.id]
+    assert server_ids == [sv.id]
+    with pytest.raises(ValueError, match="unknown id: 999"):
+        classify_refs(store, [a.id, "999"])
+
+
+def test_server_profile_kind_and_endpoint(tmp_path):
+    store, _, _, sv, http_sv = _store_with_server(tmp_path)
+    p = server_profile(store, sv.id)
+    assert p.id == sv.id
+    assert p.kind == "socks"  # mixed → socks
+    assert p.outbound["settings"]["servers"][0]["address"] == sv.listen
+    assert p.outbound["settings"]["servers"][0]["port"] == sv.port
+    assert server_profile(store, http_sv.id).kind == "http"
+    with pytest.raises(ValueError, match="unknown server id"):
+        server_profile(store, "999")
+
+
+def test_balancer_with_server_member(tmp_path):
+    store, a, _, sv, _ = _store_with_server(tmp_path)
+    g = create_balancer_group(
+        "bal", "latency", [a.id], store, server_ids=[sv.id]
+    )
+    assert g.server_ids == [sv.id]
+    t = resolve_target(store, g, default_engine="sing-box")
+    assert t.type == "balancer"
+    assert t.profile_ids == [a.id, sv.id]
+    server_node = next(p for p in t.profiles if p.id == sv.id)
+    assert server_node.kind == "socks"
+    assert server_node.outbound["settings"]["servers"][0]["port"] == 1081
+
+
+def test_chain_with_server_member(tmp_path):
+    store, a, _, sv, _ = _store_with_server(tmp_path)
+    g = create_chain_group("chain", [a.id], store, server_ids=[sv.id])
+    t = resolve_target(store, g, default_engine="sing-box")
+    assert t.type == "chain"
+    assert t.profile_ids == [a.id, sv.id]
+
+
+def test_single_group_with_server_ref(tmp_path):
+    store, _, _, sv, _ = _store_with_server(tmp_path)
+    g = create_single_group("one", sv.id, store)
+    assert g.server_ids == [sv.id]
+    t = resolve_target(store, g, default_engine="sing-box")
+    assert t.type == "single"
+    assert t.profile_ids == [sv.id]
+
+
+def test_single_group_legacy_profile_only_without_store(tmp_path):
+    g = create_single_group("one", "007")
+    assert g.profile_ids == ["007"]
+
+
+def test_resolve_refs_expands_server_member(tmp_path):
+    store, a, _, sv, _ = _store_with_server(tmp_path)
+    g = store.add_group(Group(name="g", profile_ids=[a.id], server_ids=[sv.id]))
+    profiles = resolve_refs(store, [g.id])
+    assert [p.id for p in profiles] == [a.id, sv.id]
+
+
+def test_group_with_unknown_server_rejected(tmp_path):
+    store, a, _, _, _ = _store_with_server(tmp_path)
+    with pytest.raises(ValueError, match="unknown server id: 999"):
+        create_balancer_group("bal", "latency", [a.id], store, server_ids=["999"])
+
+
+def test_server_chain_loop_rejected_in_group(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_profile(Profile(name="a", kind="vmess"))
+    sv1 = store.add_server(Server(name="s1", port=1081))
+    sv2 = store.add_server(Server(name="s2", port=1082))
+    sv1.outbound_type = "server"
+    sv1.outbound_id = sv2.id
+    sv2.outbound_type = "server"
+    sv2.outbound_id = sv1.id
+    with pytest.raises(ValueError, match="circular server reference"):
+        create_balancer_group("bal", "latency", [a.id], store, server_ids=[sv1.id])
+
+
+def test_server_forwarding_to_group_containing_it_rejected(tmp_path):
+    """Creating a group with a server that forwards to a group already
+    containing that server is rejected (a runtime loop)."""
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_profile(Profile(name="a", kind="vmess"))
+    sv = store.add_server(Server(name="s1", port=1081))
+    g = store.add_group(Group(name="g", profile_ids=[a.id], server_ids=[sv.id]))
+    sv.outbound_type = "group"
+    sv.outbound_id = g.id
+    assert server_reaches_group(store, sv.id, g.id)
+    assert server_reaches_group(store, sv.id, None)
+    with pytest.raises(ValueError, match="forwards"):
+        create_balancer_group("bal", "latency", [a.id], store, server_ids=[sv.id])

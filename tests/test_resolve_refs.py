@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule, Subscription
+from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule, Server, Subscription
 from v2raycli.outbounds.groups import (
     enrich_target_with_routing,
     resolve_refs,
@@ -110,3 +110,70 @@ def test_enrich_target_with_routing_subscription_target(tmp_path):
     t = enrich_target_with_routing(base, routing, store)
     assert t.extra_profiles
     assert {p.id for p in t.extra_profiles} == {p2.id}
+
+
+# -- server refs -----------------------------------------------------------
+
+
+def _store_with_server(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    sv = store.add_server(Server(name="local", port=1081, protocol="mixed"))
+    http_sv = store.add_server(Server(name="local-http", port=8080, protocol="http"))
+    return store, sv, http_sv
+
+
+def test_resolve_refs_server_member_socks_profile(tmp_path):
+    store, sv, _ = _store_with_server(tmp_path)
+    out = resolve_refs(store, [sv.id])
+    assert len(out) == 1
+    p = out[0]
+    assert p.id == sv.id
+    assert p.kind == "socks"  # mixed protocol → socks profile
+    assert p.outbound["settings"]["servers"][0]["address"] == sv.listen
+    assert p.outbound["settings"]["servers"][0]["port"] == sv.port
+
+
+def test_resolve_refs_http_server_member(tmp_path):
+    store, _, http_sv = _store_with_server(tmp_path)
+    out = resolve_refs(store, [http_sv.id])
+    assert out[0].kind == "http"
+
+
+def test_resolve_refs_server_via_nested_group_dedup(tmp_path):
+    store, sv, _ = _store_with_server(tmp_path)
+    leaf = store.add_group(Group(name="leaf", type="single", server_ids=[sv.id]))
+    parent = store.add_group(Group(name="parent", type="single", group_ids=[leaf.id]))
+    out = resolve_refs(store, [parent.id, sv.id])
+    assert [p.id for p in out] == [sv.id]  # deduped
+
+
+def test_resolve_refs_server_chain_loop_rejected(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    sv1 = store.add_server(Server(name="s1", port=1081))
+    sv2 = store.add_server(Server(name="s2", port=1082))
+    sv1.outbound_type = "server"
+    sv1.outbound_id = sv2.id
+    sv2.outbound_type = "server"
+    sv2.outbound_id = sv1.id
+    with pytest.raises(ValueError, match="circular server reference"):
+        resolve_refs(store, [sv1.id])
+
+
+def test_resolve_target_group_with_server_member(tmp_path):
+    store, sv, _ = _store_with_server(tmp_path)
+    g = store.add_group(Group(name="g", type="single", server_ids=[sv.id]))
+    t = resolve_target(store, g, default_engine="sing-box")
+    assert t.type == "single"
+    assert t.profile_ids == [sv.id]
+    assert t.profiles[0].kind == "socks"
+
+
+def test_resolve_target_accepts_server_model(tmp_path):
+    store, sv, _ = _store_with_server(tmp_path)
+    t = resolve_target(store, sv, default_engine="sing-box")
+    assert t.type == "single"
+    assert t.profile_ids == [sv.id]
+    assert t.profiles[0].kind == "socks"
+    assert t.profiles[0].outbound["settings"]["servers"][0]["port"] == sv.port

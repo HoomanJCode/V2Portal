@@ -16,6 +16,29 @@ class FetchError(V2RayCLIError):
     """A typed failure while fetching a subscription."""
 
 
+def resolve_proxy_arg(store, proxy: str | None) -> str | None:
+    """Normalize a proxy argument into an httpx proxy URL.
+
+    Accepts either a URL (``socks5://host:port`` / ``http://host:port``) or
+    a server ID: a server running a local inbound is referenced as
+    ``socks5://127.0.0.1:PORT`` (or ``http://`` for an http-only server).
+    Returns None for an empty value and raises ValueError for anything
+    that matches neither.
+    """
+    if proxy is None or not str(proxy).strip():
+        return None
+    value = str(proxy).strip()
+    if "://" in value:
+        return value
+    server = store.get_server(value) if store is not None else None
+    if server is None:
+        raise ValueError(
+            f"proxy must be a URL (socks5://host:port) or a server id, got: {value}"
+        )
+    scheme = "http" if server.protocol == "http" else "socks5"
+    return f"{scheme}://127.0.0.1:{server.port}"
+
+
 def fetch(url: str, user_agent: str | None = None, proxy: str | None = None) -> tuple[str, dict]:
     """Return ``(body, headers)`` for a subscription URL.
 

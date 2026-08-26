@@ -144,8 +144,9 @@ def _validate_persisted_shape(raw: dict) -> None:
         for key in ("id", "name", "type", "strategy", "engine"):
             if key in group and not isinstance(group[key], str):
                 raise ValueError(f"config groups[{index}].{key} must be text")
-        if "profile_ids" in group:
-            _validate_text_list(group["profile_ids"], f"config groups[{index}].profile_ids")
+        for key in ("profile_ids", "subscription_ids", "group_ids", "server_ids"):
+            if key in group:
+                _validate_text_list(group[key], f"config groups[{index}].{key}")
         if "enabled" in group and not isinstance(group["enabled"], bool):
             raise ValueError(f"config groups[{index}].enabled must be boolean")
         for key in ("traffic_up", "traffic_down"):
@@ -295,6 +296,7 @@ class ConfigStore:
             sub.profile_ids = [id_map.get(pid, pid) for pid in sub.profile_ids]
         for group in self.config.groups:
             group.profile_ids = [id_map.get(pid, pid) for pid in group.profile_ids]
+            group.server_ids = [id_map.get(sid, sid) for sid in group.server_ids]
         for rule in self.config.routing.rules:
             if rule.target_id and rule.target_id in id_map:
                 rule.target_id = id_map[rule.target_id]
@@ -446,13 +448,20 @@ class ConfigStore:
     def list_servers(self) -> list[Server]:
         return list(self.config.servers)
 
-    def remove_server(self, server_id: str) -> bool:
+    def remove_server(self, server_id: str) -> dict:
+        """Remove a server, pruning it from groups' server members.
+        Returns a summary dict (empty if not found)."""
         server = self.get_server(server_id)
         if server is None:
-            return False
+            return {}
         self.notify_destructive("remove-server")
         self.config.servers.remove(server)
-        return True
+        pruned_groups = 0
+        for group in self.config.groups:
+            if server_id in group.server_ids:
+                group.server_ids.remove(server_id)
+                pruned_groups += 1
+        return {"pruned_groups": pruned_groups}
 
     # -- routing -------------------------------------------------------------
 
