@@ -27,7 +27,8 @@ def run(store, controller, selection) -> None:
                 from ..outbounds.groups import resolve_ref_entity
 
                 selection = widgets.pick_profile(
-                    store.list_profiles(), store.list_groups(), store.list_subscriptions()
+                    store.list_profiles(), store.list_groups(),
+                    store.list_subscriptions(), store.list_servers(),
                 )
                 if selection is None:
                     continue

@@ -64,11 +64,12 @@ def _connect(store, controller) -> None:
     profiles = store.list_profiles()
     groups = store.list_groups()
     subscriptions = store.list_subscriptions()
-    if not profiles and not groups and not subscriptions:
+    servers = store.list_servers()
+    if not profiles and not groups and not subscriptions and not servers:
         widgets.show_message("No configs", "Add a subscription or proxy first.")
         run_manage(store)
         return
-    selection = widgets.pick_profile(profiles, groups, subscriptions)
+    selection = widgets.pick_profile(profiles, groups, subscriptions, servers)
     if selection is None:
         return
     kind, key = selection

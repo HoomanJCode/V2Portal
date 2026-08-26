@@ -1,37 +1,22 @@
-"""Prompt-toolkit dialog wrappers used by the TUI screens.
+"""Prompt-toolkit wrappers used by the TUI screens.
 
-Small Termux windows do not reliably have enough room for prompt-toolkit's
-full-screen dialogs.  In that case these helpers use numbered text prompts so
-all TUI flows remain usable without requiring a larger terminal.
+Every interactive helper is a numbered, rich-styled prompt. Rendering
+menus as rich panels keeps the TUI looking consistent on any terminal
+size (full-screen dialogs do not fit small Termux windows) and gives
+every screen the same modern look.
 """
 
 from __future__ import annotations
 
-import shutil
-
 from prompt_toolkit import PromptSession
-from prompt_toolkit.shortcuts import (
-    checkboxlist_dialog,
-    confirm as _confirm,
-    input_dialog,
-    message_dialog,
-    radiolist_dialog,
-)
 
 from ..outbounds.vpn import VPN_KINDS, detect_clients
 
 
-_MIN_DIALOG_COLUMNS = 60
-_MIN_DIALOG_LINES = 12
+def _console():
+    from rich.console import Console
 
-
-def _use_simple_ui() -> bool:
-    """Return whether the terminal is too small for full-screen dialogs."""
-    try:
-        size = shutil.get_terminal_size(fallback=(80, 24))
-    except OSError:
-        return True
-    return size.columns < _MIN_DIALOG_COLUMNS or size.lines < _MIN_DIALOG_LINES
+    return Console()
 
 
 def _prompt(text: str, default: str = "", *, password: bool = False) -> str:
@@ -41,12 +26,28 @@ def _prompt(text: str, default: str = "", *, password: bool = False) -> str:
         return default
 
 
-def _simple_menu(title: str, values, text: str = ""):
-    print(f"\n{title}")
+def panel(title: str, text: str = "", *, accent: str = "blue") -> None:
+    """Print a rich banner for a screen or menu."""
+    from rich.panel import Panel
+
+    body = f"[bold]{title}[/bold]"
     if text:
-        print(text)
+        body += f"\n[dim]{text}[/dim]"
+    _console().print(Panel(body, border_style=accent, padding=(0, 1)))
+
+
+def _render_options(title: str, values: list, text: str = "") -> None:
+    panel(title, text)
     for index, (_, label) in enumerate(values, 1):
-        print(f"  {index}) {label}")
+        _console().print(f"  [cyan]{index})[/cyan] {label}")
+
+
+def menu(title: str, values, text: str = ""):
+    """Single-select from ``values=[(value, label)]``; returns value or None."""
+    values = list(values)
+    if not values:
+        return None
+    _render_options(title, values, text)
     for _attempt in range(3):
         raw = _prompt("Select: ").strip()
         try:
@@ -62,12 +63,12 @@ def _simple_menu(title: str, values, text: str = ""):
     return None
 
 
-def _simple_multi_select(title: str, values, text: str = "") -> list:
-    print(f"\n{title}")
-    if text:
-        print(text)
-    for index, (_, label) in enumerate(values, 1):
-        print(f"  {index}) {label}")
+def multi_select(title: str, values, text: str = ""):
+    """Multi-select from ``values=[(value, label)]``; returns list or None."""
+    values = list(values)
+    if not values:
+        return []
+    _render_options(title, values, text)
     raw = _prompt("Select (comma separated, blank for none): ")
     selected = []
     for token in raw.split(","):
@@ -80,70 +81,43 @@ def _simple_multi_select(title: str, values, text: str = "") -> list:
     return selected
 
 
-def menu(title: str, values, text: str = ""):
-    """Single-select from ``values=[(value, label)]``; returns value or None."""
-    values = list(values)
-    if _use_simple_ui():
-        return _simple_menu(title, values, text)
-    return radiolist_dialog(title=title, text=text, values=values).run()
-
-
-def multi_select(title: str, values, text: str = ""):
-    """Multi-select from ``values=[(value, label)]``; returns list or None."""
-    values = list(values)
-    if _use_simple_ui():
-        return _simple_multi_select(title, values, text)
-    return checkboxlist_dialog(title=title, text=text, values=values).run()
-
-
 def confirm(question: str) -> bool:
-    if _use_simple_ui():
-        return _prompt(f"{question} [y/N]: ").strip().lower() in {"y", "yes"}
-    return _confirm(question)
+    return _prompt(f"{question} [y/N]: ").strip().lower() in {"y", "yes"}
 
 
-def input_text(prompt: str, default: str = "") -> str:
-    if _use_simple_ui():
-        return _prompt(f"{prompt}: ", default=default)
-    value = input_dialog(title="Input", text=prompt).run()
-    return value if value is not None else default
+def input_text(prompt_text: str, default: str = "") -> str:
+    return _prompt(f"{prompt_text}: ", default=default)
 
 
-def input_int(prompt: str, default=None):
-    if _use_simple_ui():
-        raw = _prompt(f"{prompt}: ", default="" if default is None else str(default))
-    else:
-        raw = input_dialog(title="Input", text=prompt).run()
-        if raw is None or raw.strip() == "":
-            return default
+def input_int(prompt_text: str, default=None):
+    raw = _prompt(f"{prompt_text}: ", default="" if default is None else str(default))
     if raw.strip() == "":
         return default
     try:
         return int(raw.strip())
     except ValueError:
-        show_message("Invalid number", f"{prompt} must be a whole number.")
+        show_message("Invalid number", f"{prompt_text} must be a whole number.")
         return default
 
 
-def input_secret(prompt: str) -> str:
-    return _prompt(f"{prompt}: ", password=True)
+def input_secret(prompt_text: str) -> str:
+    return _prompt(f"{prompt_text}: ", password=True)
 
 
 def show_message(title: str, text: str) -> None:
-    if _use_simple_ui():
-        print(f"\n{title}\n{text}")
-        return
-    message_dialog(title=title, text=text).run()
+    panel(title, text)
 
 
-def pick_profile(profiles, groups, subscriptions=(), include_vpn: bool = True):
-    """Return a ``("profile"|"subscription"|"group", id)`` selection, or None."""
+def pick_profile(profiles, groups, subscriptions=(), servers=(), include_vpn: bool = True):
+    """Return a (\"profile\"|\"subscription\"|\"group\"|\"server\", id), or None."""
     values = []
     clients = detect_clients()
     for sub in subscriptions:
         values.append((("subscription", sub.id), f"[SUB] {sub.name}"))
     for group in groups:
         values.append((("group", group.id), f"[GROUP] {group.name}"))
+    for server in servers:
+        values.append((("server", server.id), f"[SERVER] {server.name} :{server.port}"))
     for profile in profiles:
         if not include_vpn and profile.kind in VPN_KINDS:
             continue
