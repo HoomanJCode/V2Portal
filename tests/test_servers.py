@@ -668,3 +668,173 @@ def test_server_edit_protocol_and_listen(tmp_path, capsys):
     updated = store.get_server(server.id)
     assert updated.protocol == "http"
     assert updated.listen == "127.0.0.1"
+
+
+# -- server-to-server forwarding (loop prevention) -------------------------
+
+
+def test_server_add_accepts_server_ref(tmp_path, capsys):
+    store = _store(tmp_path)
+    target = store.add_server(Server(name="hop", port=1081))
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "add", "--port", "1080", target.id])
+    assert app._server_command(store, args) == 0
+    server = store.get_server(capsys.readouterr().out.strip())
+    assert server is not None
+    assert server.outbound_type == "server"
+    assert server.outbound_id == target.id
+
+
+def test_server_edit_accepts_server_ref(tmp_path, capsys):
+    store = _store(tmp_path)
+    target = store.add_server(Server(name="hop", port=1081))
+    server = store.add_server(Server(name="s1", port=1080, outbound_type="direct"))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--profile", target.id]
+    )
+    assert app._server_command(store, args) == 0
+    updated = store.get_server(server.id)
+    assert updated.outbound_type == "server"
+    assert updated.outbound_id == target.id
+
+
+def test_server_edit_rejects_self_reference(tmp_path, capsys):
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="s1", port=1080, outbound_type="direct"))
+    store.save()
+
+    args = app.build_parser().parse_args(
+        ["server", "edit", server.id, "--profile", server.id]
+    )
+    assert app._server_command(store, args) == 1
+    assert "cannot forward to itself" in capsys.readouterr().err
+    # Outbound unchanged.
+    updated = store.get_server(server.id)
+    assert updated.outbound_type == "direct"
+    assert updated.outbound_id == ""
+
+
+def test_server_edit_rejects_circular_chain(tmp_path, capsys):
+    store = _store(tmp_path)
+    a = store.add_server(Server(name="a", port=1080))
+    b = store.add_server(Server(name="b", port=1081))
+    store.get_server(a.id).outbound_type = "server"
+    store.get_server(a.id).outbound_id = b.id
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "edit", b.id, "--profile", a.id])
+    assert app._server_command(store, args) == 1
+    assert "circular server reference" in capsys.readouterr().err
+    # b's outbound unchanged.
+    updated = store.get_server(b.id)
+    assert updated.outbound_type == "profile"
+    assert updated.outbound_id == ""
+
+
+def test_server_edit_allows_valid_chain(tmp_path, capsys):
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    c = store.add_server(Server(name="c", port=1082, outbound_id=profile.id, outbound_type="profile"))
+    b = store.add_server(Server(name="b", port=1081))
+    a = store.add_server(Server(name="a", port=1080))
+    store.save()
+
+    # a -> b (server hop)
+    args = app.build_parser().parse_args(["server", "edit", a.id, "--profile", b.id])
+    assert app._server_command(store, args) == 0
+    assert store.get_server(a.id).outbound_type == "server"
+    assert store.get_server(a.id).outbound_id == b.id
+
+    # b -> c (server hop)
+    args = app.build_parser().parse_args(["server", "edit", b.id, "--profile", c.id])
+    assert app._server_command(store, args) == 0
+    assert store.get_server(b.id).outbound_type == "server"
+    assert store.get_server(b.id).outbound_id == c.id
+
+
+def test_resolve_server_outbound_builds_socks_hop(tmp_path):
+    from v2raycli.outbounds.groups import resolve_outbound
+
+    store = _store(tmp_path)
+    target = store.add_server(
+        Server(name="hop", port=1081, protocol="mixed", listen="127.0.0.1")
+    )
+    store.save()
+
+    resolved = resolve_outbound(store, "server", target.id, default_engine="sing-box")
+    assert resolved.type == "single"
+    assert len(resolved.profiles) == 1
+    profile = resolved.profiles[0]
+    assert profile.kind == "socks"
+    entry = profile.outbound["settings"]["servers"][0]
+    assert entry["address"] == "127.0.0.1"
+    assert entry["port"] == 1081
+
+
+def test_resolve_server_outbound_http_protocol(tmp_path):
+    from v2raycli.outbounds.groups import resolve_outbound
+
+    store = _store(tmp_path)
+    target = store.add_server(Server(name="web", port=3128, protocol="http"))
+    store.save()
+    resolved = resolve_outbound(store, "server", target.id, default_engine="sing-box")
+    assert resolved.profiles[0].kind == "http"
+
+
+def test_resolve_server_outbound_includes_auth(tmp_path):
+    from v2raycli.outbounds.groups import resolve_outbound
+
+    store = _store(tmp_path)
+    target = store.add_server(Server(
+        name="locked", port=1081,
+        auth={"enabled": True, "username": "u", "password": "p"},
+    ))
+    store.save()
+    resolved = resolve_outbound(store, "server", target.id, default_engine="sing-box")
+    users = resolved.profiles[0].outbound["settings"]["servers"][0]["users"]
+    assert users == [{"user": "u", "pass": "p"}]
+
+
+def test_resolve_server_outbound_rejects_cycle(tmp_path):
+    from v2raycli.outbounds.groups import resolve_outbound
+
+    store = _store(tmp_path)
+    a = store.add_server(Server(name="a", port=1080))
+    b = store.add_server(Server(name="b", port=1081))
+    store.get_server(a.id).outbound_type = "server"
+    store.get_server(a.id).outbound_id = b.id
+    store.get_server(b.id).outbound_type = "server"
+    store.get_server(b.id).outbound_id = a.id
+    store.save()
+
+    with pytest.raises(ValueError, match="circular server reference"):
+        resolve_outbound(store, "server", b.id, default_engine="sing-box", from_server_id=a.id)
+
+
+def test_server_config_forwards_through_other_server(tmp_path):
+    store = _store(tmp_path)
+    target = store.add_server(Server(name="hop", port=1081, listen="127.0.0.1"))
+    server = store.add_server(Server(
+        name="s1", port=1080, outbound_id=target.id, outbound_type="server"
+    ))
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config, engine = mgr._generate_server_config(server)
+
+    socks = next(o for o in config["outbounds"] if o.get("type") == "socks")
+    assert socks["server"] == "127.0.0.1"
+    assert socks["server_port"] == 1081
+
+
+def test_server_list_shows_server_outbound_label(tmp_path, capsys):
+    store = _store(tmp_path)
+    target = store.add_server(Server(name="hop", port=1081))
+    server = Server(name="s1", port=1080, outbound_id=target.id, outbound_type="server")
+    store.add_server(server)
+    store.save()
+
+    args = app.build_parser().parse_args(["server", "list"])
+    assert app._server_command(store, args) == 0
+    assert f"server/{target.id} (hop)" in capsys.readouterr().out
