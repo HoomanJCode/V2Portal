@@ -585,9 +585,10 @@ def test_invalid_routing_action_shows_routing_help(capsys):
     assert "routing" in err.lower()
 
 
-def test_invalid_test_action_shows_test_help(capsys):
-    """Typing 'v2raycli test foo' prints test usage and exits 2."""
-    with pytest.raises(SystemExit, match="2"):
-        app.build_parser().parse_args(["test", "foo"])
-    err = capsys.readouterr().out + capsys.readouterr().err
-    assert "test" in err.lower()
+def test_bare_test_scope_defaults_to_endpoint():
+    """Typing 'v2raycli test <id>' treats the token as a scope and defaults
+    to an endpoint probe rather than erroring on an unknown type."""
+    args = app.build_parser().parse_args(["test", "foo"])
+    assert args.test_type == "foo"
+    assert args.scope == "all"
+    assert args.test_type not in ("latency", "request", "websocket", "ws")

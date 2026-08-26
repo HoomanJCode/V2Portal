@@ -744,65 +744,28 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="test proxy outbounds (latency, reachability, websocket)",
         description=(
             "Test profiles to measure latency, check endpoint reachability,\n"
-            "or validate WebSocket handshakes. Scope can be 'all', a\n"
-            "subscription ID, a group ID, or comma-separated profile IDs.\n\n"
+            "or validate WebSocket handshakes. Scope can be 'all', 'routing',\n"
+            "a profile / subscription / group / server ID (auto-detected —\n"
+            "IDs are unique across types), or comma-separated profile IDs.\n\n"
             "Examples:\n"
             "  v2raycli test latency all\n"
             "  v2raycli test latency SUB_ID\n"
             "  v2raycli test latency GROUP_ID\n"
+            "  v2raycli test latency SERVER_ID\n"
             "  v2raycli test endpoint all\n"
             "  v2raycli test websocket ID_A,ID_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    test_commands = test.add_subparsers(dest="test_command", metavar="TYPE")
-
-    latency = test_commands.add_parser(
-        "latency", aliases=["request"],
-        help="measure real proxy request delay (connects through the engine)",
-        description=(
-            "Connect through the engine and measure response time for each\n"
-            "profile. Scope: 'all', 'routing', a subscription ID, or profile IDs.\n\n"
-            "Examples:\n"
-            "  v2raycli test latency all\n"
-            "  v2raycli test latency routing\n"
-            "  v2raycli test latency SUB_ID\n"
-            "  v2raycli test request ID_A,ID_B"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    test.add_argument(
+        "test_type", nargs="?", default="endpoint",
+        help="type of test: endpoint (default) | latency | websocket. Any other\n"
+             "first token is treated as a scope and defaults to an endpoint probe.",
     )
-    latency.add_argument("scope", nargs="?", default="all",
-                        help="'all', 'routing', a subscription ID, or comma-separated profile IDs (default: all)")
-
-    endpoint = test_commands.add_parser(
-        "endpoint", aliases=["probe"],
-        help="probe endpoint reachability with ICMP/TCP (no engine needed)",
-        description=(
-            "Check if remote endpoints are reachable via ICMP ping or\n"
-            "TCP connect. Reports ok / refused / timeout / not_testable.\n\n"
-            "Examples:\n"
-            "  v2raycli test endpoint all\n"
-            "  v2raycli test probe SUB_ID"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    test.add_argument(
+        "scope", nargs="?", default="all",
+        help="'all', 'routing', or an ID (profile/subscription/group/server), or comma-separated profile IDs (default: all)",
     )
-    endpoint.add_argument("scope", nargs="?", default="all",
-                         help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
-
-    websocket = test_commands.add_parser(
-        "websocket", aliases=["ws"],
-        help="validate WebSocket/WSS handshake and ping/pong",
-        description=(
-            "Start the engine, connect to WebSocket-based profiles, and\n"
-            "verify the WS/WSS upgrade, handshake, and ping/pong exchange.\n\n"
-            "Examples:\n"
-            "  v2raycli test websocket all\n"
-            "  v2raycli test ws SUB_ID"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    websocket.add_argument("scope", nargs="?", default="all",
-                          help="'all', a subscription ID, or comma-separated profile IDs (default: all)")
 
     # -- backup ----------------------------------------------------------------
     backup_command = commands.add_parser(
@@ -1465,16 +1428,16 @@ def _command(store: ConfigStore, args) -> int:
         if command in ("group", "groups"):
             return _group_command(store, args)
         if command == "test":
-            if not args.test_command:
-                return _command_help(args, "test")
+            if args.test_type in ("latency", "request"):
+                return _test(store, args.scope)
+            if args.test_type in ("websocket", "ws"):
+                return _ws_test(store, args.scope)
+            # endpoint/probe, or any other first token interpreted as a scope
+            # (bare `v2raycli test <id>` defaults to an endpoint probe).
             scope = args.scope
-            if args.test_command in ("latency", "request"):
-                return _test(store, scope)
-            if args.test_command in ("endpoint", "probe"):
-                return _probe(store, scope)
-            if args.test_command in ("websocket", "ws"):
-                return _ws_test(store, scope)
-            return _command_help(args, "test")
+            if args.test_type not in ("endpoint", "probe"):
+                scope = args.test_type
+            return _probe(store, scope)
         if command == "backup":
             if args.backup_command == "create":
                 return _backup(store)
@@ -2575,10 +2538,20 @@ def _resolve_test_scope(store: ConfigStore, scope: str):
     if scope.strip() == "routing":
         return select_profiles(store, "routing_targets")
     if len(ids) == 1:
+        # IDs are unique across types (one shared counter), so resolve by type.
         if store.get_subscription(ids[0]) is not None:
             return select_profiles(store, ("subscription", ids[0]))
         if store.get_group(ids[0]) is not None:
-            return select_profiles(store, ("group", ids[0]))
+            # resolve_refs also expands dynamic members (subscription and
+            # nested-group refs), not just direct profile_ids.
+            from .outbounds.groups import resolve_refs
+
+            try:
+                return resolve_refs(store, [ids[0]])
+            except ValueError:
+                return []
+        if store.get_server(ids[0]) is not None:
+            return _resolve_server_scope(store, store.get_server(ids[0]))
     return select_profiles(store, ("profiles", ids))
 
 

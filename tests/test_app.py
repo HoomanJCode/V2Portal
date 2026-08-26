@@ -70,14 +70,27 @@ def test_probe_flag_resolves_scope_and_returns_failure(tmp_path, monkeypatch):
 def test_probe_parser_option():
     args = app.build_parser().parse_args(["test", "endpoint", "all"])
 
-    assert args.test_command == "endpoint"
+    assert args.test_type == "endpoint"
     assert args.scope == "all"
 
 
 def test_ws_test_parser_option():
     args = app.build_parser().parse_args(["test", "websocket", "all"])
 
-    assert args.test_command == "websocket"
+    assert args.test_type == "websocket"
+    assert args.scope == "all"
+
+
+def test_test_defaults_to_endpoint():
+    # Bare `test` and `test <id>` default to an endpoint probe.
+    args = app.build_parser().parse_args(["test"])
+    assert args.test_type == "endpoint"
+    assert args.scope == "all"
+
+    args = app.build_parser().parse_args(["test", "005"])
+    # An unrecognized first token is treated as a scope (endpoint probe);
+    # the dispatch determines the effective type, not the parser.
+    assert args.test_type == "005"
     assert args.scope == "all"
 
 
@@ -190,6 +203,39 @@ def test_test_flag_scope_resolution(tmp_path, monkeypatch, capsys):
     tested.clear()
     assert app._test(store, p2.id) == 0
     assert tested == [p2.id]
+
+
+def test_test_flag_group_and_server_scope(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Group, Server
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="g", type="balancer", strategy="latency", profile_ids=[p1.id, p2.id])
+    )
+    server = store.add_server(Server(name="srv", outbound_type="group", outbound_id=group.id))
+
+    tested: list = []
+    monkeypatch.setattr(latency, "render_table", lambda results: None)
+    monkeypatch.setattr(latency, "save_results", lambda results, path=None: None)
+
+    def fake_test_many(profiles, settings, engines=None, concurrency=8, bin_dir=None):
+        tested.extend(p.id for p in profiles)
+        return [latency.TestResult(profile_id=p.id, name=p.name, ok=True) for p in profiles]
+
+    monkeypatch.setattr(latency, "test_many", fake_test_many)
+
+    assert app._test(store, group.id) == 0
+    assert tested == [p1.id, p2.id]  # group scope resolves to its members
+
+    tested.clear()
+    assert app._test(store, server.id) == 0
+    assert tested == [p1.id, p2.id]  # server scope resolves its outbound target
+
+    tested.clear()
+    assert app._test(store, "999") == 1  # unknown id -> no matching profiles
 
 
 def test_backup_flag(tmp_path, monkeypatch, capsys):
