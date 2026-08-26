@@ -339,18 +339,24 @@ def test_install_service_flag(tmp_path, monkeypatch, capsys):
     from v2raycli import service
 
     store = _store(tmp_path)
-    profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
+    store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
     monkeypatch.setattr(service, "platform", lambda: "linux")
-    monkeypatch.setattr(service, "install_service", lambda s, i, c: tmp_path / "unit")
+    monkeypatch.setattr(service, "install_service", lambda c: tmp_path / "unit")
 
-    assert app._install_service(store, profile.id, None) == 0
+    assert app._install_service(store, None) == 0
     assert "installed" in capsys.readouterr().out
 
 
-def test_install_service_flag_unknown_id(tmp_path, monkeypatch, capsys):
+def test_install_service_flag_unsupported(tmp_path, monkeypatch, capsys):
+    from v2raycli import service
+
     store = _store(tmp_path)
-    assert app._install_service(store, "nope", None) == 1
-    assert "unknown" in capsys.readouterr().err
+    monkeypatch.setattr(service, "platform", lambda: "darwin")
+    monkeypatch.setattr(
+        service, "install_service", lambda c: (_ for _ in ()).throw(RuntimeError("darwin"))
+    )
+    assert app._install_service(store, None) == 1
+    assert "install failed" in capsys.readouterr().err
 
 
 def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):

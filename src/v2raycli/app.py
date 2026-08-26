@@ -990,11 +990,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "service",
         help="install or uninstall a boot service (Linux systemd / Termux)",
         description=(
-            "Keep a chosen profile connected across reboots by installing\n"
+            "Keep all enabled servers running across reboots by installing\n"
             "a system service. Supported platforms: Linux (systemd user unit),\n"
             "Termux (termux-services).\n\n"
             "Examples:\n"
-            "  v2raycli service install PROFILE_ID\n"
+            "  v2raycli service install\n"
             "  v2raycli service uninstall"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1003,19 +1003,18 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     service_install = service_commands.add_parser(
         "install",
-        help="create a boot service that connects to a profile",
+        help="create a boot service that starts all enabled servers",
         description=(
             "Write a systemd user unit (Linux) or termux-services script\n"
-            "(Termux) that launches 'v2raycli connect ID' on boot.\n\n"
+            "(Termux) that launches 'v2raycli server start --all' on boot.\n\n"
             "After install, enable with:\n"
             "  systemctl --user enable --now v2raycli    (Linux)\n"
             "  sv-enable v2raycli                        (Termux)\n\n"
             "Example:\n"
-            "  v2raycli service install abc-123"
+            "  v2raycli service install"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    service_install.add_argument("id", help="profile or group ID to connect on boot")
 
     service_uninstall = service_commands.add_parser(
         "uninstall",
@@ -1450,7 +1449,7 @@ def _command(store: ConfigStore, args) -> int:
             return _update(store, args.engine, args.proxy)
         if command == "service":
             if args.service_command == "install":
-                return _install_service(store, args.id, getattr(args, "config_dir", None))
+                return _install_service(store, getattr(args, "config_dir", None))
             if args.service_command == "uninstall":
                 return _uninstall_service()
             return _command_help(args, "service")
@@ -2646,12 +2645,12 @@ def _health(store: ConfigStore) -> int:
     return 0
 
 
-def _install_service(store: ConfigStore, selection_id: str, config_dir: str | None) -> int:
+def _install_service(store: ConfigStore, config_dir: str | None) -> int:
     from . import service
 
     try:
-        path = service.install_service(store, selection_id, config_dir)
-    except (ValueError, RuntimeError) as exc:
+        path = service.install_service(config_dir)
+    except RuntimeError as exc:
         print(f"install failed: {exc}", file=sys.stderr)
         return 1
     print(f"installed service -> {path}")

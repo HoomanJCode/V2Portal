@@ -1,7 +1,7 @@
 """Install v2raycli as a background service.
 
-A service keeps a chosen profile/group connected across reboots by launching
-``v2raycli --connect <id>`` on boot:
+A service keeps the persistent proxy servers running across reboots by
+launching ``v2raycli server start --all`` on boot:
 
 - **Linux** — a systemd *user* unit under
   ``$XDG_CONFIG_HOME/systemd/user`` (or ``~/.config/systemd/user``).
@@ -33,18 +33,18 @@ def platform() -> str:
     return sys.platform
 
 
-def _cmdline(connect_id: str, config_dir: str | None = None) -> str:
-    args = [shlex.quote(sys.executable), "-m", "v2raycli", "connect", connect_id]
+def _cmdline(config_dir: str | None = None) -> str:
+    args = [shlex.quote(sys.executable), "-m", "v2raycli", "server", "start", "--all"]
     if config_dir:
         args += ["--config-dir", shlex.quote(config_dir)]
     return " ".join(args)
 
 
 def build_systemd_unit(
-    connect_id: str, config_dir: str | None = None, restart: str = "on-failure"
+    config_dir: str | None = None, restart: str = "on-failure"
 ) -> str:
-    """Return the text of a systemd *user* unit for ``connect_id``."""
-    exec_start = _cmdline(connect_id, config_dir)
+    """Return the text of a systemd *user* unit that boots all servers."""
+    exec_start = _cmdline(config_dir)
     return (
         "[Unit]\n"
         "Description=v2raycli LAN proxy\n"
@@ -61,9 +61,9 @@ def build_systemd_unit(
     )
 
 
-def build_termux_run_script(connect_id: str, config_dir: str | None = None) -> str:
-    """Return the text of a termux-services ``run`` script for ``connect_id``."""
-    return "#!/data/data/com.termux/files/usr/bin/sh\n" f"exec {_cmdline(connect_id, config_dir)}\n"
+def build_termux_run_script(config_dir: str | None = None) -> str:
+    """Return the text of a termux-services ``run`` script that boots all servers."""
+    return "#!/data/data/com.termux/files/usr/bin/sh\n" f"exec {_cmdline(config_dir)}\n"
 
 
 def systemd_unit_dir() -> Path:
@@ -75,27 +75,21 @@ def termux_service_dir() -> Path:
     return Path.home() / ".termux" / "sv" / SERVICE_NAME
 
 
-def install_service(store, connect_id: str, config_dir: str | None = None) -> Path:
-    """Write a service unit for ``connect_id``; return the written path.
+def install_service(config_dir: str | None = None) -> Path:
+    """Write a service unit that boots all servers on startup.
 
-    Raises ``ValueError`` for an unknown id and ``RuntimeError`` on unsupported
-    platforms.
+    Raises ``RuntimeError`` on unsupported platforms.
     """
-    from .outbounds.groups import classify_id
-
-    if classify_id(store, connect_id) is None:
-        raise ValueError(f"unknown profile, subscription, or group id: {connect_id}")
-
     plat = platform()
     if plat == "linux":
         target = systemd_unit_dir() / f"{SERVICE_NAME}.service"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(build_systemd_unit(connect_id, config_dir), encoding="utf-8")
+        target.write_text(build_systemd_unit(config_dir), encoding="utf-8")
         return target
     if plat == "termux":
         target = termux_service_dir() / "run"
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(build_termux_run_script(connect_id, config_dir), encoding="utf-8")
+        target.write_text(build_termux_run_script(config_dir), encoding="utf-8")
         target.chmod(0o700)
         return target
     raise RuntimeError(f"service install not supported on {plat}")
