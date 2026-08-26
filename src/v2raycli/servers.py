@@ -124,9 +124,10 @@ class ServerManager:
     def resolve_outbound_target(self, server: "Server"):
         """Resolve a server's outbound reference into a Target.
 
-        Accepts profile | subscription | group | direct via the universal
-        resolver; a subscription resolves dynamically as a strategy-based
-        balancer over its current profiles.
+        Accepts profile | subscription | group | server | direct via the
+        universal resolver; a subscription resolves dynamically as a
+        strategy-based balancer over its current profiles; a server resolves
+        to a socks/http hop through that server (loop-checked).
         """
         from .outbounds.groups import resolve_outbound
 
@@ -135,6 +136,7 @@ class ServerManager:
             server.outbound_type,
             server.outbound_id,
             default_engine=self.store.config.settings.default_engine,
+            from_server_id=server.id,
         )
 
     def _probe_healthy(self, target, timeout: float = 3.0, workers: int = 16):

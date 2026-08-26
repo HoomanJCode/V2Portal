@@ -206,8 +206,8 @@ class Server:
     name: str = ""
     port: int = 1080
     protocol: str = "mixed"  # mixed | socks | http
-    outbound_id: str = ""  # profile or group ID
-    outbound_type: str = "profile"  # profile | group
+    outbound_id: str = ""  # profile, subscription, group, or server ID
+    outbound_type: str = "profile"  # profile | subscription | group | server | direct
     listen: str = "0.0.0.0"
     auth: dict[str, Any] = field(
         default_factory=lambda: {"enabled": False, "username": "", "password": ""}
