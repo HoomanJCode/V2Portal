@@ -634,3 +634,124 @@ def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) ->
         extra_profiles=list(extra_profiles_by_id.values()),
         extra_groups=list(extra_groups_by_id.values()),
     )
+
+
+# -- hierarchy tree ----------------------------------------------------------
+
+TREE_BRANCH = "├── "
+TREE_LAST = "└── "
+TREE_PIPE = "│   "
+TREE_SPACE = "    "
+
+
+def _tree_label_group(g: Group) -> str:
+    suffix = f" ({g.strategy})" if g.type == "balancer" else ""
+    return f"{g.id}  {g.type} {g.name}{suffix}"
+
+
+def _tree_label_subscription(s: Subscription) -> str:
+    return f"{s.id}  subscription {s.name} ({len(s.profile_ids)} profiles)"
+
+
+def _tree_label_server(store, server_id: str) -> str:
+    sv = store.get_server(server_id)
+    if sv is None:
+        return f"{server_id}  <missing server>"
+    label = f"{sv.id}  server {sv.name or sv.id} :{sv.port}"
+    if sv.outbound_type != "direct" and sv.outbound_id:
+        label += f"  → {sv.outbound_type}/{sv.outbound_id}"
+    return label
+
+
+def _tree_label_profile(store, profile_id: str) -> str:
+    p = store.get_profile(profile_id)
+    if p is None:
+        return f"{profile_id}  <missing profile>"
+    return f"{p.id}  {p.kind} {p.name}"
+
+
+def _tree_render_member_refs(store, refs: list[str], prefix: str, lines: list[str], visited: set[str]) -> None:
+    """Render a list of mixed refs (profile|subscription|server|group)."""
+    for index, ref in enumerate(refs):
+        branch = TREE_LAST if index == len(refs) - 1 else TREE_BRANCH
+        child_prefix = prefix + (TREE_SPACE if index == len(refs) - 1 else TREE_PIPE)
+        group = store.get_group(ref)
+        if group is not None:
+            _tree_render_group(store, group, prefix, index == len(refs) - 1, lines, visited)
+            continue
+        sub = store.get_subscription(ref)
+        if sub is not None:
+            lines.append(prefix + branch + _tree_label_subscription(sub))
+            _tree_render_member_refs(store, list(sub.profile_ids), child_prefix, lines, visited)
+            continue
+        sv = store.get_server(ref)
+        if sv is not None:
+            lines.append(prefix + branch + _tree_label_server(store, ref))
+            continue
+        p = store.get_profile(ref)
+        if p is not None:
+            lines.append(prefix + branch + _tree_label_profile(store, ref))
+            continue
+        lines.append(prefix + branch + f"{ref}  <missing>")
+
+
+def _tree_render_group(
+    store, group: Group, prefix: str, is_last: bool, lines: list[str], visited: set[str]
+) -> None:
+    branch = TREE_LAST if is_last else TREE_BRANCH
+    child_prefix = prefix + (TREE_SPACE if is_last else TREE_PIPE)
+    lines.append(prefix + branch + _tree_label_group(group))
+    if group.id in visited:
+        lines.append(child_prefix + TREE_LAST + "(cycle — not expanded)")
+        return
+    visited = visited | {group.id}
+    refs = (
+        list(group.profile_ids)
+        + list(group.subscription_ids)
+        + list(group.server_ids)
+        + list(group.group_ids)
+    )
+    _tree_render_member_refs(store, refs, child_prefix, lines, visited)
+
+
+def group_tree_lines(store) -> list[str]:
+    """Render the nested group / subscription / server hierarchy as text lines.
+
+    Roots are the top-level groups (groups not nested inside another group)
+    followed by any subscription / server / profile that no group references,
+    so nothing is hidden. Members are expanded recursively: a subscription
+    shows its current profiles, a server shows its local inbound (and its
+    outbound reference as a hint). Group cycles — possible only in
+    hand-edited configs — are truncated and marked.
+    """
+    groups = store.list_groups()
+    subs = store.list_subscriptions()
+    servers = store.list_servers()
+    profiles = store.list_profiles()
+
+    contained_groups: set[str] = set()
+    referenced_subs: set[str] = set()
+    referenced_servers: set[str] = set()
+    referenced_profiles: set[str] = set()
+    sub_profiles: set[str] = set()
+    for group in groups:
+        contained_groups.update(group.group_ids)
+        referenced_subs.update(group.subscription_ids)
+        referenced_servers.update(group.server_ids)
+        referenced_profiles.update(group.profile_ids)
+    for sub in subs:
+        sub_profiles.update(sub.profile_ids)
+
+    roots: list[str] = [g.id for g in groups if g.id not in contained_groups]
+    roots += [s.id for s in subs if s.id not in referenced_subs]
+    roots += [sv.id for sv in servers if sv.id not in referenced_servers]
+    roots += [
+        p.id
+        for p in profiles
+        if p.id not in referenced_profiles and p.id not in sub_profiles
+    ]
+
+    lines: list[str] = []
+    visited: set[str] = set()
+    _tree_render_member_refs(store, roots, "", lines, visited)
+    return lines

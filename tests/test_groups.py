@@ -9,6 +9,7 @@ from v2raycli.outbounds.groups import (
     create_balancer_group,
     create_chain_group,
     create_single_group,
+    group_tree_lines,
     resolve_refs,
     resolve_target,
     server_profile,
@@ -385,3 +386,98 @@ def test_server_forwarding_to_group_containing_it_rejected(tmp_path):
     assert server_reaches_group(store, sv.id, None)
     with pytest.raises(ValueError, match="forwards"):
         create_balancer_group("bal", "latency", [a.id], store, server_ids=[sv.id])
+
+
+# -- hierarchy tree ---------------------------------------------------------
+
+
+def _tree_store(tmp_path):
+    """A small nested config: group G1 (balancer) contains a profile, a
+    subscription, a server, and nested group G2; plus standalone entities."""
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p1 = store.add_profile(Profile(name="p1", kind="vmess"))
+    p2 = store.add_profile(Profile(name="p2", kind="vless"))
+    p3 = store.add_profile(Profile(name="p3", kind="trojan"))
+    p4 = store.add_profile(Profile(name="p4", kind="socks"))
+    p5 = store.add_profile(Profile(name="p5", kind="http"))
+    s1 = store.add_subscription(Subscription(name="sub1", profile_ids=[p2.id, p3.id]))
+    s2 = store.add_subscription(Subscription(name="sub2", profile_ids=[p5.id]))
+    sv1 = store.add_server(Server(name="local", port=1081))
+    sv2 = store.add_server(Server(name="other", port=1082))
+    g2 = store.add_group(Group(name="inner", type="single", profile_ids=[p4.id]))
+    g1 = store.add_group(Group(
+        name="fast", type="balancer", strategy="latency",
+        profile_ids=[p1.id], subscription_ids=[s1.id],
+        server_ids=[sv1.id], group_ids=[g2.id],
+    ))
+    return store, (p1, p2, p3, p4, p5), (s1, s2), (sv1, sv2), (g1, g2)
+
+
+def test_group_tree_empty(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    assert group_tree_lines(store) == []
+
+
+def test_group_tree_renders_nested_hierarchy(tmp_path):
+    store, (p1, p2, p3, p4, p5), (s1, s2), (sv1, sv2), (g1, g2) = _tree_store(tmp_path)
+    lines = group_tree_lines(store)
+
+    text = "\n".join(lines)
+    # Top-level group root with its strategy.
+    assert f"{g1.id}  balancer fast (latency)" in text
+    # Nested members, in order: profile, subscription(+profiles), server, group.
+    assert f"{p1.id}  vmess p1" in text
+    assert f"{s1.id}  subscription sub1 (2 profiles)" in text
+    assert f"{p2.id}  vless p2" in text
+    assert f"{p3.id}  trojan p3" in text
+    assert f"{sv1.id}  server local :1081" in text
+    assert f"{g2.id}  single inner" in text
+    assert f"{p4.id}  socks p4" in text
+    # Standalone subscription, server, and profile are roots too.
+    assert f"{s2.id}  subscription sub2 (1 profiles)" in text
+    assert f"{sv2.id}  server other :1082" in text
+    assert f"{p5.id}  http p5" in text
+    # The standalone profile must appear once (its subscription ref is a root,
+    # and it is not duplicated as a standalone).
+    assert text.count(f"{p5.id}  http p5") == 1
+
+
+def test_group_tree_nesting_depths_and_branches(tmp_path):
+    store, _, _, _, (g1, _) = _tree_store(tmp_path)
+    lines = group_tree_lines(store)
+    text = "\n".join(lines)
+    # The profile member sits one level under the group root.
+    assert "├── " + f"{g1.id}  balancer fast (latency)" in text
+    assert "│   ├── " in text
+    assert "│   └── " in text
+
+
+def test_group_tree_server_outbound_hint(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    p = store.add_profile(Profile(name="p", kind="vmess"))
+    sv = store.add_server(Server(name="local", port=1081))
+    sv.outbound_type = "group"
+    sv.outbound_id = p.id  # fake a group ref for display
+    store.add_group(Group(name="g", type="single", server_ids=[sv.id]))
+    text = "\n".join(group_tree_lines(store))
+    assert f"→ group/{p.id}" in text
+
+
+def test_group_tree_truncates_cycles(tmp_path):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    a = store.add_group(Group(name="a", type="single"))
+    b = store.add_group(Group(name="b", type="single"))
+    a.group_ids.append(b.id)
+    b.group_ids.append(a.id)
+    # A top-level group reaches the a↔b cycle (hand-edited config).
+    x = store.add_group(Group(name="x", type="single", group_ids=[a.id]))
+    lines = group_tree_lines(store)
+    text = "\n".join(lines)
+    assert f"{x.id}  single x" in text
+    assert "(cycle — not expanded)" in text
+    # Terminates: a cycle must not blow the recursion.
+    assert len(lines) < 10
