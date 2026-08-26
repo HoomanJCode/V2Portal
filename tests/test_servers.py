@@ -156,6 +156,37 @@ def test_server_list_shows_outbound_id(tmp_path, capsys):
     assert f"profile/{profile.id} (US proxy)" in out
 
 
+def test_server_list_resolves_balancer_group(tmp_path, capsys, monkeypatch):
+    from v2raycli.models import Group
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="US proxy", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="EU proxy", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="fast", type="balancer", strategy="latency", profile_ids=[p1.id, p2.id])
+    )
+    server = Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group",
+                    traffic_api_port=19090)
+    store.add_server(server)
+    store.save()
+
+    # Simulate a running engine reporting the most recent active outbound.
+    from v2raycli import traffic
+    monkeypatch.setattr(
+        traffic, "read_active_outbound", lambda host, port, timeout=3.0: p2.id
+    )
+    fake_state = ServerState(server_id=server.id, pid=99999)
+    monkeypatch.setattr(ServerState, "is_running", lambda self: True)
+    monkeypatch.setattr(ServerManager, "get_state", lambda self, sid: fake_state)
+
+    args = app.build_parser().parse_args(["server", "list"])
+    assert app._server_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert f"group/{group.id} (fast)" in out
+    assert "latency" in out and "2 nodes" in out
+    assert f"→ {p2.id} (EU proxy)" in out
+
+
 def test_server_add_requires_profile_or_group(tmp_path, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
@@ -279,6 +310,142 @@ def test_server_config_with_balancer_routing_target(tmp_path):
         o.get("tag") == bal.id and o.get("type") in ("urltest", "selector")
         for o in config.get("outbounds", [])
     )
+
+
+def _probe_result(profile, tcp_ms, tcp_status="ok"):
+    from v2raycli.test.latency import EndpointResult
+
+    return EndpointResult(profile_id=profile.id, name=profile.name, tcp_ms=tcp_ms, tcp_status=tcp_status)
+
+
+def test_balancer_server_pins_to_fastest_reachable_endpoint(tmp_path, monkeypatch):
+    """Starting a balancer server pins to the lowest-TCP-delay reachable node
+    and drops dead endpoints."""
+    from v2raycli import servers as servers_module
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    fast = store.add_profile(Profile(name="fast", kind="socks", outbound=SOCKS))
+    slow = store.add_profile(Profile(name="slow", kind="socks", outbound=SOCKS))
+    dead = store.add_profile(Profile(name="dead", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[fast.id, slow.id, dead.id])
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group")
+    )
+
+    results = {
+        fast.id: _probe_result(fast, 12.0),
+        slow.id: _probe_result(slow, 200.0),
+        dead.id: _probe_result(dead, None, "timeout"),
+    }
+    monkeypatch.setattr(
+        latency, "probe_endpoint", lambda profile, timeout=5.0: results[profile.id]
+    )
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config, engine = mgr._generate_server_config(server)
+
+    assert mgr.selected_pinned is not None
+    assert mgr.selected_pinned.id == fast.id
+    # The generated config should only contain the pinned node as its outbound.
+    tags = [o.get("tag") for o in config.get("outbounds", [])]
+    assert fast.id in tags
+    assert slow.id not in tags and dead.id not in tags
+
+
+def test_balancer_server_start_fails_when_all_endpoints_dead(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[p1.id, p2.id])
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group")
+    )
+
+    monkeypatch.setattr(
+        latency, "probe_endpoint",
+        lambda profile, timeout=5.0: _probe_result(profile, None, "timeout"),
+    )
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    with pytest.raises(ValueError, match="no reachable endpoint"):
+        mgr._generate_server_config(server)
+
+
+def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
+    """Failover-enabled server keeps a health-checked balancer over healthy
+    nodes (fastest first) instead of pinning to one."""
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    fast = store.add_profile(Profile(name="fast", kind="socks", outbound=SOCKS))
+    slow = store.add_profile(Profile(name="slow", kind="socks", outbound=SOCKS))
+    dead = store.add_profile(Profile(name="dead", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[fast.id, slow.id, dead.id])
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group",
+               failover=True, failover_timeout=5)
+    )
+
+    results = {
+        fast.id: _probe_result(fast, 12.0),
+        slow.id: _probe_result(slow, 200.0),
+        dead.id: _probe_result(dead, None, "timeout"),
+    }
+    monkeypatch.setattr(latency, "probe_endpoint", lambda profile, timeout=5.0: results[profile.id])
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config, engine = mgr._generate_server_config(server)
+
+    # Failover was active over the two healthy nodes with a 5s probe interval.
+    assert mgr.failover_active == (2, 5)
+    # The generated config must keep both healthy nodes as an urltest balancer
+    # and the dead node must be dropped.
+    urltest = next(o for o in config["outbounds"] if o.get("type") == "urltest")
+    assert fast.id in urltest["outbounds"] and slow.id in urltest["outbounds"]
+    assert dead.id not in urltest["outbounds"]
+    assert urltest.get("interval") == "5s"
+    assert urltest.get("interrupt_exist_connections") is True
+
+
+def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+
+    store = _store(tmp_path)
+    a = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    dead = store.add_profile(Profile(name="dead", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id, dead.id])
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group",
+               failover=True, failover_timeout=5)
+    )
+
+    monkeypatch.setattr(
+        latency, "probe_endpoint",
+        lambda profile, timeout=5.0: (
+            _probe_result(a, 5.0) if profile.id == a.id else _probe_result(profile, None, "timeout")
+        ),
+    )
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config, engine = mgr._generate_server_config(server)
+
+    # Only one healthy node → degrade to a single pinned node.
+    assert mgr.selected_pinned is not None and mgr.selected_pinned.id == a.id
+    assert mgr.failover_active is None
+    tags = [o.get("tag") for o in config.get("outbounds", [])]
+    assert a.id in tags
+    assert dead.id not in tags
 
 
 def test_server_spawn_uses_args_kwarg(tmp_path, monkeypatch):

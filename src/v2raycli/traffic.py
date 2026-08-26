@@ -38,3 +38,33 @@ def read_traffic(host: str, port: int, timeout: float = 3.0) -> dict | None:
         }
     except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None
+
+
+def read_active_outbound(host: str, port: int, timeout: float = 3.0) -> str | None:
+    """Return the outbound tag used by the most recent active connection.
+
+    Polls the sing-box Clash API ``/connections`` and returns the
+    ``outbound`` tag of the newest connection. Returns ``None`` when the
+    engine is unreachable (xray has no Clash API) or there are no active
+    connections. For selectors/urltest this usually reports the balancer
+    tag rather than the concrete child node.
+    """
+    try:
+        resp = httpx.get(f"http://{host}:{port}/connections", timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        connections = data.get("connections")
+        if not isinstance(connections, list) or not connections:
+            return None
+        by_start = sorted(
+            connections,
+            key=lambda c: c.get("start", 0) if isinstance(c, dict) else 0,
+            reverse=True,
+        )
+        for conn in by_start:
+            tag = conn.get("outbound") if isinstance(conn, dict) else None
+            if isinstance(tag, str) and tag:
+                return tag
+        return None
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError, OverflowError, IndexError):
+        return None

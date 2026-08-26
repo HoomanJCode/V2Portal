@@ -23,6 +23,7 @@ class Target:
     profiles: list[Profile] = field(default_factory=list)
     extra_profiles: list[Profile] = field(default_factory=list)
     extra_groups: list[Group] = field(default_factory=list)
+    health_interval: int = 0  # seconds between engine health probes (0 = disabled)
 
 
 def _resolve_members(store, profile_ids) -> list[Profile]:

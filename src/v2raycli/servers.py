@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
+DEFAULT_FAILOVER_TIMEOUT = 10  # seconds between engine health probes
+
 
 @dataclass
 class ServerState:
@@ -65,6 +67,8 @@ class ServerManager:
         self.runtime_dir = runtime_dir or store.path.parent / "runtime"
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
         self._states: dict[str, ServerState] = {}
+        self.selected_pinned = None  # most recent start's real-endpoint pin
+        self.failover_active = None  # (healthy_count, timeout_s) when failover on
         self._load_states()
 
     def _states_file(self) -> Path:
@@ -133,12 +137,100 @@ class ServerManager:
             default_engine=self.store.config.settings.default_engine,
         )
 
+    def _probe_healthy(self, target, timeout: float = 3.0, workers: int = 16):
+        """Probe each balancer member's real TCP endpoint concurrently.
+
+        Returns the healthy profiles ordered by lowest connect delay, or raises
+        when no endpoint is reachable. The engine's urltest/leastPing strategy
+        measures HTTP latency *through* the proxy, which can report low latency
+        even when the underlying endpoint is dead; a raw TCP connect is the
+        ground truth here.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .test.latency import probe_endpoint
+
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = list(
+                    pool.map(
+                        lambda p: probe_endpoint(p, timeout=timeout),
+                        list(target.profiles),
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001 - probing is best-effort
+            raise ValueError(f"endpoint probe failed: {exc}") from exc
+        healthy = sorted(
+            (r for r in results if r.tcp_status == "ok"),
+            key=lambda r: (r.tcp_ms if r.tcp_ms is not None else float("inf"), r.name),
+        )
+        if not healthy:
+            raise ValueError(
+                "no reachable endpoint among balancer members "
+                "(all endpoints refused, timed out, or failed lookup)"
+            )
+        profiles = [self.store.get_profile(r.profile_id) for r in healthy]
+        if any(p is None for p in profiles):
+            raise ValueError("a probed node is no longer in the config")
+        return profiles  # type: ignore[return-value]
+
+    def _pin_to_fastest_endpoint(self, healthy: list, default_engine: str):
+        """Reduce a healthy, delay-ordered member list to the single best node."""
+        from .outbounds.groups import resolve_outbound
+
+        return resolve_outbound(
+            self.store, "profile", healthy[0].id,
+            default_engine=default_engine,
+        )
+
+    def _failover_target(self, target, healthy: list, timeout: int):
+        """Turn a balancer target into a health-checked balancer over the
+        healthy nodes, keeping the fastest endpoint first (the engine's
+        initial default) and probing every ``timeout`` seconds to fail over
+        quickly when the active node stops responding.
+        """
+        from dataclasses import replace
+
+        if len(healthy) <= 1:
+            # Nothing to balance — degrade to a single node.
+            return self._pin_to_fastest_endpoint(healthy, target.engine)
+        return replace(
+            target,
+            profiles=list(healthy),
+            profile_ids=[p.id for p in healthy],
+            health_interval=int(timeout),
+        )
+
     def _generate_server_config(self, server: "Server") -> dict:
         """Generate engine config for a single server."""
         from .engines import get_adapter
         from .outbounds.groups import enrich_target_with_routing
 
         target = self.resolve_outbound_target(server)
+        self.selected_pinned = None
+        self.failover_active = None
+        if target.type == "balancer":
+            # Real endpoint delay is always the selection ground truth: probe
+            # members, drop dead endpoints. Then either pin to the single
+            # lowest-delay node (no failover) or keep a health-checked balancer
+            # over the healthy nodes (failover enabled).
+            healthy = self._probe_healthy(target)
+            if getattr(server, "failover", False):
+                timeout = getattr(server, "failover_timeout", 0) or self.DEFAULT_FAILOVER_TIMEOUT
+                if timeout <= 0:
+                    raise ValueError("failover timeout must be a positive number of seconds")
+                target = self._failover_target(target, healthy, timeout)
+                # If there is only one healthy node the failover target degrades
+                # to a single pin — record it for the status line.
+                if len(healthy) == 1:
+                    self.selected_pinned = healthy[0]
+                else:
+                    self.failover_active = (len(healthy), timeout)
+            else:
+                target = self._pin_to_fastest_endpoint(
+                    healthy, self.store.config.settings.default_engine
+                )
+                self.selected_pinned = healthy[0]
         target = enrich_target_with_routing(target, self.store.config.routing, self.store)
 
         # Build settings for this server
@@ -154,6 +246,8 @@ class ServerManager:
             log_level=self.store.config.settings.log_level,
             test_url=self.store.config.settings.test_url,
             default_engine=self.store.config.settings.default_engine,
+            traffic_api=bool(server.traffic_api_port),
+            traffic_api_port=server.traffic_api_port,
         )
 
         # Override inbound type based on server protocol
