@@ -494,6 +494,20 @@ def test_collect_routing_target_profiles(tmp_path):
     )
     assert latency.collect_routing_target_profiles(store) == []
 
+    # Server target resolves to a socks/http profile through its inbound
+    from v2raycli.models import Server
+
+    sv = store.add_server(Server(name="local", port=1081, protocol="mixed"))
+    store.config.routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=sv.id, match={"domains": ["x.com"]})],
+    )
+    result = latency.collect_routing_target_profiles(store)
+    assert len(result) == 1
+    assert result[0].id == sv.id
+    assert result[0].kind == "socks"
+    assert result[0].outbound["settings"]["servers"][0]["port"] == sv.port
+
 
 def test_scope_routing_targets(tmp_path):
     from v2raycli.models import RoutingConfig, RoutingRule

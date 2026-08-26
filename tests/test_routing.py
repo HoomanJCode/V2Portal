@@ -92,6 +92,17 @@ def test_normalize_accepts_known_target_id():
     assert out[0].target_id == "live-profile"
 
 
+def test_normalize_accepts_server_target_id():
+    """Proxy rule targeting a server ID passes validation."""
+    cfg = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id="server-007", match={"domains": ["x.com"]})],
+    )
+    known = {"direct", "block", "server-007"}
+    out = normalize_rules(cfg, selected_target_id=None, known_target_ids=known)
+    assert out[0].target_id == "server-007"
+
+
 def test_normalize_known_ids_includes_direct_block():
     """Direct/block actions are always valid even with known_target_ids set."""
     cfg = RoutingConfig(

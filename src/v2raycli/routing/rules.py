@@ -108,7 +108,7 @@ def normalize_rules(
         ):
             raise ValueError(
                 f"rule targets unknown id {target_id!r}; "
-                f"the profile or group may have been removed"
+                f"the referenced profile, group, or server may have been removed"
             )
         normalized.append(
             RoutingRule(

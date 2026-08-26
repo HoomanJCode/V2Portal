@@ -836,6 +836,32 @@ def test_enrich_target_adds_extra_group_and_members(tmp_path):
     assert c.id in extra_pids
 
 
+def test_enrich_target_adds_extra_server(tmp_path):
+    """A routing rule targeting a server id adds its local socks/http profile."""
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    a = store.add_profile(_vmess("main"))
+    sv = store.add_server(Server(name="local", port=1081, protocol="mixed", listen="127.0.0.1"))
+    target = resolve_target(store, a, default_engine="sing-box")
+    routing = RoutingConfig(
+        mode="split",
+        rules=[RoutingRule(action="proxy", target_id=sv.id, match={"domains": ["x.com"]})],
+    )
+    enriched = enrich_target_with_routing(target, routing, store)
+    extra = {p.id: p for p in enriched.extra_profiles}
+    assert sv.id in extra
+    assert extra[sv.id].kind == "socks"
+    assert extra[sv.id].outbound["settings"]["servers"][0]["port"] == sv.port
+
+    # The generated engine config emits the server outbound and routes to it.
+    cfg = _generate_with_extras(store, a, routing)
+    outbounds = {o.get("tag"): o for o in cfg["outbounds"]}
+    assert sv.id in outbounds
+    rule = cfg["route"]["rules"][0]
+    assert rule["outbound"] == sv.id
+
+
 def test_enrich_target_ignores_non_split_routing(tmp_path):
     store = _store(tmp_path)
     a = store.add_profile(_vmess("a"))
