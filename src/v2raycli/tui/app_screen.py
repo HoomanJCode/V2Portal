@@ -1,14 +1,26 @@
-"""Main TUI loop: dispatch to connect/manage/test/routing/settings."""
+"""Main TUI loop: dispatch to connect/servers/groups/manage/test/routing/settings."""
 
 from __future__ import annotations
 
+from .. import __version__
 from ..connection import ConnectionController
 from . import widgets
 from .connection_screen import run as run_connection
+from .groups_screen import run as run_groups
 from .manage import run as run_manage
 from .routing_screen import run as run_routing
+from .servers_screen import run as run_servers
 from .settings_screen import run as run_settings
 from .test_screen import run as run_test
+
+
+def _summary_text(store) -> str:
+    conf = store.config
+    return (
+        f"v{__version__} · {len(conf.profiles)} profiles · "
+        f"{len(conf.subscriptions)} subscriptions · {len(conf.groups)} groups · "
+        f"{len(conf.servers)} servers · routing {conf.routing.mode}"
+    )
 
 
 def run(store) -> int:
@@ -20,18 +32,25 @@ def run(store) -> int:
                 "v2raycli",
                 [
                     ("connect", "Connect (select config)"),
+                    ("servers", "Servers (dashboard)"),
+                    ("groups", "Groups (tree)"),
                     ("manage", "Manage (add / update / remove)"),
                     ("test", "Test outbounds"),
                     ("routing", "Routing rules"),
                     ("settings", "Settings"),
                     ("quit", "Quit"),
                 ],
+                text=_summary_text(store),
             )
             if action is None or action == "quit":
                 return 0
             try:
                 if action == "connect":
                     _connect(store, controller)
+                elif action == "servers":
+                    run_servers(store)
+                elif action == "groups":
+                    run_groups(store)
                 elif action == "manage":
                     run_manage(store, controller)
                 elif action == "test":

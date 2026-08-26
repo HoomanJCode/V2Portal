@@ -66,7 +66,7 @@ def test_main_screen_disconnects_on_interrupt(tmp_path, monkeypatch):
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
     monkeypatch.setattr(app_screen, "run_manage", lambda _store, _controller=None: None)
     monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: None)
-    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt))
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args, **kwargs: (_ for _ in ()).throw(KeyboardInterrupt))
 
     assert app_screen.run(store) == 0
     assert controllers[0].disconnected is True
@@ -87,7 +87,7 @@ def test_fresh_tui_guides_user_to_manage(tmp_path, monkeypatch):
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
     monkeypatch.setattr(app_screen, "run_manage", lambda _store, _controller=None: events.append("manage"))
     monkeypatch.setattr(app_screen.widgets, "show_message", lambda *args: events.append("welcome"))
-    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: "quit")
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args, **kwargs: "quit")
 
     assert app_screen.run(store) == 0
     assert events == ["welcome", "manage", "disconnect"]
@@ -111,7 +111,7 @@ def test_tui_action_error_returns_to_main_menu(tmp_path, monkeypatch):
 
     monkeypatch.setattr(app_screen, "ConnectionController", FakeController)
     monkeypatch.setattr(app_screen, "run_manage", fail_manage)
-    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args: next(actions))
+    monkeypatch.setattr(app_screen.widgets, "menu", lambda *args, **kwargs: next(actions))
     monkeypatch.setattr(
         app_screen.widgets,
         "show_message",
