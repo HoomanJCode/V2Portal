@@ -158,6 +158,9 @@ v2raycli group add chain chained PROFILE_A PROFILE_B
 v2raycli group add single one SERVER_ID
 v2raycli group edit GROUP_ID --strategy random
 
+# Render the nested group/subscription/server hierarchy
+v2raycli group tree
+
 # Add a running server as a local socks/http profile
 v2raycli profile add server via-server SERVER_ID
 
@@ -259,6 +262,9 @@ You can add proxies via CLI:
   inbound ("localhost calling") — traffic physically passes through it.
   Members are resolved recursively at use time, deduplicated, and cycles
   (group→group and server→group→server) are rejected.
+- `v2raycli group tree` renders the whole hierarchy — top-level groups with
+  their members (profiles, subscriptions and their current nodes, servers,
+  nested groups) plus any subscription/server/profile no group references.
 - VPN profiles cannot join balancers/chains.
 
 A **subscription used as a target** (server outbound, connect, routing rule,
