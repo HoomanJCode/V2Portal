@@ -312,15 +312,87 @@ def subscription_target(
     )
 
 
+def validate_server_chain(
+    store, start_id: str, from_server_id: str | None = None
+) -> None:
+    """Raise ValueError if a server outbound reference loops.
+
+    Walks server → server outbound edges (``outbound_type == "server"``)
+    starting at *start_id*. Revisiting any server — including
+    *from_server_id*, the server whose outbound is being configured — is a
+    cycle. Also rejects forwarding a server to itself.
+    """
+    if not isinstance(start_id, str) or not start_id:
+        raise ValueError("server reference must be a non-empty string")
+    chain: list[str] = [from_server_id] if from_server_id else []
+    seen: set[str] = set(chain)
+    cur = start_id
+    while True:
+        if cur in seen:
+            chain.append(cur)
+            if len(chain) == 2 and chain[0] == chain[1]:
+                raise ValueError(f"server {cur} cannot forward to itself")
+            raise ValueError(f"circular server reference: {' -> '.join(chain)}")
+        seen.add(cur)
+        chain.append(cur)
+        server = store.get_server(cur)
+        if server is None:
+            raise ValueError(f"unknown server id: {cur}")
+        if server.outbound_type != "server":
+            return
+        cur = server.outbound_id
+
+
+def server_outbound_target(
+    store, server_id: str, default_engine: str = SINGBOX,
+    from_server_id: str | None = None,
+) -> Target:
+    """Build a single-hop Target that forwards to another server's inbound.
+
+    The target is a socks/http outbound pointing at the referenced server's
+    listen address and port, so traffic physically passes through that server.
+    The referenced server's own outbound chain is validated for loops.
+    """
+    validate_server_chain(store, server_id, from_server_id=from_server_id)
+    server = store.get_server(server_id)
+    assert server is not None  # validate_server_chain raises for unknown ids
+    kind = "http" if server.protocol == "http" else "socks"  # mixed → socks
+    entry: dict = {"address": server.listen, "port": server.port}
+    auth = server.auth or {}
+    if auth.get("enabled") and auth.get("username") and auth.get("password"):
+        entry["users"] = [{"user": auth["username"], "pass": auth["password"]}]
+    profile = Profile(
+        id=server.id,
+        name=server.name or server.id,
+        kind=kind,
+        engine=AUTO,
+        outbound={"settings": {"servers": [entry]}},
+    )
+    return Target(
+        type="single",
+        name=server.name or server.id,
+        engine=default_engine,
+        profile_ids=[server.id],
+        profiles=[profile],
+    )
+
+
 def resolve_outbound(store, outbound_type: str, outbound_id: str,
-                     default_engine: str = SINGBOX) -> Target:
+                     default_engine: str = SINGBOX,
+                     from_server_id: str | None = None) -> Target:
     """Resolve a server's outbound reference into a Target.
 
-    ``outbound_type`` ∈ {profile, subscription, group, direct}. Direct
-    returns an empty target (engine = default).
+    ``outbound_type`` ∈ {profile, subscription, group, server, direct}.
+    Direct returns an empty target (engine = default); server returns a
+    socks/http hop to that server's inbound (loop-checked via
+    *from_server_id*, the server being configured).
     """
     if outbound_type == "direct":
         return Target(type="single", engine=default_engine, profiles=[])
+    if outbound_type == "server":
+        return server_outbound_target(
+            store, outbound_id, default_engine, from_server_id=from_server_id
+        )
     if outbound_type == "profile":
         profile = store.get_profile(outbound_id)
         if profile is None:
