@@ -11,14 +11,14 @@
    argument auto-detects its type; no `--profile` vs `--group` vs
    `--subscription` flags anywhere.
 2. **Dynamic graph, resolved at use time.** Any entity that *contains*
-   outbounds (server, group, routing rule, connect target, service) accepts
-   **profile | subscription | group** as input. At connect/start/test the
+   outbounds (server, group, routing rule) accepts
+   **profile | subscription | group | server** as input. At start/test the
    graph is resolved recursively to concrete profiles. Subscriptions refresh
    → new profiles automatically flow through. Resolution dedups profiles.
 3. **Subscription as outbound target** = strategy-based balancer over its
    current profiles (strategy configurable, default `latency`).
 4. **Nested groups allowed** — groups can hold profiles + subscriptions +
-   groups; resolved recursively, cycles rejected.
+   groups + servers; resolved recursively, cycles rejected.
 5. **Uniform command shape**: every resource (`profile`, `subscription`,
    `group`, `server`, `routing`) exposes the same action set — `list`,
    `add`, `edit`, `remove`, plus resource-specific actions. `add` replaces
@@ -35,5 +35,5 @@
 | 02 | `todos/02-cmd-shape.md` | ✅ CLI rework: `group create`→`group add`, unified `edit`, `subscription edit`, aliases, per-resource help, removed legacy |
 | 03 | `todos/03-servers.md` | ✅ Server outbound = universal ref (profile/sub/group), auto-detect ID in add/edit/temp, running-engine reconfig |
 | 04 | `todos/04-references.md` | ✅ Referential integrity: `profile remove`, `subscription remove`, `group remove`, `server remove`, `routing` targets — refs kept/resolved/rejected consistently |
-| 05 | `todos/05-connect-tui-service.md` | ✅ `connector` unification for CLI/TUI/service; subscription targets in TUI connect; per-ref tests |
+| 05 | `todos/05-connect-tui-service.md` | ✅ one resolver shared by CLI/TUI/service; per-ref tests. (The ad-hoc `connect` it introduced was later removed — connections are persistent servers.) |
 | 06 | `todos/06-tests-docs.md` | ✅ Test sweep (exhaustive graph CLI flows), docs + README updates, final verification |

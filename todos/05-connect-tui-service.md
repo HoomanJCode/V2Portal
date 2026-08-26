@@ -1,5 +1,11 @@
 # Phase 05 — Connect, TUI & service on the universal model ✅
 
+> **Superseded (historical):** the ad-hoc `connect` command and the thin
+> `connector` module this phase planned were later removed — proxy connections
+> are now persistent **servers** (`src/v2raycli/connection.py` +
+> `src/v2raycli/servers.py` + `service.py`), and `resolve_ref_entity` lives in
+> `src/v2raycli/outbounds/groups.py`. Kept as a record of what Phase 05 delivered.
+
 **Goal:** one `connector` code path is used by CLI connect, the TUI connect
 screen, and the boot service; all accept any reference
 (profile | subscription | group).
