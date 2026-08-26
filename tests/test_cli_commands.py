@@ -326,6 +326,42 @@ def test_subscription_update_proxy_unknown_id_fails(tmp_path, capsys):
     assert "proxy must be a URL" in capsys.readouterr().err
 
 
+# -- group tree ------------------------------------------------------------
+
+
+def test_group_tree_command_renders_hierarchy(tmp_path, capsys):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="p1", kind="vmess", outbound=SOCKS))
+    p2 = store.add_profile(Profile(name="p2", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[p2.id]))
+    sv = store.add_server(Server(name="local", port=1081))
+    inner = store.add_group(Group(name="inner", type="single", profile_ids=[p2.id]))
+    outer = store.add_group(Group(
+        name="fast", type="balancer", strategy="latency",
+        profile_ids=[p1.id], subscription_ids=[sub.id],
+        server_ids=[sv.id], group_ids=[inner.id],
+    ))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "tree"])
+    assert app._group_command(store, args) == 0
+    out = capsys.readouterr().out
+    assert f"{outer.id}  balancer fast (latency)" in out
+    assert f"{inner.id}  single inner" in out
+    assert f"{sub.id}  subscription sub (1 profiles)" in out
+    assert f"{sv.id}  server local :1081" in out
+
+
+def test_group_tree_command_empty(tmp_path, capsys):
+    store = _store(tmp_path)
+    store.save()
+    args = app.build_parser().parse_args(["group", "tree"])
+    assert app._group_command(store, args) == 0
+    assert "no groups" in capsys.readouterr().out
+
+
 def test_group_edit(tmp_path, capsys):
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))

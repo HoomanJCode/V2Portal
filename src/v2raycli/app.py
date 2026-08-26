@@ -763,6 +763,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     group_remove_sub.add_argument("id", help="group ID to modify")
     group_remove_sub.add_argument("subscription_ids", nargs="+", help="subscription ID(s) to remove")
 
+    group_tree = group_commands.add_parser(
+        "tree",
+        help="show the nested group / subscription / server hierarchy",
+        description=(
+            "Render the group hierarchy as a tree. Top-level groups are\n"
+            "expanded into their members (profiles, subscriptions with their\n"
+            "current nodes, servers, nested groups), then any subscription,\n"
+            "server, or profile not referenced by a group is shown as a root\n"
+            "so nothing is hidden.\n\n"
+            "Example:\n"
+            "  v2raycli group tree"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
     # -- test -----------------------------------------------------------------
     test = commands.add_parser(
         "test",
@@ -1945,6 +1960,16 @@ def _group_command(store: ConfigStore, args) -> int:
         store.add_group(group)
         store.save()
         print(group.id)
+        return 0
+    if action == "tree":
+        from .outbounds.groups import group_tree_lines
+
+        lines = group_tree_lines(store)
+        if not lines:
+            print("no groups")
+            return 0
+        for line in lines:
+            print(line)
         return 0
     if action == "remove":
         summary = store.remove_group(args.id)

@@ -16,7 +16,7 @@ from v2raycli import app
 RESOURCES = {
     "profile": {"list", "add", "edit", "remove"},
     "subscription": {"list", "add", "edit", "remove", "update", "rename"},
-    "group": {"list", "add", "edit", "remove", "add-member", "remove-member"},
+    "group": {"list", "add", "edit", "remove", "add-member", "remove-member", "tree"},
     "server": {"list", "add", "edit", "remove", "start", "stop", "restart"},
     "routing": {"list", "add", "remove", "mode", "enable", "disable", "move"},
 }
