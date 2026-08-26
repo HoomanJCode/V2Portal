@@ -1,8 +1,8 @@
 # V2Ray Interactive CLI Client — Architecture & Plan
 
-> **Status:** Planning only. No code has been written yet. The files under `todos/`
-> are the build backlog. An implementing agent should read this document first,
-> then execute the phases in `todos/` in order.
+> **Status:** Implemented. The `todos/` phases (01–06) are complete and the
+> behavior described here is live; this document is the architecture record.
+> The user-facing command tree and examples live in `README.md`.
 
 ## 1. What this is
 
@@ -14,9 +14,11 @@ A fully-interactive command-line client that wraps two proxy engines
    share links or raw configs, add plain SOCKS5 / HTTP / WireGuard / hysteria2 /
    tuic outbounds, and add OpenVPN / Cisco AnyConnect VPN profiles. Everything
    persists to a local config file.
-2. **Connect** — pick a proxy (single node, subscription node, balancer, or
-   chain), then run a local **mixed inbound** (SOCKS5 + HTTP on one port) bound
-   to the LAN so any device on the network can use it.
+2. **Serve** — persistent **servers**, each a separate engine process with its
+   own local **mixed inbound** (SOCKS5 + HTTP on one port) bound to the LAN so
+   any device on the network can use it. There is no ad-hoc `connect`: a
+   server's outbound is a universal ref (profile | subscription | group |
+   server | direct) resolved at start time.
 3. **Route** — route all traffic through the selection, or use user-defined
    split-routing rules (direct / bypass / block by domain, IP, or geo).
 4. **Test** — measure latency / reachability of all outbounds, or only the
@@ -29,9 +31,9 @@ A fully-interactive command-line client that wraps two proxy engines
 | Decision | Choice |
 |---|---|
 | **Universal ID space** | Profiles, subscriptions, groups, servers share **one counter** — an ID alone is unambiguous. Every target reference is auto-detected (no `--profile` / `--group` / `--subscription` selector flags). |
-| **Dynamic graph, resolved at use time** | Any entity that contains outbounds (server, group, routing rule, service) accepts **profile | subscription | group**. Resolved recursively to concrete profiles at start/test; subscriptions refresh → new profiles flow automatically; deduped. |
+| **Dynamic graph, resolved at use time** | Any entity that contains outbounds (server, group, routing rule) accepts **profile | subscription | group | server**. Resolved recursively to concrete profiles at start/test; subscriptions refresh → new profiles flow automatically; deduped. |
 | **Subscription as outbound target** | Resolves as a strategy-based balancer over its current profiles (strategy configurable, default `latency`). |
-| **Nested groups** | Groups can hold profiles + subscriptions + other groups; cycles rejected, members deduped. |
+| **Nested groups** | Groups can hold profiles + subscriptions + other groups + servers; cycles rejected, members deduped. A server member resolves to a socks/http profile through its local inbound. |
 | Uniform CLI | Every resource uses `list` / `add` / `edit` / `remove` + resource-specific actions (`group add` unifies `group create`; `subscription edit`/`rename`; `server edit --outbound REF`; `group tree`). Ad-hoc `connect` was dropped — connections are persistent servers. |
 | Language | **Python 3.10+** (Linux, Windows, Termux; fastest to iterate) |
 | Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
@@ -88,15 +90,16 @@ A fully-interactive command-line client that wraps two proxy engines
 ```
 ┌───────────────────────────── v2ray-cli (Python) ────────────────────────────┐
 │  TUI (prompt_toolkit + rich)                                                │
-│    ├─ select config (subscription nodes + manual proxies + groups + VPNs)  │
-│    ├─ manage (add/update subscriptions, outbounds, groups, VPNs, rules)    │
-│    ├─ live connection screen (status, inbound addr, auth, up/down)         │
-│    └─ test screen (latency table)                                          │
+│    ├─ connect/status screen (pick any ref, live inbound + auth)            │
+│    ├─ servers dashboard (status table, start/stop, start-all/stop-all)     │
+│    ├─ groups tree (nested hierarchy) + subscription health table           │
+│    └─ test / routing / settings screens                                    │
 │                                                                             │
 │  Core                                                                        │
 │    ├─ storage      : load/save config.json                                  │
 │    ├─ subs         : fetch + parse subscriptions, decode share links        │
 │    ├─ outbounds    : manual/vpn profiles, groups (balancer/chain)           │
+│    ├─ servers      : server lifecycle (start/stop/restart, ref resolution) │
 │    ├─ routing      : split-routing rule model + normalization               │
 │    ├─ engines      : base adapter + singbox.py + xray.py + binary.py        │
 │    ├─ runner       : spawn/kill engine cores + vpn clients, logs, stats     │
@@ -109,59 +112,66 @@ A fully-interactive command-line client that wraps two proxy engines
    mixed inbound :1080      socks :1080 + HTTP :1081  (VPN profile, no inbound)
 ```
 
-### Directory layout (to be created in Phase 01)
+### Directory layout
 
 ```
 v2ray-cli/
 ├── pyproject.toml
 ├── README.md
 ├── PLAN.md
-├── todos/
+├── AGENTS.md
+├── todos/                       # phase docs + index (all phases complete)
+├── scripts/                     # verify_acceptance / verify_engines / verify_platform
 ├── src/v2raycli/
 │   ├── __init__.py
 │   ├── __main__.py
-│   ├── app.py
-│   ├── config.py                  # settings + platform paths
-│   ├── models.py                  # dataclasses + enums
-│   ├── storage.py
+│   ├── app.py                   # CLI parser + command handlers
+│   ├── config.py                # settings + platform paths
+│   ├── models.py                # dataclasses + enums (single source of config shape)
+│   ├── storage.py               # load/save/migrate config.json
+│   ├── connection.py            # ConnectionController: engine process lifecycle
+│   ├── servers.py               # server model + resolution helpers
+│   ├── service.py               # boot service (systemd/termux) → server start --all
+│   ├── traffic.py               # sing-box Clash API traffic polling
+│   ├── backup.py                # rolling backups + restore
+│   ├── exchange.py              # full-config and share-link export/import
+│   ├── diagnostics.py           # read-only platform diagnostics
+│   ├── geo.py                   # geo asset management
+│   ├── errors.py
 │   ├── subs/
 │   │   ├── __init__.py
-│   │   ├── fetcher.py
-│   │   ├── parser.py
-│   │   └── share.py               # link <-> outbound for all protocols
+│   │   ├── fetcher.py           # fetch + retries + proxy resolution
+│   │   ├── parser.py            # subscription import/update + userinfo
+│   │   ├── health.py            # expiry/traffic status table
+│   │   └── share.py             # link <-> outbound for all protocols
 │   ├── outbounds/
 │   │   ├── __init__.py
 │   │   ├── manual.py
-│   │   ├── groups.py
-│   │   └── vpn.py                 # openvpn(.ovpn) + openconnect profiles
+│   │   ├── groups.py            # group model, resolution, tree renderer
+│   │   └── vpn.py               # openvpn(.ovpn) + openconnect profiles
 │   ├── routing/
 │   │   └── rules.py
 │   ├── engines/
 │   │   ├── __init__.py
-│   │   ├── base.py                # EngineAdapter ABC
+│   │   ├── base.py              # EngineAdapter ABC
 │   │   ├── singbox.py
 │   │   ├── xray.py
-│   │   └── binary.py              # locate/download both cores
-│   ├── runner.py                  # subprocess lifecycle (cores + vpn)
-│   ├── backup.py                  # rolling backups + restore
-│   ├── exchange.py                # full-config and share-link export/import
+│   │   └── binary.py            # locate/download both cores
+│   ├── runner.py                # subprocess lifecycle (cores + vpn)
 │   ├── test/
 │   │   └── latency.py
 │   └── tui/
 │       ├── __init__.py
-│       ├── app_screen.py
-│       ├── select_profile.py
-│       ├── manage.py
-│       ├── connection_screen.py
+│       ├── app_screen.py        # main menu + config summary header
+│       ├── connection_screen.py # connect/status panel
+│       ├── servers_screen.py    # servers dashboard
+│       ├── groups_screen.py     # group tree + creation
+│       ├── manage.py            # subscriptions/profiles management
+│       ├── routing_screen.py
+│       ├── settings_screen.py
 │       ├── test_screen.py
-│       └── widgets.py
-└── tests/                         # pytest
-    ├── test_share.py
-    ├── test_parser.py
-    ├── test_config_gen.py
-    ├── test_storage.py
-    ├── test_groups.py
-    └── test_routing.py
+│       └── widgets.py           # unified rich-styled widgets
+└── tests/                       # pytest suite (one file per module / feature)
 ```
 
 ## 5. Data model (`config.json`)
@@ -175,13 +185,18 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
   "settings": {
     "listen": "0.0.0.0",
     "mixed_port": 1080,
+    "socks_port": 0,                       // 0 = disabled; dedicated SOCKS-only inbound
+    "http_port": 0,                        // 0 = disabled; dedicated HTTP-only inbound
     "allow_lan": true,
     "inbound_auth": { "enabled": false, "username": "", "password": "" },
     "dns": ["1.1.1.1", "8.8.8.8"],
     "log_level": "info",
     "test_url": "http://cp.cloudflare.com/generate_204",
     "default_engine": "sing-box",
-    "backup_keep": 10
+    "backup_keep": 10,
+    "traffic_api": false,                  // sing-box Clash API traffic stats
+    "traffic_api_port": 9090,
+    "subscription_proxy": ""              // URL or server id used by auto-update
   },
   "routing": {
     "mode": "all",                       // "all" | "split"
@@ -242,7 +257,7 @@ Stored at `<platform config dir>/v2ray-cli/config.json`
 }
 ```
 
-### Group (what the user connects to)
+### Group (an outbound target)
 
 ```jsonc
 {
@@ -335,20 +350,23 @@ server (CLI `server start`, the TUI Servers dashboard, or the boot service):
 - VPN profiles (openvpn/openconnect) are **not** latency-tested; they show a
   simple "connect test" (client launches and establishes, then disconnects) —
   optional, deferred.
-- Planned Phase 10 adds separate ICMP and TCP endpoint measurements, followed
-  by a real full-request delay through the proxy. ICMP-unavailable platforms
-  must report "unsupported" rather than a failed node.
-- Planned WebSocket checks start the resolved engine, verify the WS/WSS upgrade,
-  send a small ping/payload, and report handshake/payload failures per profile.
+- `test endpoint` measures separate ICMP and TCP reachability with DNS/refusal/
+  timeout classification; ICMP-unavailable platforms report "unsupported"
+  rather than a failed node.
+- `test websocket` starts the resolved engine, verifies the WS/WSS upgrade,
+  sends a small ping/payload, and reports handshake/payload failures per profile.
+- `test latency` measures real proxy request delay through the engine; test
+  scopes accept any ref (profile | subscription | group | server).
 
 ### Explicit engine updates
 
-- Planned Phase 10 adds user-requested updates for sing-box, xray, or both from
-  the CLI and TUI. Startup and connection must never update automatically.
+- `engine update` updates sing-box, xray, or both from the CLI. Updates are
+  never automatic.
 - Updates apply only to binaries managed by the `auto` path; custom binary paths
   require an explicit warning and must not be overwritten silently.
 - Downloads are staged, version-checked, atomically replaced, and rolled back if
   verification or replacement fails. Running engine processes block replacement.
+- `--proxy` (a URL or a local server id) fetches through a restricted network.
 
 ## 10. Cross-platform notes
 
@@ -378,5 +396,5 @@ server (CLI `server start`, the TUI Servers dashboard, or the boot service):
 
 ## 12. Phase order
 
-See `todos/README.md`. Phase 10 contains the planned advanced outbound tests
-and explicit engine-update workflow.
+See `todos/README.md`. All phases (01–06) are complete; the phase table there
+links each phase file to what it delivered.
