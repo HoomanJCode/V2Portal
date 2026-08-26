@@ -254,11 +254,38 @@ def _transfer(store) -> None:
 # -- subscriptions ---------------------------------------------------------
 
 
+def _render_subscriptions_table(store, subs) -> None:
+    """Rich table of subscriptions with profile counts and health status."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from ..subs.health import subscription_status
+
+    table = Table(title="Subscriptions", border_style="dim")
+    table.add_column("ID", style="dim")
+    table.add_column("Profiles", justify="right")
+    table.add_column("Status")
+    table.add_column("Name")
+    for sub in subs:
+        status = subscription_status(sub)
+        if status["expired"]:
+            label = "[bold red]EXPIRED[/bold red]"
+        elif status["expiring"]:
+            label = f"[yellow]expiring {status['days_left']}d[/yellow]"
+        elif sub.last_updated:
+            label = "[green]ok[/green]"
+        else:
+            label = "[dim]never updated[/dim]"
+        table.add_row(sub.id, str(len(sub.profile_ids)), label, sub.name)
+    Console().print(table)
+
+
 def _subscriptions(store) -> None:
     subs = store.list_subscriptions()
     if not subs:
         widgets.show_message("No subscriptions", "Add one via Manage -> Add.")
         return
+    _render_subscriptions_table(store, subs)
     action = widgets.menu(
         "Subscriptions",
         [
@@ -267,6 +294,7 @@ def _subscriptions(store) -> None:
             ("remove", "Remove"),
             ("back", "Back"),
         ],
+        text="Subscriptions update on demand; auto-update follows each sub's schedule.",
     )
     if action == "update":
         choice = widgets.menu("Pick", [(s.id, s.name) for s in subs])

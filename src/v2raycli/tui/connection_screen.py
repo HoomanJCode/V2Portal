@@ -61,12 +61,12 @@ def _read_traffic(controller) -> dict | None:
 
 def _render(status, traffic: dict | None = None) -> None:
     from rich.console import Console
+    from rich.panel import Panel
     from rich.table import Table
 
     from ..subs.health import human_bytes
 
-    console = Console()
-    table = Table(title="Connected", show_header=False)
+    table = Table(show_header=False, box=None, padding=(0, 1))
     table.add_column(style="bold")
     table.add_column()
     table.add_row("Target", status.target_name)
@@ -86,4 +86,4 @@ def _render(status, traffic: dict | None = None) -> None:
             table.add_row("Auth", f"{inbound['auth']['username']}/***")
         for lan in inbound.get("lan", []):
             table.add_row("LAN", lan)
-    console.print(table)
+    Console().print(Panel(table, title="Connected", border_style="green"))

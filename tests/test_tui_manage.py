@@ -63,6 +63,23 @@ def test_manage_creates_balancer_and_chain(tmp_path, monkeypatch):
     assert store.config.groups[1].profile_ids == [first.id, second.id]
 
 
+def test_subscriptions_table_renders_health(tmp_path, monkeypatch, capsys):
+    store = _store(tmp_path)
+    from v2raycli.models import Subscription
+
+    store.add_subscription(Subscription(name="fresh", url="paste://x", last_updated="2024-01-01T00:00:00+00:00"))
+    store.add_subscription(Subscription(name="stale", url="paste://x"))
+    store.save()
+
+    manage._render_subscriptions_table(store, store.list_subscriptions())
+
+    out = capsys.readouterr().out
+    assert "fresh" in out
+    assert "stale" in out
+    assert "never updated" in out
+    assert "Subscriptions" in out
+
+
 def test_manage_adds_openvpn_profile_from_ui(tmp_path, monkeypatch):
     store = _store(tmp_path)
     inputs = iter(["vpn", "", "client\n"])
