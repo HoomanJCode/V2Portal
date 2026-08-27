@@ -776,3 +776,65 @@ def test_bare_test_scope_defaults_to_endpoint():
     assert args.test_type == "foo"
     assert args.scope == "all"
     assert args.test_type not in ("latency", "request", "websocket", "ws")
+
+
+# -- config get / bare config / completion --------------------------------
+
+
+def test_config_bare_shows_help(tmp_path, capsys):
+    """'v2raycli config' with no subcommand prints help and returns 1."""
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["config"])
+    assert app._config_command(store, args) == 2
+
+
+def test_config_get_all(tmp_path, capsys):
+    """'v2raycli config get' prints all settings as JSON."""
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["config", "get"])
+    assert app._config_command(store, args) == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert "mixed_port" in data
+    assert "default_engine" in data
+
+
+def test_config_get_single_key(tmp_path, capsys):
+    """'v2raycli config get settings.mixed_port' prints one value."""
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["config", "get", "settings.mixed_port"])
+    assert app._config_command(store, args) == 0
+    out = capsys.readouterr().out.strip()
+    assert json.loads(out) == store.config.settings.mixed_port
+
+
+def test_config_get_unknown_key_rejected(tmp_path):
+    """'v2raycli config get settings.nonexistent' raises ValueError."""
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["config", "get", "settings.nonexistent"])
+    with pytest.raises(ValueError, match="unknown setting"):
+        app._config_command(store, args)
+
+
+def test_completion_no_shell_returns_error(capsys):
+    """'v2raycli completion' with no shell prints usage and returns 1."""
+    args = app.build_parser().parse_args(["completion"])
+    assert app._completion_command(args) == 1
+    out = capsys.readouterr().out
+    assert "bash|zsh" in out.lower() or "bash" in out.lower()
+
+
+def test_completion_bash_returns_script(capsys):
+    """'v2raycli completion bash' prints a completion script."""
+    args = app.build_parser().parse_args(["completion", "bash"])
+    assert app._completion_command(args) == 0
+    out = capsys.readouterr().out
+    assert "COMPREPLY" in out
+
+
+def test_completion_zsh_returns_script(capsys):
+    """'v2raycli completion zsh' prints a completion script."""
+    args = app.build_parser().parse_args(["completion", "zsh"])
+    assert app._completion_command(args) == 0
+    out = capsys.readouterr().out
+    assert "compdef" in out

@@ -83,7 +83,7 @@ def build_parser() -> _SubcommandParser:
     parser.add_argument(
         "--proxy",
         metavar="URL",
-        help="ephemeral HTTP/SOCKS proxy for engine updates (not stored)",
+        help=argparse.SUPPRESS,  # moved to 'engine update --proxy'
     )
     _add_command_parser(parser)
     return parser
@@ -519,7 +519,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     # -- group ----------------------------------------------------------------
     group = commands.add_parser(
         "group", aliases=["groups"],
-        help="manage profile groups (balancers, chains, singles)",
+        help="manage profile groups (balancers, chains)",
         description=(
         "A group lets you connect to multiple profiles at once.\n\n"
         "  balancer  — pick the fastest/random/round-robin from a set\n"
@@ -553,11 +553,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     group_add = group_commands.add_parser(
         "add",
         aliases=["create"],
-        help="create a group (pick single, balancer, or chain)",
+        help="create a group (balancer or chain)",
         description=(
         "Add a group. Use 'balancer' or 'chain' as the next argument.\n"
         "('create' is an accepted alias.)\n\n"
-        "A single profile cannot form a group on its own — pass 2+ profiles\n"
+        "A lone profile cannot form a group on its own — pass 2+ profiles\n"
         "or one subscription/nested group that expands to several.\n\n"
         "Examples:\n"
         "  v2raycli group add balancer fast ID_A SUB_GROUP/GROUP_ID --strategy latency\n"
@@ -819,26 +819,83 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     # -- config ----------------------------------------------------------------
     config_command = commands.add_parser(
         "config",
-        help="inspect or transfer the complete config",
+        help="view and change app settings",
         description=(
-            "Show, export, import, or change individual settings.\n\n"
+            "View or change app settings (listen address, ports, engine,\n"
+            "DNS, test URL, and more). Export/import the full config for\n"
+            "backup or transfer.\n\n"
             "Examples:\n"
-            "  v2raycli config show\n"
-            "  v2raycli config show --redact\n"
+            "  v2raycli config get\n"
+            "  v2raycli config get settings.test_url\n"
             "  v2raycli config set settings.mixed_port 1081\n"
             "  v2raycli config set settings.allow_lan true\n"
-            "  v2raycli config export /tmp/config.json\n"
-            "  v2raycli config import /tmp/config.json"
+            "  v2raycli config show --redact\n"
+            "  v2raycli config export /tmp/config.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     config_commands = config_command.add_subparsers(dest="config_command", metavar="ACTION")
 
+    config_get = config_commands.add_parser(
+        "get",
+        help="print app settings",
+        description=(
+            "Show app settings in a readable format. With no argument,\n"
+            "prints all settings. Pass a key to print one value.\n\n"
+            "Examples:\n"
+            "  v2raycli config get\n"
+            "  v2raycli config get settings.test_url"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_get.add_argument("key", nargs="?", default=None,
+                           help="optional dotted setting key (e.g. settings.test_url)")
+
+    config_set = config_commands.add_parser(
+        "set",
+        help="change a setting",
+        description=(
+            "Set a specific app setting. Boolean values use true/false.\n\n"
+            "Available keys:\n"
+            "  settings.listen              listen address (default: 0.0.0.0)\n"
+            "  settings.mixed_port          mixed SOCKS5+HTTP port (default: 1080)\n"
+            "  settings.socks_port          dedicated SOCKS-only port (0 = disabled)\n"
+            "  settings.http_port           dedicated HTTP-only port (0 = disabled)\n"
+            "  settings.allow_lan            allow LAN sharing (true/false)\n"
+            "  settings.dns                  comma-separated DNS servers\n"
+            "  settings.log_level            log level (debug/info/warn/error)\n"
+            "  settings.test_url             URL used for latency tests\n"
+            "  settings.default_engine       engine (sing-box or xray)\n"
+            "  settings.backup_keep          max config backups (integer)\n"
+            "  settings.traffic_api          enable live traffic API (true/false)\n"
+            "  settings.traffic_api_port     traffic API port (integer)\n"
+            "  settings.subscription_proxy   proxy for subscription fetches\n\n"
+            "Examples:\n"
+            "  v2raycli config set settings.mixed_port 1081\n"
+            "  v2raycli config set settings.allow_lan false\n"
+            "  v2raycli config set settings.test_url https://cp.cloudflare.com/generate_204\n"
+            "  v2raycli config set settings.default_engine xray\n"
+            "  v2raycli config set settings.dns 1.1.1.1,8.8.8.8,9.9.9.9\n"
+            "  v2raycli config set settings.log_level debug"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    config_set.add_argument("key",
+                           choices=("settings.listen", "settings.mixed_port",
+                                    "settings.socks_port", "settings.http_port",
+                                    "settings.allow_lan", "settings.dns",
+                                    "settings.log_level", "settings.test_url",
+                                    "settings.default_engine", "settings.backup_keep",
+                                    "settings.traffic_api", "settings.traffic_api_port",
+                                    "settings.subscription_proxy"),
+                           help="dotted setting key to change")
+    config_set.add_argument("value", help="new value (use true/false for booleans, numbers for ports)")
+
     config_show = config_commands.add_parser(
         "show",
-        help="print the complete config as formatted JSON",
+        help="print the full config as JSON",
         description=(
-            "Dumps the full config.json content. Use --redact to mask\n"
+            "Dump the full config.json content. Use --redact to mask\n"
             "credentials and keys (safe for sharing).\n\n"
             "Examples:\n"
             "  v2raycli config show\n"
@@ -851,7 +908,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     config_export = config_commands.add_parser(
         "export",
-        help="write the complete config to a file",
+        help="write the full config to a file",
         description=(
             "Export the full config to a JSON file. Use --redact to\n"
             "mask credentials.\n\n"
@@ -866,7 +923,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     config_import = config_commands.add_parser(
         "import",
-        help="import a complete config (merge by default, or replace)",
+        help="import a full config (merge or replace)",
         description=(
             "Import a previously exported config. By default new items\n"
             "are merged with the existing config. Use --replace to swap\n"
@@ -880,38 +937,6 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     config_import.add_argument("path", help="path to the exported config file")
     config_import.add_argument("--replace", action="store_true",
                              help="replace the entire config (not merge)")
-
-    config_set = config_commands.add_parser(
-        "set",
-        help="change a single setting",
-        description=(
-            "Set a specific config value. The key must be a dotted path\n"
-            "like 'settings.mixed_port'. Boolean values use true/false.\n\n"
-            "Available keys:\n"
-            "  settings.listen              listen address (default: 0.0.0.0)\n"
-            "  settings.mixed_port          mixed SOCKS5+HTTP port (default: 1080)\n"
-            "  settings.socks_port          dedicated SOCKS-only port (0 = disabled)\n"
-            "  settings.http_port           dedicated HTTP-only port (0 = disabled)\n"
-            "  settings.allow_lan            allow LAN sharing (true/false)\n"
-            "  settings.default_engine       default engine: sing-box or xray\n"
-            "  settings.test_url             URL used for latency tests\n"
-            "  settings.subscription_proxy   proxy for subscription fetches\n\n"
-            "Examples:\n"
-            "  v2raycli config set settings.mixed_port 1081\n"
-            "  v2raycli config set settings.socks_port 1081\n"
-            "  v2raycli config set settings.http_port 1082\n"
-            "  v2raycli config set settings.allow_lan false\n"
-            "  v2raycli config set settings.default_engine xray"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_set.add_argument("key",
-                           choices=("settings.listen", "settings.mixed_port",
-                                    "settings.socks_port", "settings.http_port",
-                                    "settings.allow_lan", "settings.default_engine",
-                                    "settings.test_url", "settings.subscription_proxy"),
-                           help="dotted setting key to change")
-    config_set.add_argument("value", help="new value (use true/false for booleans, numbers for ports)")
 
     # -- engine ----------------------------------------------------------------
     engine = commands.add_parser(
@@ -2022,7 +2047,33 @@ def _group_command(store: ConfigStore, args) -> int:
 def _config_command(store: ConfigStore, args) -> int:
     action = args.config_command
     if action is None:
-        action = "show"
+        return _command_help(args, "config")
+    if action == "get":
+        if args.key:
+            key = args.key.split(".", 1)[1] if "." in args.key else args.key
+            if not hasattr(store.config.settings, key):
+                raise ValueError(f"unknown setting: {args.key}")
+            value = getattr(store.config.settings, key)
+            print(json.dumps(value, ensure_ascii=False))
+        else:
+            s = store.config.settings
+            fields = {
+                "listen": s.listen,
+                "mixed_port": s.mixed_port,
+                "socks_port": s.socks_port,
+                "http_port": s.http_port,
+                "allow_lan": s.allow_lan,
+                "dns": s.dns,
+                "log_level": s.log_level,
+                "test_url": s.test_url,
+                "default_engine": s.default_engine,
+                "backup_keep": s.backup_keep,
+                "traffic_api": s.traffic_api,
+                "traffic_api_port": s.traffic_api_port,
+                "subscription_proxy": s.subscription_proxy,
+            }
+            print(json.dumps(fields, ensure_ascii=False, indent=2))
+        return 0
     if action == "show":
         from .exchange import export_full
 
@@ -2039,14 +2090,18 @@ def _config_command(store: ConfigStore, args) -> int:
         except json.JSONDecodeError:
             value = args.value
         key = args.key.split(".", 1)[1]
-        if key in ("mixed_port", "socks_port", "http_port") and (isinstance(value, bool) or not isinstance(value, int)):
+        if key in ("mixed_port", "socks_port", "http_port", "traffic_api_port", "backup_keep") and (isinstance(value, bool) or not isinstance(value, int)):
             raise ValueError(f"settings.{key} must be an integer")
         if key in ("mixed_port", "socks_port", "http_port") and isinstance(value, int) and not (0 <= value <= 65534):
             raise ValueError(f"settings.{key} must be between 0 and 65534 (0 = disabled; xray reserves mixed_port+1 for HTTP)")
-        if key == "allow_lan" and not isinstance(value, bool):
-            raise ValueError("settings.allow_lan must be boolean (use true or false)")
+        if key in ("traffic_api_port", "backup_keep") and isinstance(value, int) and value < 0:
+            raise ValueError(f"settings.{key} must be a non-negative integer")
+        if key in ("allow_lan", "traffic_api") and not isinstance(value, bool):
+            raise ValueError(f"settings.{key} must be boolean (use true or false)")
         if key == "default_engine" and value not in ("sing-box", "xray"):
             raise ValueError("settings.default_engine must be sing-box or xray")
+        if key == "log_level" and value not in ("debug", "info", "warn", "error"):
+            raise ValueError("settings.log_level must be debug, info, warn, or error")
         setattr(store.config.settings, key, value)
         store.save()
         print(f"{args.key}={json.dumps(value, ensure_ascii=False)}")
@@ -3072,6 +3127,15 @@ def _completion_command(args) -> int:
     """
     if args.complete_line:
         return _do_complete(args.complete_line[0])
+    if not args.shell:
+        print("Usage: v2raycli completion <bash|zsh>")
+        print("")
+        print("Generate shell completion scripts. Add the output to your")
+        print("shell profile (e.g. ~/.bashrc or ~/.zshrc):")
+        print("")
+        print("  source <(v2raycli completion bash)     # bash")
+        print("  source <(v2raycli completion zsh)      # zsh")
+        return 1
     if args.shell == "bash":
         print(BASH_COMPLETION)
     elif args.shell == "zsh":

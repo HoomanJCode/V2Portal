@@ -17,8 +17,8 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 - **Protocols** — vmess, vless, trojan, ss, ssr, socks, http, wireguard,
   hysteria2, tuic, plus raw JSON configs. OpenVPN / OpenConnect via the system
   clients.
-- **Groups** — `balancer` (latency / random / roundRobin / leastLoad), `chain`
-  (proxy through proxy), and `single`.
+- **Groups** — `balancer` (latency / random / roundRobin / leastLoad) and
+  `chain` (proxy through proxy).
 - **Split routing** — domain/keyword/regex rules, IP CIDR, and geoip/geosite.
   Rules can target any profile, subscription, group, or server, plus
   `direct` or `block`. Stale rules are auto-cleaned when a profile, group,
@@ -127,7 +127,7 @@ group         list | add | tree | edit | remove | add-member | remove-member  (a
 server        list | add | edit | start | stop | restart | remove  (alias: sv)
 routing       list | mode | add | move | enable | disable | remove
 backup        create | list | restore
-config        show | set | export | import
+config        get | set | show | export | import
 engine        update
 service       install | uninstall
 test          latency | endpoint | websocket
@@ -159,7 +159,6 @@ v2raycli profile list --subscription SUB_ID
 # Groups accept profiles, subscriptions, groups, and servers (auto-detected)
 v2raycli group add balancer fastest PROFILE_A SUB_ID GROUP_B SERVER_ID --strategy latency
 v2raycli group add chain chained PROFILE_A PROFILE_B
-v2raycli group add single one SERVER_ID
 v2raycli group edit GROUP_ID --strategy random
 
 # Render the nested group/subscription/server hierarchy
@@ -252,13 +251,12 @@ You can add proxies via CLI:
 
 ## Groups
 
-- **Single** — wrap one reference (profile, subscription, group, or server)
-  as a named group.
-- **Balancer** — pick 2+ references (profiles, subscriptions, groups, servers)
+- **Balancer** — pick references (profiles, subscriptions, groups, servers)
   and a strategy (`latency`, `random`, `roundRobin`, `leastLoad`).
   `leastLoad` forces xray-core. Everything resolves dynamically.
+  A lone profile is rejected — a single profile is not a group.
 - **Chain** — pick an ordered list; traffic flows through each in order.
-- Groups can **nest**: a balancer can contain other groups, and a server
+- Groups can **nest**: a balancer can contain other groups. A server
   member resolves to a socks/http profile pointing at that server's local
   inbound ("localhost calling") — traffic physically passes through it.
   Members are resolved recursively at use time, deduplicated, and cycles
