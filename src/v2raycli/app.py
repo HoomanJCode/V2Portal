@@ -761,56 +761,6 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="'all', 'routing', or an ID (profile/subscription/group/server), or comma-separated profile IDs (default: all)",
     )
 
-    # -- backup ----------------------------------------------------------------
-    backup_command = commands.add_parser(
-        "backup",
-        help="manage config backups (create, list, restore)",
-        description=(
-            "Automatic backups are created before destructive operations.\n"
-            "Use these commands to create, browse, or restore backups.\n\n"
-            "Examples:\n"
-            "  v2raycli backup create\n"
-            "  v2raycli backup list\n"
-            "  v2raycli backup restore /path/to/backup.json"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    backup_commands = backup_command.add_subparsers(dest="backup_command", metavar="ACTION")
-
-    backup_commands.add_parser(
-        "create",
-        help="snapshot the current config to a timestamped backup file",
-        description=(
-            "Create a manual backup of the current config.\n"
-            "Old backups beyond 'backup_keep' (default 10) are pruned.\n\n"
-            "Example:\n"
-            "  v2raycli backup create"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    backup_commands.add_parser(
-        "list",
-        help="list available backups (newest first)",
-        description=(
-            "List all backup files with timestamp, reason, and size.\n\n"
-            "Example:\n"
-            "  v2raycli backup list"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    restore = backup_commands.add_parser(
-        "restore",
-        help="replace the current config with a backup file",
-        description=(
-            "Restore the config from a backup file. The current config\n"
-            "is backed up first as a safety measure.\n\n"
-            "Example:\n"
-            "  v2raycli backup restore /path/to/backup.json"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    restore.add_argument("path", help="path to the backup file to restore")
-
     # -- settings --------------------------------------------------------------
     settings_cmd = commands.add_parser(
         "settings",
@@ -850,6 +800,55 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     _add_setting("traffic-api", "enable live traffic API (true/false)")
     _add_setting("traffic-api-port", "traffic API port")
     _add_setting("subscription-proxy", "proxy for subscription fetches")
+
+    # backup create/list/restore under settings
+    backup_sub = settings_sub.add_parser(
+        "backup",
+        help="manage config backups (create, list, restore)",
+        description=(
+            "Automatic backups are created before destructive operations.\n"
+            "Use these commands to create, browse, or restore backups.\n\n"
+            "Examples:\n"
+            "  v2raycli settings backup create\n"
+            "  v2raycli settings backup list\n"
+            "  v2raycli settings backup restore /path/to/backup.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    backup_action_sub = backup_sub.add_subparsers(dest="backup_action", metavar="ACTION")
+    backup_action_sub.add_parser(
+        "create",
+        help="snapshot the current config to a timestamped backup file",
+        description=(
+            "Create a manual backup of the current config.\n"
+            "Old backups beyond 'backup_keep' (default 10) are pruned.\n\n"
+            "Example:\n"
+            "  v2raycli settings backup create"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    backup_action_sub.add_parser(
+        "list",
+        help="list available backups (newest first)",
+        description=(
+            "List all backup files with timestamp, reason, and size.\n\n"
+            "Example:\n"
+            "  v2raycli settings backup list"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    restore = backup_action_sub.add_parser(
+        "restore",
+        help="replace the current config with a backup file",
+        description=(
+            "Restore the config from a backup file. The current config\n"
+            "is backed up first as a safety measure.\n\n"
+            "Example:\n"
+            "  v2raycli settings backup restore /path/to/backup.json"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    restore.add_argument("path", help="path to the backup file to restore")
 
     # service install/uninstall under settings
     service_sub = settings_sub.add_parser(
@@ -1329,14 +1328,6 @@ def _command(store: ConfigStore, args) -> int:
             if args.test_type not in ("endpoint", "probe"):
                 scope = args.test_type
             return _probe(store, scope)
-        if command == "backup":
-            if args.backup_command == "create":
-                return _backup(store)
-            if args.backup_command == "list":
-                return _list_backups()
-            if args.backup_command == "restore":
-                return _restore(store, args.path)
-            return _command_help(args, "backup")
         if command == "settings":
             return _settings_command(store, args)
         if command == "routing":
@@ -1967,6 +1958,16 @@ def _settings_command(store: ConfigStore, args) -> int:
             return _install_service(store, getattr(args, "config_dir", None))
         if service_action == "uninstall":
             return _uninstall_service()
+        return _command_help(args, "settings")
+    # Handle backup subcommand
+    if action == "backup":
+        backup_action = getattr(args, "backup_action", None)
+        if backup_action == "create":
+            return _backup(store)
+        if backup_action == "list":
+            return _list_backups()
+        if backup_action == "restore":
+            return _restore(store, args.path)
         return _command_help(args, "settings")
     # Handle engine update subcommand
     if action == "engine":
