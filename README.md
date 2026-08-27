@@ -1,9 +1,9 @@
 # v2raycli
 
-Interactive v2ray client for the terminal. It wraps two proxy engines —
-**sing-box** (default) and **xray-core** — behind a single config, and gives you
-a full-screen menu to add subscriptions/proxies, chain or balance them, and
-share a mixed SOCKS5+HTTP proxy over your LAN.
+Non-interactive CLI client for v2ray proxy management. It wraps two proxy
+engines — **sing-box** (default) and **xray-core** — behind a single config,
+and lets you add subscriptions/proxies, chain or balance them, test latency,
+and run inbound servers from the command line.
 
 Runs on **Linux**, **Windows**, and **Termux (Android)**.
 
@@ -172,10 +172,16 @@ v2raycli server add --port 1080 REF --name 'US proxy'
 v2raycli server edit SERVER_ID --outbound REF
 v2raycli server start SERVER_ID
 
-# Servers run in the background and survive terminal close.
+# Servers run in the background and survive terminal close
 v2raycli server list
 v2raycli sv stop SERVER_ID
 v2raycli sv restart --all
+
+# View and change settings
+v2raycli config get
+v2raycli config get settings.test_url
+v2raycli config set settings.mixed_port 1081
+v2raycli config set settings.default_engine xray
 
 # Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
@@ -230,7 +236,7 @@ logged and skipped — they never block startup. Disable per-run with
 ### Subscription health
 
 On startup the CLI warns (to stderr) about expired subscriptions and those
-expiring within 7 days. `v2raycli --health` prints a table of expiry status and
+expiring within 7 days. `v2raycli health` prints a table of expiry status and
 traffic used for every enabled subscription.
 
 

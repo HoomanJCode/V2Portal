@@ -1,4 +1,4 @@
-# V2Ray Interactive CLI Client — Architecture & Plan
+# V2Ray CLI Client — Architecture & Plan
 
 > **Status:** Implemented. The `todos/` phases (01–06) are complete and the
 > behavior described here is live; this document is the architecture record.
@@ -6,7 +6,7 @@
 
 ## 1. What this is
 
-A fully-interactive command-line client that wraps two proxy engines
+A non-interactive command-line client that wraps two proxy engines
 (**sing-box**, default, and **xray-core**, fallback) plus the system
 `openvpn`/`openconnect` clients to do five jobs:
 
@@ -39,7 +39,7 @@ A fully-interactive command-line client that wraps two proxy engines
 | Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
 | Protocol coverage | vmess, vless, trojan, ss, ssr, wireguard, hysteria2, tuic, socks, http |
 | OpenVPN / Cisco AnyConnect | Integrate via system `openvpn` / `openconnect` clients as a separate "VPN profile" type (not chainable/balanceable with proxy outbounds) |
-| Interactive UI | **prompt_toolkit** + **rich** |
+| Interactive UI | **prompt_toolkit** + **rich** (modules exist in `tui/` but are not wired into the CLI; CLI is non-interactive) |
 | Config storage | **JSON** via `platformdirs` |
 | HTTP client | **httpx** |
 | Routing | **Split routing** (rules by domain / IP / geo), defaulting to "route everything" |
@@ -325,7 +325,7 @@ server (CLI `server start`, the TUI Servers dashboard, or the boot service):
 4. For `openvpn`/`openconnect` profiles, instead launch the system client with
    the stored config; no inbound server is created (the VPN owns system routing
    — this is an explicit user choice, kept separate from proxy outbounds).
-6. TUI shows target, engine, inbound URL(s) + auth, and (stretch) live traffic.
+6. Print target, engine, inbound URL(s) + auth to stdout.
 
 ## 8. Backup, Export & Import
 
