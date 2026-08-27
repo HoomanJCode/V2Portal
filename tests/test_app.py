@@ -95,7 +95,7 @@ def test_test_defaults_to_endpoint():
 
 
 def test_update_parser_option():
-    args = app.build_parser().parse_args(["engine", "update", "both", "--proxy", "socks5://proxy.example:1080"])
+    args = app.build_parser().parse_args(["settings", "engine", "update", "both", "--proxy", "socks5://proxy.example:1080"])
 
     assert args.engine == "both"
     assert args.proxy == "socks5://proxy.example:1080"

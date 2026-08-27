@@ -195,7 +195,7 @@ def test_group_add_balancer_rejects_lone_profile(tmp_path, capsys):
     store.save()
     args = app.build_parser().parse_args(["group", "add", "balancer", "one", p.id])
     assert app._command(store, args) == 1
-    assert "only one profile" in capsys.readouterr().err
+    assert "single profile is not a group" in capsys.readouterr().err
 
 
 def test_group_add_accepts_single_subscription(tmp_path, capsys):
@@ -234,32 +234,6 @@ def test_group_add_balancer_detects_server_ref(tmp_path, capsys):
     g = store.get_group(capsys.readouterr().out.strip())
     assert g.profile_ids == [p.id]
     assert g.server_ids == [sv.id]
-
-
-def test_group_add_single_accepts_server_ref(tmp_path, capsys):
-    from v2raycli.models import Server
-
-    store = _store(tmp_path)
-    sv = store.add_server(Server(name="local", port=1081))
-    store.save()
-
-    args = app.build_parser().parse_args(["group", "add", "single", "one", sv.id])
-    assert app._group_command(store, args) == 0
-    g = store.get_group(capsys.readouterr().out.strip())
-    assert g.type == "single"
-    assert g.server_ids == [sv.id]
-
-
-def test_group_add_single_rejects_multi_profile_sub(tmp_path, capsys):
-    store = _store(tmp_path)
-    p1 = store.add_profile(Profile(name="p1", kind="socks", outbound=SOCKS))
-    p2 = store.add_profile(Profile(name="p2", kind="socks", outbound=SOCKS))
-    sub = store.add_subscription(Subscription(name="sub", profile_ids=[p1.id, p2.id]))
-    store.save()
-
-    args = app.build_parser().parse_args(["group", "add", "single", "one", sub.id])
-    assert app._command(store, args) == 1
-    assert "exactly 1 profile" in capsys.readouterr().err
 
 
 def test_group_add_member_detects_server_id(tmp_path, capsys):
@@ -640,74 +614,74 @@ def test_routing_enable_unknown_id(tmp_path, capsys):
     assert "unknown" in capsys.readouterr().err
 
 
-def test_config_set_port_validation(tmp_path, capsys):
-    """config set rejects port 65535 (xray HTTP overflow) but accepts 65534."""
+def test_settings_port_validation(tmp_path, capsys):
+    """settings mixed-port rejects port 65535 but accepts 65534."""
     store = _store(tmp_path)
 
     # 65534 should be accepted
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.mixed_port", "65534"]
+        ["settings", "mixed-port", "65534"]
     )
-    assert app._config_command(store, args) == 0
+    assert app._settings_command(store, args) == 0
     assert store.config.settings.mixed_port == 65534
 
-    # 65535 should be rejected (raises ValueError, caught by _command)
+    # 65535 should be rejected
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.mixed_port", "65535"]
+        ["settings", "mixed-port", "65535"]
     )
     with pytest.raises(ValueError, match="65534"):
-        app._config_command(store, args)
+        app._settings_command(store, args)
     assert store.config.settings.mixed_port == 65534  # unchanged
 
 
-def test_config_set_port_zero_accepted(tmp_path, capsys):
-    """config set accepts port 0 (disabled) for socks_port and http_port."""
+def test_settings_port_zero_accepted(tmp_path, capsys):
+    """settings accepts port 0 (disabled) for socks-port and http-port."""
     store = _store(tmp_path)
 
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.socks_port", "0"]
+        ["settings", "socks-port", "0"]
     )
-    assert app._config_command(store, args) == 0
+    assert app._settings_command(store, args) == 0
     assert store.config.settings.socks_port == 0
 
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.http_port", "0"]
+        ["settings", "http-port", "0"]
     )
-    assert app._config_command(store, args) == 0
+    assert app._settings_command(store, args) == 0
     assert store.config.settings.http_port == 0
 
 
-def test_config_set_port_negative_rejected(tmp_path, capsys):
-    """config set rejects negative port values."""
+def test_settings_port_negative_rejected(tmp_path, capsys):
+    """settings rejects negative port values."""
     store = _store(tmp_path)
 
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.mixed_port", "-1"]
+        ["settings", "mixed-port", "-1"]
     )
     with pytest.raises(ValueError, match="65534"):
-        app._config_command(store, args)
+        app._settings_command(store, args)
 
 
-def test_config_set_port_string_rejected(tmp_path, capsys):
-    """config set rejects non-integer port values."""
+def test_settings_port_string_rejected(tmp_path, capsys):
+    """settings rejects non-integer port values."""
     store = _store(tmp_path)
 
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.mixed_port", "abc"]
+        ["settings", "mixed-port", "abc"]
     )
     with pytest.raises(ValueError, match="integer"):
-        app._config_command(store, args)
+        app._settings_command(store, args)
 
 
-def test_config_set_port_bool_rejected(tmp_path, capsys):
-    """config set rejects boolean port values."""
+def test_settings_port_bool_rejected(tmp_path, capsys):
+    """settings rejects boolean port values."""
     store = _store(tmp_path)
 
     args = app.build_parser().parse_args(
-        ["config", "set", "settings.mixed_port", "true"]
+        ["settings", "mixed-port", "true"]
     )
     with pytest.raises(ValueError, match="integer"):
-        app._config_command(store, args)
+        app._settings_command(store, args)
 
 
 def test_routing_list_shows_disabled(tmp_path, capsys):
@@ -778,63 +752,43 @@ def test_bare_test_scope_defaults_to_endpoint():
     assert args.test_type not in ("latency", "request", "websocket", "ws")
 
 
-# -- config get / bare config / completion --------------------------------
+# -- settings / config ------------------------------------------------------
 
 
-def test_config_bare_shows_help(tmp_path, capsys):
-    """'v2raycli config' with no subcommand prints help and returns 1."""
+def test_settings_bare_shows_all(tmp_path, capsys):
+    """'v2raycli settings' with no subcommand prints all settings as JSON."""
     store = _store(tmp_path)
-    args = app.build_parser().parse_args(["config"])
-    assert app._config_command(store, args) == 2
-
-
-def test_config_get_all(tmp_path, capsys):
-    """'v2raycli config get' prints all settings as JSON."""
-    store = _store(tmp_path)
-    args = app.build_parser().parse_args(["config", "get"])
-    assert app._config_command(store, args) == 0
+    args = app.build_parser().parse_args(["settings"])
+    assert app._settings_command(store, args) == 0
     out = capsys.readouterr().out
     data = json.loads(out)
-    assert "mixed_port" in data
-    assert "default_engine" in data
+    assert "mixed-port" in data
+    assert "default-engine" in data
 
 
-def test_config_get_single_key(tmp_path, capsys):
-    """'v2raycli config get settings.mixed_port' prints one value."""
+def test_settings_get_single(tmp_path, capsys):
+    """'v2raycli settings mixed-port' prints current value."""
     store = _store(tmp_path)
-    args = app.build_parser().parse_args(["config", "get", "settings.mixed_port"])
-    assert app._config_command(store, args) == 0
+    args = app.build_parser().parse_args(["settings", "mixed-port"])
+    assert app._settings_command(store, args) == 0
     out = capsys.readouterr().out.strip()
     assert json.loads(out) == store.config.settings.mixed_port
 
 
-def test_config_get_unknown_key_rejected(tmp_path):
-    """'v2raycli config get settings.nonexistent' raises ValueError."""
+def test_settings_set_single(tmp_path, capsys):
+    """'v2raycli settings mixed-port 1081' sets the value."""
     store = _store(tmp_path)
-    args = app.build_parser().parse_args(["config", "get", "settings.nonexistent"])
-    with pytest.raises(ValueError, match="unknown setting"):
-        app._config_command(store, args)
+    args = app.build_parser().parse_args(["settings", "mixed-port", "1081"])
+    assert app._settings_command(store, args) == 0
+    assert store.config.settings.mixed_port == 1081
 
 
-def test_completion_no_shell_returns_error(capsys):
-    """'v2raycli completion' with no shell prints usage and returns 1."""
-    args = app.build_parser().parse_args(["completion"])
-    assert app._completion_command(args) == 1
+
+def test_config_show_and_export(tmp_path, capsys):
+    """'v2raycli config show' still works."""
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["config", "show"])
+    assert app._config_command(store, args) == 0
     out = capsys.readouterr().out
-    assert "bash|zsh" in out.lower() or "bash" in out.lower()
-
-
-def test_completion_bash_returns_script(capsys):
-    """'v2raycli completion bash' prints a completion script."""
-    args = app.build_parser().parse_args(["completion", "bash"])
-    assert app._completion_command(args) == 0
-    out = capsys.readouterr().out
-    assert "COMPREPLY" in out
-
-
-def test_completion_zsh_returns_script(capsys):
-    """'v2raycli completion zsh' prints a completion script."""
-    args = app.build_parser().parse_args(["completion", "zsh"])
-    assert app._completion_command(args) == 0
-    out = capsys.readouterr().out
-    assert "compdef" in out
+    data = json.loads(out)
+    assert "settings" in data

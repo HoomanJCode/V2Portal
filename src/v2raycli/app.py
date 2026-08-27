@@ -80,11 +80,6 @@ def build_parser() -> _SubcommandParser:
         action="store_true",
         help="skip auto-updating stale subscriptions on startup",
     )
-    parser.add_argument(
-        "--proxy",
-        metavar="URL",
-        help=argparse.SUPPRESS,  # moved to 'engine update --proxy'
-    )
     _add_command_parser(parser)
     return parser
 
@@ -816,80 +811,92 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     restore.add_argument("path", help="path to the backup file to restore")
 
-    # -- config ----------------------------------------------------------------
-    config_command = commands.add_parser(
-        "config",
+    # -- settings --------------------------------------------------------------
+    settings_cmd = commands.add_parser(
+        "settings",
         help="view and change app settings",
         description=(
-            "View or change app settings (listen address, ports, engine,\n"
-            "DNS, test URL, and more). Export/import the full config for\n"
-            "backup or transfer.\n\n"
+            "View or change app settings. Run without a subcommand to\n"
+            "show all settings. Each setting has its own subcommand.\n\n"
             "Examples:\n"
-            "  v2raycli config get\n"
-            "  v2raycli config get settings.test_url\n"
-            "  v2raycli config set settings.mixed_port 1081\n"
-            "  v2raycli config set settings.allow_lan true\n"
+            "  v2raycli settings\n"
+            "  v2raycli settings test-url\n"
+            "  v2raycli settings test-url https://cp.cloudflare.com/generate_204\n"
+            "  v2raycli settings mixed-port 1081\n"
+            "  v2raycli settings allow-lan false"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    settings_sub = settings_cmd.add_subparsers(dest="settings_command", metavar="SETTING")
+
+    def _add_setting(name, help_text, choices=None):
+        """Add a setting subcommand that shows/sets a single value."""
+        p = settings_sub.add_parser(name, help=help_text,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+        p.add_argument("value", nargs="?", choices=choices,
+                       help="new value (omit to show current)")
+        return p
+
+    _add_setting("listen", "listen address (default: 0.0.0.0)")
+    _add_setting("mixed-port", "mixed SOCKS5+HTTP port (default: 1080)")
+    _add_setting("socks-port", "dedicated SOCKS-only port (0 = disabled)")
+    _add_setting("http-port", "dedicated HTTP-only port (0 = disabled)")
+    _add_setting("allow-lan", "allow LAN sharing (true/false)")
+    _add_setting("dns", "comma-separated DNS servers")
+    _add_setting("log-level", "log level", choices=("debug", "info", "warn", "error"))
+    _add_setting("test-url", "URL used for latency tests")
+    _add_setting("default-engine", "default engine", choices=("sing-box", "xray"))
+    _add_setting("backup-keep", "max config backups")
+    _add_setting("traffic-api", "enable live traffic API (true/false)")
+    _add_setting("traffic-api-port", "traffic API port")
+    _add_setting("subscription-proxy", "proxy for subscription fetches")
+
+    # engine update subcommand under settings
+    engine_sub = settings_sub.add_parser(
+        "engine",
+        help="manage sing-box / xray engine binaries",
+        description=(
+            "Download or update the proxy engine binaries. Only binaries\n"
+            "with binary_path='auto' are replaceable; custom paths are\n"
+            "never overwritten.\n\n"
+            "Examples:\n"
+            "  v2raycli settings engine update sing-box\n"
+            "  v2raycli settings engine update both --proxy socks5://127.0.0.1:10808"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    engine_update_sub = engine_sub.add_subparsers(dest="engine_action", metavar="ACTION")
+    engine_update_parser = engine_update_sub.add_parser(
+        "update",
+        help="download and replace engine binaries",
+        description=(
+            "Explicitly update the sing-box, xray, or both engine\n"
+            "binaries. Downloads are verified and atomic.\n\n"
+            "Examples:\n"
+            "  v2raycli settings engine update sing-box\n"
+            "  v2raycli settings engine update both --proxy socks5://127.0.0.1:10808"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    engine_update_parser.add_argument("engine", choices=("sing-box", "xray", "both"),
+                                      help="which engine to update")
+    engine_update_parser.add_argument("--proxy",
+                                      help="proxy URL (socks5://host:port, http://host:port) or a local server ID (not stored)")
+
+    # -- config (legacy, kept for backup/import/export) ------------------------
+    config_command = commands.add_parser(
+        "config",
+        help="export/import the full config",
+        description=(
+            "Export or import the full config.json for backup or transfer.\n\n"
+            "Examples:\n"
             "  v2raycli config show --redact\n"
-            "  v2raycli config export /tmp/config.json"
+            "  v2raycli config export /tmp/config.json\n"
+            "  v2raycli config import /tmp/config.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     config_commands = config_command.add_subparsers(dest="config_command", metavar="ACTION")
-
-    config_get = config_commands.add_parser(
-        "get",
-        help="print app settings",
-        description=(
-            "Show app settings in a readable format. With no argument,\n"
-            "prints all settings. Pass a key to print one value.\n\n"
-            "Examples:\n"
-            "  v2raycli config get\n"
-            "  v2raycli config get settings.test_url"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_get.add_argument("key", nargs="?", default=None,
-                           help="optional dotted setting key (e.g. settings.test_url)")
-
-    config_set = config_commands.add_parser(
-        "set",
-        help="change a setting",
-        description=(
-            "Set a specific app setting. Boolean values use true/false.\n\n"
-            "Available keys:\n"
-            "  settings.listen              listen address (default: 0.0.0.0)\n"
-            "  settings.mixed_port          mixed SOCKS5+HTTP port (default: 1080)\n"
-            "  settings.socks_port          dedicated SOCKS-only port (0 = disabled)\n"
-            "  settings.http_port           dedicated HTTP-only port (0 = disabled)\n"
-            "  settings.allow_lan            allow LAN sharing (true/false)\n"
-            "  settings.dns                  comma-separated DNS servers\n"
-            "  settings.log_level            log level (debug/info/warn/error)\n"
-            "  settings.test_url             URL used for latency tests\n"
-            "  settings.default_engine       engine (sing-box or xray)\n"
-            "  settings.backup_keep          max config backups (integer)\n"
-            "  settings.traffic_api          enable live traffic API (true/false)\n"
-            "  settings.traffic_api_port     traffic API port (integer)\n"
-            "  settings.subscription_proxy   proxy for subscription fetches\n\n"
-            "Examples:\n"
-            "  v2raycli config set settings.mixed_port 1081\n"
-            "  v2raycli config set settings.allow_lan false\n"
-            "  v2raycli config set settings.test_url https://cp.cloudflare.com/generate_204\n"
-            "  v2raycli config set settings.default_engine xray\n"
-            "  v2raycli config set settings.dns 1.1.1.1,8.8.8.8,9.9.9.9\n"
-            "  v2raycli config set settings.log_level debug"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_set.add_argument("key",
-                           choices=("settings.listen", "settings.mixed_port",
-                                    "settings.socks_port", "settings.http_port",
-                                    "settings.allow_lan", "settings.dns",
-                                    "settings.log_level", "settings.test_url",
-                                    "settings.default_engine", "settings.backup_keep",
-                                    "settings.traffic_api", "settings.traffic_api_port",
-                                    "settings.subscription_proxy"),
-                           help="dotted setting key to change")
-    config_set.add_argument("value", help="new value (use true/false for booleans, numbers for ports)")
 
     config_show = config_commands.add_parser(
         "show",
@@ -937,63 +944,6 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     config_import.add_argument("path", help="path to the exported config file")
     config_import.add_argument("--replace", action="store_true",
                              help="replace the entire config (not merge)")
-
-    # -- engine ----------------------------------------------------------------
-    engine = commands.add_parser(
-        "engine",
-        help="manage sing-box / xray engine binaries",
-        description=(
-            "Download or update the proxy engine binaries. Only binaries\n"
-            "with binary_path='auto' are replaceable; custom paths are\n"
-            "never overwritten. Updates are staged, verified, and rolled\n"
-            "back if verification fails.\n\n"
-            "Examples:\n"
-            "  v2raycli engine update sing-box\n"
-            "  v2raycli engine update xray\n"
-            "  v2raycli engine update both\n"
-            "  v2raycli engine update both --proxy socks5://127.0.0.1:10808"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    engine_commands = engine.add_subparsers(dest="engine_command", metavar="ACTION")
-
-    engine_update = engine_commands.add_parser(
-        "update",
-        help="download and replace engine binaries",
-        description=(
-            "Explicitly update the sing-box, xray, or both engine\n"
-            "binaries. Downloads are verified and atomic.\n\n"
-            "Examples:\n"
-            "  v2raycli engine update sing-box\n"
-            "  v2raycli engine update both --proxy socks5://127.0.0.1:10808"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    engine_update.add_argument("engine", choices=("sing-box", "xray", "both"),
-                             help="which engine to update")
-    engine_update.add_argument("--proxy",
-                             help="proxy URL (socks5://host:port, http://host:port) or a local server ID (not stored)")
-
-    # -- completion -----------------------------------------------------------
-    completion_cmd = commands.add_parser(
-        "completion",
-        help="generate shell completion script",
-        description=(
-            "Print a shell completion script. Supports bash and zsh.\n\n"
-            "Examples:\n"
-            "  source <(v2raycli completion bash)     # bash\n"
-            "  source <(v2raycli completion zsh)      # zsh"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    completion_cmd.add_argument(
-        "shell", choices=("bash", "zsh"), nargs="?",
-        help="target shell for the completion script",
-    )
-    completion_cmd.add_argument(
-        "--complete", nargs=1, dest="complete_line",
-        help=argparse.SUPPRESS,
-    )
 
     # -- service ---------------------------------------------------------------
     service_command = commands.add_parser(
@@ -1449,14 +1399,10 @@ def _command(store: ConfigStore, args) -> int:
             if args.backup_command == "restore":
                 return _restore(store, args.path)
             return _command_help(args, "backup")
+        if command == "settings":
+            return _settings_command(store, args)
         if command == "config":
             return _config_command(store, args)
-        if command == "completion":
-            return _completion_command(args)
-        if command == "engine":
-            if args.engine_command != "update":
-                return _command_help(args, "engine")
-            return _update(store, args.engine, args.proxy)
         if command == "service":
             if args.service_command == "install":
                 return _install_service(store, getattr(args, "config_dir", None))
@@ -2042,6 +1988,84 @@ def _group_command(store: ConfigStore, args) -> int:
         print(f"removed {removed} subscription(s) from {args.id}")
         return 0
     return _command_help(args, "group")
+
+
+# Mapping from CLI setting name to attribute name on Settings
+_SETTINGS_MAP = {
+    "listen": "listen",
+    "mixed-port": "mixed_port",
+    "socks-port": "socks_port",
+    "http-port": "http_port",
+    "allow-lan": "allow_lan",
+    "dns": "dns",
+    "log-level": "log_level",
+    "test-url": "test_url",
+    "default-engine": "default_engine",
+    "backup-keep": "backup_keep",
+    "traffic-api": "traffic_api",
+    "traffic-api-port": "traffic_api_port",
+    "subscription-proxy": "subscription_proxy",
+}
+
+
+def _settings_command(store: ConfigStore, args) -> int:
+    action = args.settings_command
+    if action is None:
+        # Show all settings
+        s = store.config.settings
+        fields = {
+            "listen": s.listen,
+            "mixed-port": s.mixed_port,
+            "socks-port": s.socks_port,
+            "http-port": s.http_port,
+            "allow-lan": s.allow_lan,
+            "dns": s.dns,
+            "log-level": s.log_level,
+            "test-url": s.test_url,
+            "default-engine": s.default_engine,
+            "backup-keep": s.backup_keep,
+            "traffic-api": s.traffic_api,
+            "traffic-api-port": s.traffic_api_port,
+            "subscription-proxy": s.subscription_proxy,
+        }
+        print(json.dumps(fields, ensure_ascii=False, indent=2))
+        return 0
+    # Handle engine update subcommand
+    if action == "engine":
+        engine_action = getattr(args, "engine_action", None)
+        if engine_action != "update":
+            return _command_help(args, "settings")
+        return _update(store, args.engine, getattr(args, "proxy", None))
+    attr = _SETTINGS_MAP.get(action)
+    if attr is None:
+        return _command_help(args, "settings")
+    current = getattr(store.config.settings, attr)
+    if args.value is None:
+        # Show current value
+        print(json.dumps(current, ensure_ascii=False))
+        return 0
+    # Set new value
+    value = args.value
+    if attr in ("allow_lan", "traffic_api"):
+        if value.lower() in ("true", "1"):
+            value = True
+        elif value.lower() in ("false", "0"):
+            value = False
+        else:
+            raise ValueError(f"settings.{attr} must be true or false")
+    if attr in ("mixed_port", "socks_port", "http_port", "traffic_api_port", "backup_keep"):
+        try:
+            value = int(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"settings.{attr} must be an integer")
+        if attr in ("mixed_port", "socks_port", "http_port") and not (0 <= value <= 65534):
+            raise ValueError(f"settings.{attr} must be between 0 and 65534")
+        if attr in ("traffic_api_port", "backup_keep") and value < 0:
+            raise ValueError(f"settings.{attr} must be a non-negative integer")
+    setattr(store.config.settings, attr, value)
+    store.save()
+    print(f"{action}={json.dumps(value, ensure_ascii=False)}")
+    return 0
 
 
 def _config_command(store: ConfigStore, args) -> int:
@@ -3093,130 +3117,6 @@ def _summary(store: ConfigStore) -> int:
             f"groups: {len(conf.groups)}"
         )
     return 0
-
-
-BASH_COMPLETION = '''# v2raycli bash completion — add to ~/.bashrc or ~/.bash_completion
-_v2raycli_complete() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    local line="${COMP_LINE}"
-    local completions
-    completions=($(v2raycli completion --complete "$line"))
-    COMPREPLY=($(compgen -W "${completions[*]}" -- "$cur"))
-    return 0
-}
-complete -F _v2raycli_complete v2raycli
-'''
-
-ZSH_COMPLETION = '''#compdef v2raycli
-# v2raycli zsh completion — source from ~/.zshrc
-_v2raycli() {
-    local -a completions
-    local line="${words[*]}"
-    completions=(${(f)"$(v2raycli completion --complete "$line")"})
-    compadd -a completions
-}
-_v2raycli
-'''
-
-
-def _completion_command(args) -> int:
-    """Handle the completion command.
-
-    Without --complete, prints the shell script to stdout.
-    With --complete LINE, performs actual completion.
-    """
-    if args.complete_line:
-        return _do_complete(args.complete_line[0])
-    if not args.shell:
-        print("Usage: v2raycli completion <bash|zsh>")
-        print("")
-        print("Generate shell completion scripts. Add the output to your")
-        print("shell profile (e.g. ~/.bashrc or ~/.zshrc):")
-        print("")
-        print("  source <(v2raycli completion bash)     # bash")
-        print("  source <(v2raycli completion zsh)      # zsh")
-        return 1
-    if args.shell == "bash":
-        print(BASH_COMPLETION)
-    elif args.shell == "zsh":
-        print(ZSH_COMPLETION)
-    return 0
-
-
-def _do_complete(raw_line: str) -> int:
-    """Perform actual word completion.
-
-    The line is the raw COMP_WORDS[*] from bash (words joined by spaces).
-    We detect the prefix and completed words from it.
-    """
-    trailing_space = raw_line.endswith(" ")
-    # Split into words; if trailing space, last "word" would be empty, so split captures it.
-    parts = raw_line.strip().split() if trailing_space else raw_line.rstrip().split()
-    if not parts or parts[0] != "v2raycli":
-        return 0
-
-    words = parts[1:]  # all words after "v2raycli"
-    if trailing_space:
-        prefix = ""
-    else:
-        prefix = words[-1] if words else ""
-        words = words[:-1] if words else []
-
-    # Walk completed words to the deepest subparser.
-    parser = build_parser()
-    current = _walk_parser(parser, words)
-
-    # Collect completions at this level filtered by prefix.
-    completions = _collect_actions(current)
-
-    # If prefix exactly matches a subcommand, also show its children.
-    for c in sorted(set(completions)):
-        if c == prefix:
-            sub = _walk_parser(current, [prefix])
-            completions = list(set(completions + _collect_actions(sub)))
-            break
-
-    for c in sorted(set(completions)):
-        if c.startswith(prefix):
-            print(c)
-    return 0
-
-
-def _walk_parser(parser: argparse.ArgumentParser, words: list[str]) -> argparse.ArgumentParser:
-    """Walk completed words through the parser tree."""
-    current = parser
-    for word in words:
-        found = False
-        for action in current._actions:  # type: ignore[attr-defined]
-            if isinstance(action, argparse._SubParsersAction):
-                if word in action._name_parser_map:
-                    current = action._name_parser_map[word]
-                    found = True
-                    break
-        if not found:
-            break
-    return current
-
-
-def _collect_actions(parser: argparse.ArgumentParser) -> list[str]:
-    """Collect available subcommands and option strings from a parser."""
-    completions: list[str] = []
-    for action in parser._actions:  # type: ignore[attr-defined]
-        if isinstance(action, argparse._SubParsersAction):
-            completions.extend(action._name_parser_map.keys())
-        else:
-            for opt in (action.option_strings or []):
-                completions.append(opt)
-            if action.choices:
-                completions.extend(action.choices)
-    return completions
-
-
-def _print_completions(completions: list[str], prefix: str) -> None:
-    """Print completions that match the current partial word."""
-    for c in sorted(set(completions)):
-        if c.startswith(prefix):
-            print(c)
 
 
 if __name__ == "__main__":
