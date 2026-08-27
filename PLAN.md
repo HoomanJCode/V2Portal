@@ -360,7 +360,7 @@ server (CLI `server start`, the TUI Servers dashboard, or the boot service):
 
 ### Explicit engine updates
 
-- `engine update` updates sing-box, xray, or both from the CLI. Updates are
+- `settings engine update` updates sing-box, xray, or both from the CLI. Updates are
   never automatic.
 - Updates apply only to binaries managed by the `auto` path; custom binary paths
   require an explicit warning and must not be overwritten silently.

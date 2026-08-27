@@ -127,11 +127,10 @@ group         list | add | tree | edit | remove | add-member | remove-member  (a
 server        list | add | edit | start | stop | restart | remove  (alias: sv)
 routing       list | mode | add | move | enable | disable | remove
 backup        create | list | restore
-config        get | set | show | export | import
-engine        update
+settings      show/set app settings, engine update
+config        show | export | import (backup/restore)
 service       install | uninstall
 test          latency | endpoint | websocket
-completion    bash | zsh
 ```
 
 **One ID space, auto-detected references.** Every entity — profile,
@@ -178,10 +177,11 @@ v2raycli sv stop SERVER_ID
 v2raycli sv restart --all
 
 # View and change settings
-v2raycli config get
-v2raycli config get settings.test_url
-v2raycli config set settings.mixed_port 1081
-v2raycli config set settings.default_engine xray
+v2raycli settings
+v2raycli settings test-url
+v2raycli settings mixed-port 1081
+v2raycli settings default-engine xray
+v2raycli settings engine update both
 
 # Update all subscriptions, filter profiles by kind
 v2raycli subscription update --all
@@ -201,30 +201,15 @@ v2raycli server add --port 1081 GROUP_ID --protocol http --name 'Balancer'
 v2raycli server start --all
 ```
 
-### Tab completion
-
-```bash
-# bash — add to ~/.bashrc
-source <(v2raycli completion bash)
-
-# zsh — add to ~/.zshrc
-source <(v2raycli completion zsh)
-```
-
-The completion script covers all commands, subcommands, aliases (`sv`, `sub`,
-`groups`, `profiles`, `subscriptions`), and option flags.
-
 ### Engine updates
 
-Engine updates are never automatic. Use `v2raycli engine update sing-box`,
-`v2raycli engine update xray`, or `v2raycli engine update both`. Only binaries
+Engine updates are never automatic. Use `v2raycli settings engine update sing-box`,
+`v2raycli settings engine update xray`, or `v2raycli settings engine update both`. Only binaries
 configured with `binary_path: "auto"` are replaceable; custom and system paths
 are protected. Downloads are staged, version-checked, atomically replaced, and
-rolled back if verification fails. For restricted networks, the CLI accepts an
-ephemeral proxy with `--proxy` — either a URL (`socks5://host:port`,
-`http://host:port`) or a local server ID to fetch through; it is never stored.
-`subscription add` / `subscription update --proxy` and the stored
-`settings.subscription_proxy` accept the same two forms.
+rolled back if verification fails. For restricted networks, pass an ephemeral
+proxy with `--proxy` on the update command (e.g. `v2raycli settings engine update both --proxy
+socks5://127.0.0.1:1080`); it is never stored.
 
 ### Auto-update
 
@@ -432,7 +417,7 @@ to reorder them.
 
 ## Troubleshooting
 
-- **Port in use** — change the port with `v2raycli config set settings.mixed_port <port>`.
+- **Port in use** — change the port with `v2raycli settings mixed-port <port>`.
 - **"binary not found"** — binaries download on first use; if download fails,
   set `engines.<name>.binary_path` in the config to a local binary, or
   `"system"` to use one on `PATH`.
