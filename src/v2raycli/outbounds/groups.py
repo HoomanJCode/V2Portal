@@ -108,10 +108,29 @@ def _group_ref(
                 raise ValueError(
                     f"server {sid} forwards (transitively) to a group that contains it"
                 )
-    if not all_ids and not group_ids and not server_ids:
+    if not refs and not subscription_ids and not group_ids and not server_ids:
         raise ValueError(
             "group requires at least one profile, subscription, group, or server"
         )
+    # A single profile or single server is not a group-like entity.
+    # Check the direct member count (before subscription expansion).
+    n_direct = (
+        len(refs)
+        + (len(subscription_ids) if subscription_ids else 0)
+        + (len(group_ids) if group_ids else 0)
+        + (len(server_ids) if server_ids else 0)
+    )
+    if n_direct == 1:
+        if refs and not subscription_ids and not group_ids and not server_ids:
+            raise ValueError(
+                "a single profile is not a group — add another profile or "
+                "use a subscription or group as the sole member"
+            )
+        if server_ids and not refs and not subscription_ids and not group_ids:
+            raise ValueError(
+                "a single server is not a group — add another profile/server or "
+                "use a subscription or group as the sole member"
+            )
     profiles = resolve_refs(store, all_ids) if all_ids else []
     if server_ids:
         # Server members resolve to socks/http profiles — include them in the
@@ -560,13 +579,13 @@ def resolve_target(store, selection, default_engine: str = SINGBOX) -> Target:
             strategy = ""
             target_type = "single"
         elif selection.type == "chain":
-            if len(profiles) < 2:
-                raise ValueError("a chain requires at least 2 profiles")
+            if len(profiles) < 1:
+                raise ValueError("a chain requires at least 1 profile")
             strategy = ""
             target_type = "chain"
         else:
-            if len(profiles) < 2:
-                raise ValueError("a balancer requires at least 2 profiles")
+            if len(profiles) < 1:
+                raise ValueError("a balancer requires at least 1 profile")
             if not isinstance(selection.strategy, str) or selection.strategy not in VALID_STRATEGIES:
                 raise ValueError(f"invalid strategy: {selection.strategy}")
             strategy = selection.strategy

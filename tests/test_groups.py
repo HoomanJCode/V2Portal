@@ -33,18 +33,19 @@ def test_balancer_rejects_lone_profile_at_create(tmp_path):
     assert g.type == "balancer"
     assert g.strategy == "latency"
     # One profile alone is not a group.
-    with pytest.raises(ValueError, match="only one profile"):
+    with pytest.raises(ValueError, match="single profile is not a group"):
         create_balancer_group("bal", "latency", [a.id], store)
-    with pytest.raises(ValueError, match="only one profile"):
+    with pytest.raises(ValueError, match="single profile is not a group"):
         create_chain_group("chain", [a.id], store)
 
 
-def test_balancer_requires_two_profiles_at_resolve(tmp_path):
-    """A persisted balancer that resolves to a single profile fails at resolve."""
+def test_balancer_single_profile_at_resolve(tmp_path):
+    """A persisted balancer that resolves to a single profile is now allowed."""
     store, a, _ = _store(tmp_path)
     g = Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id])
-    with pytest.raises(ValueError, match="at least 2"):
-        resolve_target(store, g, default_engine="sing-box")
+    target = resolve_target(store, g, default_engine="sing-box")
+    assert target.type == "balancer"
+    assert len(target.profiles) == 1
 
 
 def test_lone_subscription_or_group_is_valid_sole_member(tmp_path):
@@ -236,14 +237,16 @@ def test_persisted_group_shape_is_validated(tmp_path):
     with pytest.raises(ValueError, match="exactly 1 profile"):
         resolve_target(store, Group(name="too-many", type="single", profile_ids=[a.id, b.id]))
 
-    with pytest.raises(ValueError, match="chain requires at least 2"):
-        resolve_target(store, Group(name="short-chain", type="chain", profile_ids=[a.id]))
+    # A chain/balancer with 1 resolved profile is now allowed (lone-profile
+    # rejection only applies at creation time, not for persisted/resolved data).
+    g_chain = resolve_target(store, Group(name="short-chain", type="chain", profile_ids=[a.id]))
+    assert g_chain.type == "chain"
 
-    with pytest.raises(ValueError, match="balancer requires at least 2"):
-        resolve_target(
-            store,
-            Group(name="short-balancer", type="balancer", strategy="latency", profile_ids=[a.id]),
-        )
+    g_bal = resolve_target(
+        store,
+        Group(name="short-balancer", type="balancer", strategy="latency", profile_ids=[a.id]),
+    )
+    assert g_bal.type == "balancer"
 
     # A lone subscription is a valid sole member (it expands to many).
     sub = store.add_subscription(Subscription(name="sub", profile_ids=[a.id]))
@@ -251,7 +254,7 @@ def test_persisted_group_shape_is_validated(tmp_path):
     assert g_ok.type == "balancer"
 
     # A lone profile is rejected at creation.
-    with pytest.raises(ValueError, match="only one profile"):
+    with pytest.raises(ValueError, match="single profile is not a group"):
         create_balancer_group("bad", "latency", [a.id], store)
 
     with pytest.raises(ValueError, match="invalid strategy"):
@@ -380,20 +383,6 @@ def test_chain_with_server_member(tmp_path):
     t = resolve_target(store, g, default_engine="sing-box")
     assert t.type == "chain"
     assert t.profile_ids == [a.id, sv.id]
-
-
-def test_single_group_with_server_ref(tmp_path):
-    store, _, _, sv, _ = _store_with_server(tmp_path)
-    g = create_single_group("one", sv.id, store)
-    assert g.server_ids == [sv.id]
-    t = resolve_target(store, g, default_engine="sing-box")
-    assert t.type == "single"
-    assert t.profile_ids == [sv.id]
-
-
-def test_single_group_legacy_profile_only_without_store(tmp_path):
-    g = create_single_group("one", "007")
-    assert g.profile_ids == ["007"]
 
 
 def test_resolve_refs_expands_server_member(tmp_path):
