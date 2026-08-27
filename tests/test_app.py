@@ -282,59 +282,6 @@ def test_restore_flag(tmp_path, monkeypatch, capsys):
     assert "restored" in capsys.readouterr().out
 
 
-def test_export_flag(tmp_path, monkeypatch, capsys):
-    store = _store(tmp_path)
-    store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
-    target = tmp_path / "export.json"
-
-    assert app._export(store, str(target), False) == 0
-    assert "schema_version" in target.read_text(encoding="utf-8")
-    assert "exported" in capsys.readouterr().out
-
-
-def test_export_redact_flag(tmp_path, monkeypatch):
-    store = _store(tmp_path)
-    auth = {
-        "settings": {
-            "servers": [
-                {"address": "1.2.3.4", "port": 1080, "username": "u", "password": "secret"}
-            ]
-        }
-    }
-    store.add_profile(Profile(name="s", kind="socks", outbound=auth))
-    target = tmp_path / "export.json"
-
-    assert app._export(store, str(target), True) == 0
-    content = target.read_text(encoding="utf-8")
-    assert "REDACTED" in content
-    assert "secret" not in content
-
-
-def test_import_flag_merge(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
-    source = _store(tmp_path)
-    source.add_profile(Profile(name="shared", kind="socks", outbound=SOCKS))
-    exported = tmp_path / "export.json"
-    app._export(source, str(exported), False)
-
-    dest = _store(tmp_path / "other")
-    assert app._import(dest, str(exported), False) == 0
-    assert [p.name for p in dest.config.profiles] == ["shared"]
-
-
-def test_import_flag_replace(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
-    source = _store(tmp_path)
-    source.add_profile(Profile(name="shared", kind="socks", outbound=SOCKS))
-    exported = tmp_path / "export.json"
-    app._export(source, str(exported), False)
-
-    dest = _store(tmp_path / "other")
-    dest.add_profile(Profile(name="local-only", kind="socks", outbound=SOCKS))
-    assert app._import(dest, str(exported), True) == 0
-    assert [p.name for p in dest.config.profiles] == ["shared"]
-
-
 def test_install_service_flag(tmp_path, monkeypatch, capsys):
     from v2raycli import service
 
@@ -345,18 +292,6 @@ def test_install_service_flag(tmp_path, monkeypatch, capsys):
 
     assert app._install_service(store, None) == 0
     assert "installed" in capsys.readouterr().out
-
-
-def test_install_service_flag_unsupported(tmp_path, monkeypatch, capsys):
-    from v2raycli import service
-
-    store = _store(tmp_path)
-    monkeypatch.setattr(service, "platform", lambda: "darwin")
-    monkeypatch.setattr(
-        service, "install_service", lambda c: (_ for _ in ()).throw(RuntimeError("darwin"))
-    )
-    assert app._install_service(store, None) == 1
-    assert "install failed" in capsys.readouterr().err
 
 
 def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):

@@ -851,6 +851,46 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     _add_setting("traffic-api-port", "traffic API port")
     _add_setting("subscription-proxy", "proxy for subscription fetches")
 
+    # service install/uninstall under settings
+    service_sub = settings_sub.add_parser(
+        "service",
+        help="install or uninstall a boot service (Linux systemd / Termux)",
+        description=(
+            "Keep all enabled servers running across reboots by installing\n"
+            "a system service. Supported platforms: Linux (systemd user unit),\n"
+            "Termux (termux-services).\n\n"
+            "Examples:\n"
+            "  v2raycli settings service install\n"
+            "  v2raycli settings service uninstall"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    service_action_sub = service_sub.add_subparsers(dest="service_action", metavar="ACTION")
+    service_action_sub.add_parser(
+        "install",
+        help="create a boot service that starts all enabled servers",
+        description=(
+            "Write a systemd user unit (Linux) or termux-services script\n"
+            "(Termux) that launches 'v2raycli server start --all' on boot.\n\n"
+            "After install, enable with:\n"
+            "  systemctl --user enable --now v2raycli    (Linux)\n"
+            "  sv-enable v2raycli                        (Termux)\n\n"
+            "Example:\n"
+            "  v2raycli settings service install"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    service_action_sub.add_parser(
+        "uninstall",
+        help="remove the installed boot service",
+        description=(
+            "Remove the systemd unit or termux-services script.\n\n"
+            "Example:\n"
+            "  v2raycli settings service uninstall"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
     # engine update subcommand under settings
     engine_sub = settings_sub.add_parser(
         "engine",
@@ -883,109 +923,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     engine_update_parser.add_argument("--proxy",
                                       help="proxy URL (socks5://host:port, http://host:port) or a local server ID (not stored)")
 
-    # -- config (legacy, kept for backup/import/export) ------------------------
-    config_command = commands.add_parser(
-        "config",
-        help="export/import the full config",
-        description=(
-            "Export or import the full config.json for backup or transfer.\n\n"
-            "Examples:\n"
-            "  v2raycli config show --redact\n"
-            "  v2raycli config export /tmp/config.json\n"
-            "  v2raycli config import /tmp/config.json"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_commands = config_command.add_subparsers(dest="config_command", metavar="ACTION")
 
-    config_show = config_commands.add_parser(
-        "show",
-        help="print the full config as JSON",
-        description=(
-            "Dump the full config.json content. Use --redact to mask\n"
-            "credentials and keys (safe for sharing).\n\n"
-            "Examples:\n"
-            "  v2raycli config show\n"
-            "  v2raycli config show --redact"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_show.add_argument("--redact", action="store_true",
-                            help="mask passwords, keys, and secrets with 'REDACTED'")
-
-    config_export = config_commands.add_parser(
-        "export",
-        help="write the full config to a file",
-        description=(
-            "Export the full config to a JSON file. Use --redact to\n"
-            "mask credentials.\n\n"
-            "Example:\n"
-            "  v2raycli config export /tmp/config.json --redact"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_export.add_argument("path", help="output file path")
-    config_export.add_argument("--redact", action="store_true",
-                             help="mask credentials and keys")
-
-    config_import = config_commands.add_parser(
-        "import",
-        help="import a full config (merge or replace)",
-        description=(
-            "Import a previously exported config. By default new items\n"
-            "are merged with the existing config. Use --replace to swap\n"
-            "the entire config.\n\n"
-            "Examples:\n"
-            "  v2raycli config import /tmp/config.json\n"
-            "  v2raycli config import /tmp/config.json --replace"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    config_import.add_argument("path", help="path to the exported config file")
-    config_import.add_argument("--replace", action="store_true",
-                             help="replace the entire config (not merge)")
-
-    # -- service ---------------------------------------------------------------
-    service_command = commands.add_parser(
-        "service",
-        help="install or uninstall a boot service (Linux systemd / Termux)",
-        description=(
-            "Keep all enabled servers running across reboots by installing\n"
-            "a system service. Supported platforms: Linux (systemd user unit),\n"
-            "Termux (termux-services).\n\n"
-            "Examples:\n"
-            "  v2raycli service install\n"
-            "  v2raycli service uninstall"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    service_commands = service_command.add_subparsers(dest="service_command", metavar="ACTION")
-
-    service_install = service_commands.add_parser(
-        "install",
-        help="create a boot service that starts all enabled servers",
-        description=(
-            "Write a systemd user unit (Linux) or termux-services script\n"
-            "(Termux) that launches 'v2raycli server start --all' on boot.\n\n"
-            "After install, enable with:\n"
-            "  systemctl --user enable --now v2raycli    (Linux)\n"
-            "  sv-enable v2raycli                        (Termux)\n\n"
-            "Example:\n"
-            "  v2raycli service install"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    service_uninstall = service_commands.add_parser(
-        "uninstall",
-        help="remove the installed boot service",
-        description=(
-            "Remove the systemd unit or termux-services script.\n\n"
-            "Example:\n"
-            "  v2raycli service uninstall"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
 
     # -- routing ---------------------------------------------------------------
     routing = commands.add_parser(
@@ -1401,14 +1339,6 @@ def _command(store: ConfigStore, args) -> int:
             return _command_help(args, "backup")
         if command == "settings":
             return _settings_command(store, args)
-        if command == "config":
-            return _config_command(store, args)
-        if command == "service":
-            if args.service_command == "install":
-                return _install_service(store, getattr(args, "config_dir", None))
-            if args.service_command == "uninstall":
-                return _uninstall_service()
-            return _command_help(args, "service")
         if command == "routing":
             return _routing_command(store, args)
         if command in ("server", "sv"):
@@ -2030,6 +1960,14 @@ def _settings_command(store: ConfigStore, args) -> int:
         }
         print(json.dumps(fields, ensure_ascii=False, indent=2))
         return 0
+    # Handle service subcommand
+    if action == "service":
+        service_action = getattr(args, "service_action", None)
+        if service_action == "install":
+            return _install_service(store, getattr(args, "config_dir", None))
+        if service_action == "uninstall":
+            return _uninstall_service()
+        return _command_help(args, "settings")
     # Handle engine update subcommand
     if action == "engine":
         engine_action = getattr(args, "engine_action", None)
@@ -2068,69 +2006,7 @@ def _settings_command(store: ConfigStore, args) -> int:
     return 0
 
 
-def _config_command(store: ConfigStore, args) -> int:
-    action = args.config_command
-    if action is None:
-        return _command_help(args, "config")
-    if action == "get":
-        if args.key:
-            key = args.key.split(".", 1)[1] if "." in args.key else args.key
-            if not hasattr(store.config.settings, key):
-                raise ValueError(f"unknown setting: {args.key}")
-            value = getattr(store.config.settings, key)
-            print(json.dumps(value, ensure_ascii=False))
-        else:
-            s = store.config.settings
-            fields = {
-                "listen": s.listen,
-                "mixed_port": s.mixed_port,
-                "socks_port": s.socks_port,
-                "http_port": s.http_port,
-                "allow_lan": s.allow_lan,
-                "dns": s.dns,
-                "log_level": s.log_level,
-                "test_url": s.test_url,
-                "default_engine": s.default_engine,
-                "backup_keep": s.backup_keep,
-                "traffic_api": s.traffic_api,
-                "traffic_api_port": s.traffic_api_port,
-                "subscription_proxy": s.subscription_proxy,
-            }
-            print(json.dumps(fields, ensure_ascii=False, indent=2))
-        return 0
-    if action == "show":
-        from .exchange import export_full
 
-        print(json.dumps(export_full(store, redact=getattr(args, 'redact', False)), ensure_ascii=False, indent=2))
-        return 0
-    if action == "export":
-        return _export(store, args.path, getattr(args, 'redact', False))
-    if action == "import":
-        return _import(store, args.path, args.replace)
-    if action == "set":
-        value: object
-        try:
-            value = json.loads(args.value)
-        except json.JSONDecodeError:
-            value = args.value
-        key = args.key.split(".", 1)[1]
-        if key in ("mixed_port", "socks_port", "http_port", "traffic_api_port", "backup_keep") and (isinstance(value, bool) or not isinstance(value, int)):
-            raise ValueError(f"settings.{key} must be an integer")
-        if key in ("mixed_port", "socks_port", "http_port") and isinstance(value, int) and not (0 <= value <= 65534):
-            raise ValueError(f"settings.{key} must be between 0 and 65534 (0 = disabled; xray reserves mixed_port+1 for HTTP)")
-        if key in ("traffic_api_port", "backup_keep") and isinstance(value, int) and value < 0:
-            raise ValueError(f"settings.{key} must be a non-negative integer")
-        if key in ("allow_lan", "traffic_api") and not isinstance(value, bool):
-            raise ValueError(f"settings.{key} must be boolean (use true or false)")
-        if key == "default_engine" and value not in ("sing-box", "xray"):
-            raise ValueError("settings.default_engine must be sing-box or xray")
-        if key == "log_level" and value not in ("debug", "info", "warn", "error"):
-            raise ValueError("settings.log_level must be debug, info, warn, or error")
-        setattr(store.config.settings, key, value)
-        store.save()
-        print(f"{args.key}={json.dumps(value, ensure_ascii=False)}")
-        return 0
-    return _command_help(args, "config")
 
 
 def _routing_command(store: ConfigStore, args) -> int:
@@ -2867,29 +2743,7 @@ def _restore(store: ConfigStore, path: str) -> int:
     return 0
 
 
-def _export(store: ConfigStore, path: str, redact: bool) -> int:
-    from . import exchange
 
-    try:
-        exchange.export_full(store, path, redact=redact)
-    except (OSError, ValueError, TypeError) as exc:
-        print(f"export failed: {exc}", file=sys.stderr)
-        return 1
-    print(f"exported to {path}")
-    return 0
-
-
-def _import(store: ConfigStore, path: str, replace: bool) -> int:
-    from . import exchange
-
-    mode = "replace" if replace else "merge"
-    try:
-        exchange.import_full(store, path, mode=mode)
-    except (OSError, ValueError, TypeError) as exc:
-        print(f"import failed: {exc}", file=sys.stderr)
-        return 1
-    print(f"imported {path} ({mode})")
-    return 0
 
 
 def _interactive() -> bool:

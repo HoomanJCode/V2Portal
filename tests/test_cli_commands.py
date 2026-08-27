@@ -781,14 +781,3 @@ def test_settings_set_single(tmp_path, capsys):
     args = app.build_parser().parse_args(["settings", "mixed-port", "1081"])
     assert app._settings_command(store, args) == 0
     assert store.config.settings.mixed_port == 1081
-
-
-
-def test_config_show_and_export(tmp_path, capsys):
-    """'v2raycli config show' still works."""
-    store = _store(tmp_path)
-    args = app.build_parser().parse_args(["config", "show"])
-    assert app._config_command(store, args) == 0
-    out = capsys.readouterr().out
-    data = json.loads(out)
-    assert "settings" in data
