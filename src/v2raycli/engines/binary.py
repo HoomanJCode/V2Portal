@@ -99,6 +99,14 @@ def _latest_tag(repo: str, proxy: str | None = None) -> str:
             resp.raise_for_status()
             payload = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
+        msg = str(exc).lower()
+        if "timeout" in msg or "handshake" in msg or "connect" in msg:
+            hint = (
+                f"cannot reach GitHub ({exc}). "
+                "Check your internet connection or use a proxy:\n"
+                "  v2raycli settings engine update sing-box --proxy socks5://HOST:PORT"
+            )
+            raise BinaryError(hint) from exc
         raise BinaryError(f"could not resolve latest release: {exc}") from exc
     tag = payload.get("tag_name") if isinstance(payload, dict) else None
     if not isinstance(tag, str) or not tag.strip():

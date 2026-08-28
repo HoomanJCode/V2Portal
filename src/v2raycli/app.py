@@ -2662,7 +2662,9 @@ def _uninstall_service() -> int:
 
 def _firewall_command(store: ConfigStore, args) -> int:
     from . import firewall
-    from .engines.binary import locate_binary, platform_name
+    from .engines.binary import locate_binary, platform_name, arch_name, effective_platform
+    from .engines.base import get_adapter
+    from . import config as cfg
 
     if not firewall.is_windows():
         print("firewall rules are only needed on Windows")
@@ -2694,11 +2696,20 @@ def _firewall_command(store: ConfigStore, args) -> int:
 
     for engine in engines:
         options = options_map.get(engine, {})
+        # Try locate_binary first; if the binary isn't downloaded yet,
+        # fall back to the expected path so the firewall rule can still
+        # be added (the user will download the binary later).
         try:
             binary = locate_binary(engine, options)
-        except Exception as exc:
-            print(f"{engine}: {exc}", file=sys.stderr)
-            continue
+        except Exception:
+            # Construct the expected path without downloading.
+            adapter = get_adapter(engine)
+            platform = platform_name()
+            arch = arch_name()
+            binary_name = adapter.binary_filename(
+                effective_platform(engine, platform), arch,
+            )
+            binary = cfg.BIN_DIR / binary_name
 
         if action == "allow":
             msg = firewall.add_rule(engine, binary)
