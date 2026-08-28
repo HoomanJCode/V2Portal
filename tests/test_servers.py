@@ -8,7 +8,7 @@ import pytest
 
 from v2raycli import app
 from v2raycli.models import Group, Profile, Server, Subscription
-from v2raycli.servers import ServerManager, ServerState
+from v2raycli.servers import ServerManager, ServerState, _check_stderr_for_errors
 from v2raycli.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -838,3 +838,54 @@ def test_server_list_shows_server_outbound_label(tmp_path, capsys):
     args = app.build_parser().parse_args(["server", "list"])
     assert app._server_command(store, args) == 0
     assert f"server/{target.id} (hop)" in capsys.readouterr().out
+
+
+# -- engine stderr error detection ----------------------------------------
+
+
+def test_check_stderr_returns_none_for_empty():
+    assert _check_stderr_for_errors([]) is None
+    assert _check_stderr_for_errors(None) is None  # type: ignore[arg-type]
+
+
+def test_check_stderr_returns_none_for_clean_logs():
+    lines = [
+        "INFO[0000] inbound mixed listening on 127.0.0.1:1080",
+        "INFO[0000] outbound direct tag=direct",
+    ]
+    assert _check_stderr_for_errors(lines) is None
+
+
+def test_check_stderr_detects_handshake_failure():
+    lines = [
+        "INFO listening on 127.0.0.1:1080",
+        "ERRO[0001] dial tcp 1.2.3.4:443: failed to handshake",
+    ]
+    result = _check_stderr_for_errors(lines)
+    assert result is not None
+    assert "engine reports errors" in result
+    assert "failed to handshake" in result
+
+
+def test_check_stderr_detects_connection_refused():
+    lines = ["dial tcp 1.2.3.4:443: connection refused"]
+    result = _check_stderr_for_errors(lines)
+    assert result is not None
+    assert "connection refused" in result
+
+
+def test_check_stderr_detects_address_in_use():
+    lines = ["bind: address already in use"]
+    result = _check_stderr_for_errors(lines)
+    assert result is not None
+    assert "address already in use" in result
+
+
+def test_check_stderr_includes_firewall_hint_on_windows(monkeypatch):
+    import os as _os
+    monkeypatch.setattr(_os, "name", "nt")
+    lines = ["dial tcp 1.2.3.4:443: i/o timeout"]
+    result = _check_stderr_for_errors(lines)
+    assert result is not None
+    assert "firewall" in result.lower()
+    assert "Firewall" in result

@@ -189,6 +189,17 @@ class ConnectionController:
             self.proc.stop()
             raise ProxyConnectionError(f"{target.engine} exited immediately: {tail}")
 
+        # Give the engine a moment to attempt the outbound connection, then
+        # check logs for handshake / dial failures that indicate the proxy
+        # is running but non-functional.
+        time.sleep(1.0)
+        from .servers import _check_stderr_for_errors
+        log_warning = _check_stderr_for_errors(self.proc.logs(), target.engine)
+        if log_warning and not self.proc.is_running():
+            tail = " ".join(self.proc.logs()[-3:])
+            self.proc.stop()
+            raise ProxyConnectionError(f"{target.engine} failed: {tail}")
+
         self.status = ConnectionStatus(
             state="connected",
             target_name=target.name,
@@ -197,6 +208,8 @@ class ConnectionController:
             pid=self.proc.pid,
             started_at=_now(),
         )
+        if log_warning:
+            _log.warning("%s", log_warning)
         return self.status
 
     def _inbound_info(self, settings, engine: str = "sing-box") -> dict:

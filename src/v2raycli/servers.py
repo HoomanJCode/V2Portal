@@ -23,6 +23,53 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_FAILOVER_TIMEOUT = 10  # seconds between engine health probes
 
+# Patterns in engine stderr that indicate the proxy is non-functional.
+_ENGINE_ERROR_PATTERNS = (
+    "failed to handshake",
+    "connection refused",
+    "connection reset",
+    " dial ",
+    " handshake ",
+    " i/o timeout",
+    " too many connections",
+    " no such host",
+    " lookup ",
+    " permission denied",
+    " access denied",
+    " address already in use",
+    " bind: address already in use",
+    " port is already allocated",
+    "\nerror",
+)
+
+_FIREWALL_HINT_WINDOWS = (
+    "On Windows, the engine binary may need a firewall rule to make outbound connections.\n"
+    "Try: Windows Security → Firewall → Allow an app → browse to sing-box.exe or xray.exe\n"
+    "Or run PowerShell as Admin: New-NetFirewallRule -DisplayName 'v2raycli engine' "
+    "-Direction Outbound -Program '<path-to-engine>' -Action Allow"
+)
+
+
+def _check_stderr_for_errors(stderr_lines: list[str], engine: str = "") -> str | None:
+    """Scan captured engine stderr for known failure patterns.
+
+    Returns a human-readable warning string, or ``None`` when no error
+    pattern is found.
+    """
+    if not stderr_lines:
+        return None
+    lower_lines = [line.lower() for line in stderr_lines]
+    for line in lower_lines:
+        for pattern in _ENGINE_ERROR_PATTERNS:
+            if pattern in line:
+                # Collect the most relevant error lines (last 3).
+                detail = " | ".join(stderr_lines[-3:])
+                hint = ""
+                if os.name == "nt":
+                    hint = f"\n\n{_FIREWALL_HINT_WINDOWS}"
+                return f"engine reports errors: {detail}{hint}"
+    return None
+
 
 @dataclass
 class ServerState:
@@ -328,12 +375,19 @@ class ServerManager:
                 error=f"engine exited immediately: {detail}",
             )
         else:
+            # Engine is running — give it a moment to attempt the outbound
+            # connection, then scan stderr for handshake / dial failures.
+            time.sleep(1.0)
+            stderr_lines = getattr(proc, "_captured_stderr", [])
+            warning = _check_stderr_for_errors(stderr_lines, target_engine)
             state = ServerState(
                 server_id=server_id,
                 pid=proc.pid,
                 config_path=str(config_path),
                 started_at=datetime.now(timezone.utc).isoformat(),
             )
+            if warning:
+                state.error = warning
         self._states[server_id] = state
         self._save_states()
         return state
