@@ -890,6 +890,63 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # firewall subcommand under settings (Windows only)
+    firewall_sub = settings_sub.add_parser(
+        "firewall",
+        help="manage Windows Firewall rules for engine binaries",
+        description=(
+            "Add or remove Windows Firewall outbound rules so the engine\n"
+            "binaries (sing-box, xray) can connect to remote servers.\n"
+            "Requires Administrator privileges (UAC prompt will appear).\n\n"
+            "Examples:\n"
+            "  v2raycli settings firewall allow sing-box\n"
+            "  v2raycli settings firewall allow xray\n"
+            "  v2raycli settings firewall allow both\n"
+            "  v2raycli settings firewall remove sing-box\n"
+            "  v2raycli settings firewall list"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    firewall_action_sub = firewall_sub.add_subparsers(dest="firewall_action", metavar="ACTION")
+    firewall_allow = firewall_action_sub.add_parser(
+        "allow",
+        help="add an outbound allow rule for an engine binary",
+        description=(
+            "Add a Windows Firewall rule that allows the engine binary\n"
+            "to make outbound connections. UAC elevation is automatic.\n\n"
+            "Examples:\n"
+            "  v2raycli settings firewall allow sing-box\n"
+            "  v2raycli settings firewall allow xray\n"
+            "  v2raycli settings firewall allow both"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    firewall_allow.add_argument("engine", choices=("sing-box", "xray", "both"),
+                                help="which engine to allow")
+    firewall_remove = firewall_action_sub.add_parser(
+        "remove",
+        help="remove the outbound allow rule for an engine binary",
+        description=(
+            "Remove a previously added Windows Firewall rule.\n\n"
+            "Examples:\n"
+            "  v2raycli settings firewall remove sing-box\n"
+            "  v2raycli settings firewall remove both"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    firewall_remove.add_argument("engine", choices=("sing-box", "xray", "both"),
+                                 help="which engine to remove")
+    firewall_action_sub.add_parser(
+        "list",
+        help="show existing v2raycli firewall rules",
+        description=(
+            "List all v2raycli-generated Windows Firewall rules.\n\n"
+            "Example:\n"
+            "  v2raycli settings firewall list"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
     # engine update subcommand under settings
     engine_sub = settings_sub.add_parser(
         "engine",
@@ -1969,6 +2026,9 @@ def _settings_command(store: ConfigStore, args) -> int:
         if backup_action == "restore":
             return _restore(store, args.path)
         return _command_help(args, "settings")
+    # Handle firewall subcommand
+    if action == "firewall":
+        return _firewall_command(store, args)
     # Handle engine update subcommand
     if action == "engine":
         engine_action = getattr(args, "engine_action", None)
@@ -2597,6 +2657,59 @@ def _uninstall_service() -> int:
         print("no service installed")
         return 0
     print(f"removed service -> {removed}")
+    return 0
+
+
+def _firewall_command(store: ConfigStore, args) -> int:
+    from . import firewall
+    from .engines.binary import locate_binary, platform_name
+
+    if not firewall.is_windows():
+        print("firewall rules are only needed on Windows")
+        return 0
+
+    action = getattr(args, "firewall_action", None)
+    if action is None:
+        print("usage: v2raycli settings firewall {allow|remove|list}")
+        return 2
+
+    if action == "list":
+        rules = firewall.list_rules()
+        if not rules:
+            print("no v2raycli firewall rules found")
+            return 0
+        for rule in rules:
+            name = rule.get("DisplayName", "?")
+            enabled = rule.get("Enabled", "?")
+            print(f"  {name}  enabled={enabled}")
+        return 0
+
+    engine_arg = getattr(args, "engine", None)
+    if engine_arg is None:
+        print("specify an engine: sing-box, xray, or both", file=sys.stderr)
+        return 2
+
+    engines = ["sing-box", "xray"] if engine_arg == "both" else [engine_arg]
+    options_map = store.config.engines
+
+    for engine in engines:
+        options = options_map.get(engine, {})
+        try:
+            binary = locate_binary(engine, options)
+        except Exception as exc:
+            print(f"{engine}: {exc}", file=sys.stderr)
+            continue
+
+        if action == "allow":
+            msg = firewall.add_rule(engine, binary)
+        elif action == "remove":
+            msg = firewall.remove_rule(engine)
+        else:
+            print(f"unknown action: {action}", file=sys.stderr)
+            return 2
+
+        print(msg)
+
     return 0
 
 
