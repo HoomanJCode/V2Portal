@@ -238,6 +238,69 @@ def test_test_flag_group_and_server_scope(tmp_path, monkeypatch):
     assert app._test(store, "999") == 1  # unknown id -> no matching profiles
 
 
+def test_probe_server_scope_probes_server_inbound_not_subprofiles(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Group, Server
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    group = store.add_group(Group(name="g", type="balancer", strategy="latency", profile_ids=[p1.id]))
+    server = store.add_server(Server(name="srv", outbound_type="group", outbound_id=group.id))
+
+    probed: list = []
+
+    def fake_probe_servers(servers, concurrency=8, timeout=5.0):
+        probed.extend(s.id for s in servers)
+        return [latency.EndpointResult(profile_id=s.id, name=s.name, tcp_status="ok") for s in servers]
+
+    monkeypatch.setattr(latency, "probe_servers", fake_probe_servers)
+    monkeypatch.setattr(latency, "render_endpoint_table", lambda results: None)
+
+    assert app._probe(store, server.id) == 0
+    # the server itself is probed as an endpoint — not its sub-profiles
+    assert probed == [server.id]
+
+
+def test_probe_server_scope_failure_exit_code(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1081))
+
+    monkeypatch.setattr(
+        latency, "probe_servers",
+        lambda servers, concurrency=8, timeout=5.0: [
+            latency.EndpointResult(profile_id=s.id, name=s.name, tcp_status="refused") for s in servers
+        ],
+    )
+    monkeypatch.setattr(latency, "render_endpoint_table", lambda results: None)
+
+    assert app._probe(store, server.id) == 1
+
+
+def test_ws_test_server_scope_marks_not_testable(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Group, Server
+
+    store = _store(tmp_path)
+    p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    group = store.add_group(Group(name="g", type="balancer", strategy="latency", profile_ids=[p1.id]))
+    server = store.add_server(Server(name="srv", outbound_type="group", outbound_id=group.id))
+
+    rendered: list = []
+
+    def fake_render(results):
+        rendered.extend(results)
+
+    monkeypatch.setattr(latency, "render_websocket_table", fake_render)
+
+    assert app._ws_test(store, server.id) == 0
+    assert len(rendered) == 1
+    assert rendered[0].profile_id == server.id
+    assert rendered[0].not_testable is True
+
+
 def test_backup_flag(tmp_path, monkeypatch, capsys):
     from v2raycli import backup
 

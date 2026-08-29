@@ -2740,6 +2740,25 @@ def _resolve_server_scope(store: ConfigStore, server):
         return []
 
 
+def _resolve_scope_servers(store: ConfigStore, scope: str) -> list:
+    """Return Server objects when the scope is purely server ID(s).
+
+    ``scope`` may be a single server ID or a comma-separated list of server
+    IDs. Returns an empty list when any token is not a server, so callers
+    fall back to the normal profile-based resolution.
+    """
+    ids = [part.strip() for part in scope.split(",") if part.strip()]
+    if not ids:
+        return []
+    servers: list = []
+    for sid in ids:
+        server = store.get_server(sid)
+        if server is None:
+            return []
+        servers.append(server)
+    return servers
+
+
 def _resolve_test_scope(store: ConfigStore, scope: str):
     from .test.latency import select_profiles
 
@@ -2767,7 +2786,14 @@ def _resolve_test_scope(store: ConfigStore, scope: str):
 
 
 def _probe(store: ConfigStore, scope: str) -> int:
-    from .test.latency import probe_many, render_endpoint_table
+    from .test.latency import probe_many, probe_servers, render_endpoint_table
+
+    # A server is itself an endpoint: probe its own local inbound port.
+    servers = _resolve_scope_servers(store, scope)
+    if servers:
+        results = probe_servers(servers)
+        render_endpoint_table(results)
+        return 0 if all(result.tcp_status in {"ok", "not_testable"} for result in results) else 1
 
     profiles = _resolve_test_scope(store, scope)
     if not profiles:
@@ -2779,7 +2805,14 @@ def _probe(store: ConfigStore, scope: str) -> int:
 
 
 def _ws_test(store: ConfigStore, scope: str) -> int:
-    from .test.latency import render_websocket_table, websocket_test_many
+    from .test.latency import render_websocket_table, server_websocket_result, websocket_test_many
+
+    # A server has no WebSocket path of its own — mark it not testable.
+    servers = _resolve_scope_servers(store, scope)
+    if servers:
+        results = [server_websocket_result(server) for server in servers]
+        render_websocket_table(results)
+        return 0
 
     profiles = _resolve_test_scope(store, scope)
     if not profiles:

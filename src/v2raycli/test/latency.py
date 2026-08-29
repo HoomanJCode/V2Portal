@@ -209,6 +209,66 @@ def probe_many(profiles, concurrency: int = 8, timeout: float = 5.0) -> list[End
     return [results[profile.id] for profile in profiles]
 
 
+def server_endpoint(server) -> tuple[str, int | None]:
+    """Return a server's own local inbound endpoint (listen:port)."""
+    host = getattr(server, "listen", None) or "127.0.0.1"
+    if host in ("0.0.0.0", "::", ""):
+        host = "127.0.0.1"
+    return host, _normalized_port(getattr(server, "port", None))
+
+
+def probe_server(server, timeout: float = 5.0) -> EndpointResult:
+    """Probe a server's own local inbound as an endpoint.
+
+    A server is itself a proxy process bound to ``listen:port``; this checks
+    that the server is up and accepting connections, without testing the
+    profiles it forwards to.
+    """
+    host, port = server_endpoint(server)
+    kind = f"server/{getattr(server, 'protocol', 'mixed')}"
+    result = EndpointResult(
+        profile_id=server.id,
+        name=server.name or server.id,
+        kind=kind,
+        host=host,
+        port=port,
+    )
+    if not host or port is None:
+        result.tcp_status = "invalid"
+        result.error = "server has no valid local port"
+        return result
+    result.icmp_ms, result.icmp_status = _icmp_probe(host, min(timeout, 3.0))
+    result.tcp_ms, result.tcp_status = _tcp_probe(host, port, timeout)
+    if result.tcp_status not in ("ok", "not_testable"):
+        result.error = f"tcp {result.tcp_status}"
+    return result
+
+
+def probe_servers(
+    servers,
+    concurrency: int = 8,
+    timeout: float = 5.0,
+) -> list[EndpointResult]:
+    """Probe server local inbounds concurrently while preserving input order."""
+    import sys
+    total = len(servers)
+    results: dict[str, EndpointResult] = {}
+    workers = max(1, min(int(concurrency), 32))
+    if sys.stderr.isatty():
+        print(f"\rprobing {total} servers…", end="", file=sys.stderr, flush=True)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(probe_server, server, timeout): server.id for server in servers}
+        for future in as_completed(futures):
+            result = future.result()
+            results[result.profile_id] = result
+            if sys.stderr.isatty():
+                done = len(results)
+                print(f"\rprobing {done}/{total}…", end="", file=sys.stderr, flush=True)
+    if sys.stderr.isatty():
+        print("\rdone.              ", file=sys.stderr)
+    return [results[server.id] for server in servers]
+
+
 def render_endpoint_table(results: list[EndpointResult]) -> None:
     from rich.console import Console
     from rich.table import Table
@@ -504,6 +564,24 @@ def websocket_test_many(
     if sys.stderr.isatty():
         print("\rdone.              ", file=sys.stderr)
     return [results[profile.id] for profile in profiles]
+
+
+def server_websocket_result(server) -> WebSocketResult:
+    """A server is a generic inbound proxy with no WebSocket path of its own.
+
+    WebSocket tests apply to profiles that use a WS transport; a server just
+    listens on a port, so there is nothing to handshake with.
+    """
+    host, port = server_endpoint(server)
+    return WebSocketResult(
+        profile_id=server.id,
+        name=server.name or server.id,
+        kind=f"server/{getattr(server, 'protocol', 'mixed')}",
+        host=host,
+        port=port,
+        not_testable=True,
+        error="servers are generic inbound proxies with no WebSocket path",
+    )
 
 
 def render_websocket_table(results: list[WebSocketResult]) -> None:

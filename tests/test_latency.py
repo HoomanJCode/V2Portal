@@ -257,6 +257,85 @@ def test_probe_many_returns_input_order(tmp_path, monkeypatch):
     assert [result.profile_id for result in results] == [a.id, b.id]
 
 
+def test_probe_server_targets_own_local_inbound(tmp_path, monkeypatch):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1081, protocol="mixed", listen="127.0.0.1"))
+
+    def fake_tcp(host, port, timeout=5.0):
+        return 3.0, "ok"
+
+    monkeypatch.setattr(latency, "_tcp_probe", fake_tcp)
+    monkeypatch.setattr(latency, "_icmp_probe", lambda host, timeout=3.0: (None, "blocked"))
+
+    result = latency.probe_server(server)
+
+    assert result.profile_id == server.id
+    assert result.name == "srv"
+    assert result.host == "127.0.0.1"
+    assert result.port == 1081
+    assert result.tcp_status == "ok"
+
+
+def test_probe_server_falls_back_to_loopback_for_any_listen(tmp_path, monkeypatch):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1082, protocol="socks", listen="0.0.0.0"))
+
+    monkeypatch.setattr(latency, "_tcp_probe", lambda host, port, timeout=5.0: (1.0, "ok"))
+    monkeypatch.setattr(latency, "_icmp_probe", lambda host, timeout=3.0: (None, "blocked"))
+
+    result = latency.probe_server(server)
+
+    assert result.host == "127.0.0.1"  # any-listen binds loopback too
+    assert result.port == 1082
+
+
+def test_probe_server_invalid_port_is_invalid(tmp_path):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=0, protocol="mixed"))
+
+    result = latency.probe_server(server)
+
+    assert result.tcp_status == "invalid"
+    assert result.port is None
+
+
+def test_probe_servers_returns_input_order(tmp_path, monkeypatch):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    a = store.add_server(Server(name="a", port=1081))
+    b = store.add_server(Server(name="b", port=1082))
+
+    def fake(server, timeout=5.0):
+        return latency.EndpointResult(profile_id=server.id, name=server.name, tcp_status="ok")
+
+    monkeypatch.setattr(latency, "probe_server", fake)
+    results = latency.probe_servers([a, b], concurrency=2)
+
+    assert [result.profile_id for result in results] == [a.id, b.id]
+
+
+def test_server_websocket_result_is_not_testable(tmp_path):
+    from v2raycli.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1081, protocol="mixed"))
+
+    result = latency.server_websocket_result(server)
+
+    assert result.not_testable is True
+    assert result.profile_id == server.id
+    assert result.error
+    assert result.host == "127.0.0.1"
+    assert result.port == 1081
+
+
 class FakeWebSocketSocket:
     def __init__(self, response=b""):
         self.response = response
