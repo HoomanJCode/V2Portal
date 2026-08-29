@@ -43,6 +43,7 @@ class EndpointResult:
     tcp_ms: float | None = None
     tcp_status: str = "not_testable"
     error: str | None = None
+    state: str = ""  # running | stopped | "" (profiles have no process state)
 
 
 @dataclass
@@ -272,16 +273,38 @@ def probe_servers(
 def render_endpoint_table(results: list[EndpointResult]) -> None:
     from rich.console import Console
     from rich.table import Table
+    from rich.text import Text
 
     table = Table(title="Endpoint probes")
-    for column in ("ID", "Name", "Endpoint", "ICMP", "TCP", "Status"):
+    show_state = any(result.state for result in results)
+    columns = ("ID", "Name", "Endpoint", "ICMP", "TCP", "Status")
+    if show_state:
+        columns = ("ID", "Name", "State", "Endpoint", "ICMP", "TCP", "Status")
+    for column in columns:
         table.add_column(column)
     for result in results:
         icmp = f"{result.icmp_ms:.0f} ms" if result.icmp_ms is not None else result.icmp_status
         tcp = f"{result.tcp_ms:.0f} ms" if result.tcp_ms is not None else result.tcp_status
-        status = "OK" if result.tcp_status == "ok" else (result.error or result.tcp_status)
-        style = "green" if result.tcp_status == "ok" else "red"
-        table.add_row(result.profile_id, result.name, f"{result.host}:{result.port or '-'}", icmp, tcp, status, style=style)
+        status = result.error or result.tcp_status
+        if result.tcp_status == "ok":
+            status = "OK"
+        status_cell = Text(status, style="green" if result.tcp_status == "ok" else "red")
+        if show_state:
+            if result.state == "running":
+                state_cell = Text("running", style="green")
+            elif result.state == "stopped":
+                state_cell = Text("stopped", style="dim red")
+            else:
+                state_cell = Text("-")
+            table.add_row(
+                result.profile_id, result.name, state_cell,
+                f"{result.host}:{result.port or '-'}", icmp, tcp, status_cell,
+            )
+        else:
+            table.add_row(
+                result.profile_id, result.name,
+                f"{result.host}:{result.port or '-'}", icmp, tcp, status_cell,
+            )
     Console().print(table)
 
 

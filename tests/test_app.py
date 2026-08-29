@@ -261,6 +261,50 @@ def test_probe_server_scope_probes_server_inbound_not_subprofiles(tmp_path, monk
     assert probed == [server.id]
 
 
+def test_probe_server_scope_attaches_running_state(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Server
+    from v2raycli import servers as servers_mod
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1081))
+
+    monkeypatch.setattr(
+        latency, "probe_servers",
+        lambda servers, concurrency=8, timeout=5.0: [
+            latency.EndpointResult(profile_id=s.id, name=s.name, tcp_status="ok") for s in servers
+        ],
+    )
+    captured: list = []
+    monkeypatch.setattr(latency, "render_endpoint_table", lambda results: captured.extend(results))
+    monkeypatch.setattr(servers_mod.ServerManager, "list_running", lambda self: [server.id])
+
+    assert app._probe(store, server.id) == 0
+    assert captured[0].state == "running"
+
+
+def test_probe_server_scope_attaches_stopped_state(tmp_path, monkeypatch):
+    from v2raycli.test import latency
+    from v2raycli.models import Server
+    from v2raycli import servers as servers_mod
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="srv", port=1081))
+
+    monkeypatch.setattr(
+        latency, "probe_servers",
+        lambda servers, concurrency=8, timeout=5.0: [
+            latency.EndpointResult(profile_id=s.id, name=s.name, tcp_status="refused") for s in servers
+        ],
+    )
+    captured: list = []
+    monkeypatch.setattr(latency, "render_endpoint_table", lambda results: captured.extend(results))
+    monkeypatch.setattr(servers_mod.ServerManager, "list_running", lambda self: [])
+
+    assert app._probe(store, server.id) == 1
+    assert captured[0].state == "stopped"
+
+
 def test_probe_server_scope_failure_exit_code(tmp_path, monkeypatch):
     from v2raycli.test import latency
     from v2raycli.models import Server

@@ -2759,6 +2759,16 @@ def _resolve_scope_servers(store: ConfigStore, scope: str) -> list:
     return servers
 
 
+def _attach_server_states(store: ConfigStore, results) -> None:
+    """Tag each server probe result with running/stopped process state."""
+    from .servers import ServerManager
+
+    mgr = ServerManager(store)
+    running_ids = set(mgr.list_running())
+    for result in results:
+        result.state = "running" if result.profile_id in running_ids else "stopped"
+
+
 def _resolve_test_scope(store: ConfigStore, scope: str):
     from .test.latency import select_profiles
 
@@ -2792,6 +2802,7 @@ def _probe(store: ConfigStore, scope: str) -> int:
     servers = _resolve_scope_servers(store, scope)
     if servers:
         results = probe_servers(servers)
+        _attach_server_states(store, results)
         render_endpoint_table(results)
         return 0 if all(result.tcp_status in {"ok", "not_testable"} for result in results) else 1
 
