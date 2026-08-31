@@ -132,11 +132,21 @@ def test_hysteria2_tuic_wireguard():
     assert w.kind == "wireguard"
     assert w.outbound["settings"]["secretKey"] == "k"
 
+    # URI format (v2rayNG compatible)
+    uri = "wireguard://myPrivateKey@1.2.3.4:51820?publickey=pk123&reserved=1,2,3&address=10.0.0.2/32&mtu=1280#wg-node"
+    w2 = decode_link(uri)
+    assert w2.kind == "wireguard"
+    assert w2.outbound["settings"]["secretKey"] == "myPrivateKey"
+    assert w2.outbound["settings"]["peers"][0]["publicKey"] == "pk123"
+    assert w2.outbound["settings"]["peers"][0]["endpoint"] == "1.2.3.4:51820"
+    assert w2.outbound["settings"]["address"] == ["10.0.0.2/32"]
+    assert w2.outbound["settings"]["mtu"] == 1280
+
 
 def test_wireguard_binary_payload_reports_clean_error():
     # base64 of raw binary that is not UTF-8 text (corrupt subscription link)
     payload = base64.b64encode(b"7P\xa1'>\xa6\xd0\xc0A\x11\x9f\xe0\xcd\xbf\x8f8<V").decode()
-    with pytest.raises(ShareLinkError, match="not valid base64-encoded JSON"):
+    with pytest.raises(ShareLinkError, match="not valid base64-encoded JSON or URI format"):
         decode_link("wireguard://" + payload)
 
 
