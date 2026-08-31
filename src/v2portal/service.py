@@ -6,8 +6,10 @@ launching ``v2portal server start --all`` on boot:
 - **Linux** — a systemd *user* unit under
   ``$XDG_CONFIG_HOME/systemd/user`` (or ``~/.config/systemd/user``).
 - **Termux** — a ``termux-services`` run script under ``~/.termux/sv/v2portal``.
+- **macOS** — a launchd *user* plist under
+  ``~/Library/LaunchAgents/``.
 
-Other platforms (Windows, macOS) are not supported and raise.
+Windows is not supported and raises.
 """
 
 from __future__ import annotations
@@ -23,13 +25,15 @@ _log = logging.getLogger(__name__)
 
 
 def platform() -> str:
-    """Detect the run environment: ``linux``, ``termux``, or ``sys.platform``."""
+    """Detect the run environment: ``linux``, ``termux``, ``darwin``, or ``sys.platform``."""
     if os.environ.get("PREFIX") and os.environ.get("TERMUX_VERSION"):
         return "termux"
     if sys.platform == "win32":
         return "windows"
     if sys.platform.startswith("linux"):
         return "linux"
+    if sys.platform == "darwin":
+        return "darwin"
     return sys.platform
 
 
@@ -66,6 +70,42 @@ def build_termux_run_script(config_dir: str | None = None) -> str:
     return "#!/data/data/com.termux/files/usr/bin/sh\n" f"exec {_cmdline(config_dir)}\n"
 
 
+def build_launchd_plist(config_dir: str | None = None) -> str:
+    """Return the XML content of a macOS launchd user plist."""
+    argv = [sys.executable, "-m", "v2portal", "server", "start", "--all"]
+    if config_dir:
+        argv += ["--config-dir", config_dir]
+    log_dir = Path.home() / "Library" / "Logs"
+    args_xml = ''.join(f'    <string>{arg}</string>\n' for arg in argv)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0">\n'
+        '<dict>\n'
+        '  <key>Label</key>\n'
+        f'  <string>{SERVICE_NAME}</string>\n'
+        '  <key>ProgramArguments</key>\n'
+        '  <array>\n'
+        + args_xml
+        + '  </array>\n'
+        '  <key>RunAtLoad</key>\n'
+        '  <true/>\n'
+        '  <key>KeepAlive</key>\n'
+        '  <true/>\n'
+        '  <key>StandardOutPath</key>\n'
+        f'  <string>{log_dir}/{SERVICE_NAME}.stdout.log</string>\n'
+        '  <key>StandardErrorPath</key>\n'
+        f'  <string>{log_dir}/{SERVICE_NAME}.stderr.log</string>\n'
+        '</dict>\n'
+        '</plist>\n'
+    )
+
+
+def launchd_plist_dir() -> Path:
+    return Path.home() / "Library" / "LaunchAgents"
+
+
 def systemd_unit_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "systemd" / "user"
@@ -92,6 +132,11 @@ def install_service(config_dir: str | None = None) -> Path:
         target.write_text(build_termux_run_script(config_dir), encoding="utf-8")
         target.chmod(0o700)
         return target
+    if plat == "darwin":
+        target = launchd_plist_dir() / f"{SERVICE_NAME}.plist"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(build_launchd_plist(config_dir), encoding="utf-8")
+        return target
     raise RuntimeError(f"service install not supported on {plat}")
 
 
@@ -103,6 +148,8 @@ def uninstall_service() -> Path | None:
         candidates.append(systemd_unit_dir() / f"{SERVICE_NAME}.service")
     elif plat == "termux":
         candidates.append(termux_service_dir() / "run")
+    elif plat == "darwin":
+        candidates.append(launchd_plist_dir() / f"{SERVICE_NAME}.plist")
     removed = None
     for path in candidates:
         if path.exists():

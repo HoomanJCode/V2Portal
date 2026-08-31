@@ -2646,6 +2646,8 @@ def _install_service(store: ConfigStore, config_dir: str | None) -> int:
         print("enable with: systemctl --user enable --now v2portal")
     elif service.platform() == "termux":
         print("enable with: sv-enable v2portal")
+    elif service.platform() == "darwin":
+        print("load with: launchctl load ~/Library/LaunchAgents/v2portal.plist")
     return 0
 
 
