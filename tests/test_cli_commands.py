@@ -17,6 +17,16 @@ def _store(tmp_path):
     return store
 
 
+def _patch_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(app.config, "CONFIG_PATH", tmp_path / "config.json")
+    monkeypatch.setattr(app.config, "BACKUP_DIR", tmp_path / "backup")
+    monkeypatch.setattr(app.config, "RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(app.config, "BIN_DIR", tmp_path / "bin")
+    monkeypatch.setattr(app.config, "GEO_DIR", tmp_path / "geo")
+    monkeypatch.setattr(app.config, "ensure_dirs", lambda: None)
+    monkeypatch.setattr(app, "_tui_available", lambda: (_ for _ in ()).throw(AssertionError("TUI invoked")))
+
+
 def test_parser_exposes_command_tree():
     args = app.build_parser().parse_args(["profile", "list", "--json"])
     assert args.command == "profile"
@@ -54,35 +64,37 @@ def test_profile_add_list_rename_remove_are_non_interactive(tmp_path, capsys):
     assert store.get_profile(profile.id) is None
 
 
-def test_profile_add_link_from_share_link(tmp_path, capsys):
-    """profile add link auto-extracts the name from the share link fragment."""
-    store = _store(tmp_path)
+def test_profile_add_link_direct(tmp_path, monkeypatch):
+    """profile add <link> auto-extracts the name from the share link fragment."""
+    _patch_config(tmp_path, monkeypatch)
     link = "vless://00000000-0000-0000-0000-000000000001@1.2.3.4:443?security=tcp#my-node"
-    args = app.build_parser().parse_args(["profile", "add", "link", link])
-    assert app._profile_command(store, args) == 0
+    assert app.main(["--no-auto-update", "profile", "add", link]) == 0
+    store = _store(tmp_path)
     profiles = store.config.profiles
     assert len(profiles) == 1
     assert profiles[0].name == "my-node"
     assert profiles[0].kind == "vless"
 
 
-def test_profile_add_link_with_name_override(tmp_path, capsys):
-    """profile add link --name overrides the extracted name."""
-    store = _store(tmp_path)
+def test_profile_add_link_with_name_override(tmp_path, monkeypatch):
+    """profile add <link> --name overrides the extracted name."""
+    _patch_config(tmp_path, monkeypatch)
     link = "vless://00000000-0000-0000-0000-000000000001@1.2.3.4:443?security=tcp#my-node"
-    args = app.build_parser().parse_args(["profile", "add", "link", link, "--name", "US proxy"])
-    assert app._profile_command(store, args) == 0
+    assert app.main(["--no-auto-update", "profile", "add", link, "--name", "US proxy"]) == 0
+    store = _store(tmp_path)
     profiles = store.config.profiles
     assert len(profiles) == 1
     assert profiles[0].name == "US proxy"
     assert profiles[0].kind == "vless"
 
 
-def test_profile_add_link_invalid_returns_error(tmp_path, capsys):
-    """profile add link rejects an invalid link."""
+def test_profile_add_link_invalid_returns_error(tmp_path, monkeypatch):
+    """profile add <invalid> is rejected by argparse (not a known type)."""
+    _patch_config(tmp_path, monkeypatch)
+    with pytest.raises(SystemExit) as exc_info:
+        app.main(["--no-auto-update", "profile", "add", "not-a-link"])
+    assert exc_info.value.code == 2
     store = _store(tmp_path)
-    args = app.build_parser().parse_args(["profile", "add", "link", "not-a-link"])
-    assert app._profile_command(store, args) == 1
     assert store.config.profiles == []
 
 
