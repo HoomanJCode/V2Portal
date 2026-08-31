@@ -68,7 +68,7 @@ def test_cli_launches_and_exits_on_pty(tmp_path):
         "PYTHONPATH": str(src) + os.pathsep + os.environ.get("PYTHONPATH", ""),
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "v2raycli", "--config-dir", str(tmp_path), "--no-auto-update"],
+        [sys.executable, "-m", "v2portal", "--config-dir", str(tmp_path), "--no-auto-update"],
         stdin=slave,
         stdout=slave,
         stderr=slave,
