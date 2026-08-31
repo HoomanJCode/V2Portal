@@ -54,7 +54,7 @@ def _resolve_group_engine(
         if len(required) > 1:
             raise ValueError("a group cannot mix profiles that need different engines")
         engine = required.pop() if required else default
-        if strategy == "leastLoad":
+        if strategy in ("leastLoad", "random", "roundRobin"):
             engine = XRAY
     _assert_engine_compatible(profiles, engine)
     if strategy and not strategy_supported(engine, strategy):

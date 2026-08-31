@@ -272,7 +272,7 @@ class SingBoxAdapter(EngineAdapter):
     supported_kinds = frozenset(
         {"vmess", "vless", "trojan", "ss", "socks", "http", "wireguard", "hysteria2", "tuic"}
     )
-    supported_strategies = frozenset({"latency", "random", "roundRobin"})
+    supported_strategies = frozenset({"latency"})
 
     def generate(self, settings: "Settings", routing: "RoutingConfig", target: "Target") -> dict:
         _validate_settings(settings)
