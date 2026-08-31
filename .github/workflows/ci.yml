@@ -62,15 +62,12 @@ jobs:
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
           echo "Tag version: $TAG"
 
-      - name: Verify version matches pyproject.toml
+      - name: Set version in pyproject.toml from tag
         run: |
-          PKG_VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           TAG_VERSION="${{ steps.version.outputs.version }}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "ERROR: tag version ($TAG_VERSION) does not match pyproject.toml ($PKG_VERSION)"
-            exit 1
-          fi
-          echo "Version verified: $PKG_VERSION"
+          sed -i "s/^version = \".*\"/version = \"${TAG_VERSION}\"/" pyproject.toml
+          echo "Set pyproject.toml version to $TAG_VERSION"
+          grep '^version' pyproject.toml | head -1
 
       - name: Generate changelog
         id: changelog
