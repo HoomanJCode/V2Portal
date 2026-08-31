@@ -36,16 +36,25 @@ Runs on **Linux**, **Windows**, and **Termux (Android)**.
 
 ## Install
 
-### pip (Linux / macOS / Termux)
+### PyPI (recommended)
 
 ```bash
-pip install .
+pip install v2portal
+# or, with pipx (handles PATH automatically):
+pipx install v2portal
+```
+
+### From source
+
+```bash
+pip install git+https://github.com/HoomanJCode/V2Portal.git
 # or, for development:
-pip install -e .[dev]
+git clone https://github.com/HoomanJCode/V2Portal.git
+pip install -e "V2Portal[dev]"
 ```
 
 > **Tip:** If the `v2portal` command is not found after install, use
-> `python -m v2portal` as a fallback, or install with `pipx install .`
+> `python -m v2portal` as a fallback, or install with `pipx install v2portal`
 > (install pipx first: `pip install pipx`). `pipx` handles PATH setup
 > automatically.
 
@@ -53,7 +62,7 @@ pip install -e .[dev]
 
 ```bash
 pkg update && pkg install python
-pip install .
+pip install v2portal
 ```
 
 The engine binaries (sing-box / xray) download automatically to
@@ -65,7 +74,7 @@ The engine binaries (sing-box / xray) download automatically to
 ### Windows
 
 ```bash
-pip install .
+pip install v2portal
 ```
 
 After installing, the `v2portal` command is placed in Python's `Scripts`
@@ -446,14 +455,15 @@ Config is JSON at `<config-dir>/config.json`. Derived dirs under the same base:
 ## Development
 
 ```bash
-pip install -e .[dev]
+git clone https://github.com/HoomanJCode/V2Portal.git
+pip install -e "V2Portal[dev]"
 pytest
 python scripts/verify_acceptance.py --json
 ```
 
-GitHub Actions runs the pytest suite and the credential-free acceptance smoke
-on Python 3.10, 3.11, and 3.12 for pushes and pull requests. Live engine,
-remote-node, and platform walkthroughs remain separate from CI.
+GitHub Actions runs the pytest suite on Ubuntu and Windows (Python 3.12)
+for pushes and pull requests. Live engine, remote-node, and platform
+walkthroughs remain separate from CI.
 
 Read-only platform diagnostics (does not load or modify the config, download
 binaries, or start processes):

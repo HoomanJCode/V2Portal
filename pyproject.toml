@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "v2portal"
 version = "0.1.1"
 description = "Interactive v2ray CLI client (sing-box + xray-core) with subscriptions, groups, and split routing"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "prompt_toolkit>=3.0",
