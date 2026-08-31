@@ -265,7 +265,7 @@ class ServerManager:
             # over the healthy nodes (failover enabled).
             healthy = self._probe_healthy(target)
             if server.failover >= 0:
-                timeout = server.failover or self.DEFAULT_FAILOVER_TIMEOUT
+                timeout = server.failover or DEFAULT_FAILOVER_TIMEOUT
                 if timeout <= 0:
                     raise ValueError("failover timeout must be a positive number of seconds")
                 target = self._failover_target(target, healthy, timeout)
