@@ -160,19 +160,18 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     profile_add = profile_commands.add_parser(
         "add",
-        help="add a new profile (link or type below)",
+        help="add a new profile (pick a type below)",
         description=(
-            "Add a profile. You can paste a share link directly, or pick\n"
-            "a type for manual entry.\n\n"
-            "Supported types: share, raw, socks, http, wireguard, hysteria2,\n"
+            "Add a profile by type. Each type has its own required arguments.\n\n"
+            "Supported types: link, share, raw, socks, http, wireguard, hysteria2,\n"
             "tuic, openvpn, openconnect, server.\n\n"
             "Examples:\n"
-            "  v2portal profile add 'vless://uuid@host:443?...#name'\n"
-            "  v2portal profile add 'vmess://...' --name 'US proxy'\n"
+            "  v2portal profile add link 'vless://uuid@host:443?...#name'\n"
             "  v2portal profile add socks office 127.0.0.1 1080\n"
+            "  v2portal profile add socks office 127.0.0.1 1080 --username u --password p\n"
             "  v2portal profile add share us 'vless://...'\n"
             "  v2portal profile add http proxy 10.0.0.1 8080\n"
-            "  v2portal profile add server via-server SERVER_ID"
+            "  v2portal profile add server via-server SERVER_ID  # socks/http profile on localhost"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -193,7 +192,23 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     share.add_argument("name", help="display name for this profile")
     share.add_argument("link", help="the full share link string")
 
-
+    link = profile_add_commands.add_parser(
+        "link",
+        help="add a profile by pasting a share link (auto-detects name)",
+        description=(
+            "Paste a share link and add it as a profile. The name is\n"
+            "auto-extracted from the link (fragment #name or vmess ps field).\n"
+            "Optionally override with --name.\n\n"
+            "Supported schemes: vmess, vless, trojan, ss, hysteria2, tuic,\n"
+            "wireguard, socks, http.\n\n"
+            "Examples:\n"
+            "  v2portal profile add link 'vless://uuid@host:443?...#my-node'\n"
+            "  v2portal profile add link 'vmess://...' --name 'US proxy'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    link.add_argument("link", help="the full share link string")
+    link.add_argument("--name", help="override the display name (default: extracted from link)")
 
     raw = profile_add_commands.add_parser(
         "raw",
@@ -1329,77 +1344,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_remove.add_argument("id", help="server ID to remove")
 
 
-_LINK_SCHEMES = (
-    "vmess://", "vless://", "trojan://", "ss://", "ssr://",
-    "hysteria2://", "tuic://", "wireguard://", "socks://", "http://",
-)
-
-
-def _rewrite_link_argv(argv: list[str]) -> list[str]:
-    """If ``profile add <link>```, rewrite to ``profile add share <name> <link>``."""
-    if argv is None:
-        return argv
-    try:
-        profile_idx = None
-        for i, a in enumerate(argv):
-            if a in ("profile", "profiles"):
-                profile_idx = i
-                break
-        if profile_idx is None:
-            return argv
-        # Find 'add' after 'profile'
-        add_idx = None
-        for i in range(profile_idx + 1, len(argv)):
-            if argv[i] == "add":
-                add_idx = i
-                break
-            if not argv[i].startswith("-"):
-                break  # hit a subcommand that isn't 'add'
-        if add_idx is None:
-            return argv
-        # What comes after 'add'?
-        rest = argv[add_idx + 1 :]
-        # Skip leading flags (--name, etc.) to find the first positional
-        first_pos = None
-        first_pos_idx = None
-        for i, a in enumerate(rest):
-            if a.startswith("-"):
-                continue
-            first_pos = a
-            first_pos_idx = i
-            break
-        if first_pos is None:
-            return argv
-        # If the first positional looks like a share link, rewrite
-        if any(first_pos.startswith(s) for s in _LINK_SCHEMES):
-            from .subs.share import decode_link
-            try:
-                profile = decode_link(first_pos)
-            except Exception:
-                return argv  # let argparse handle the error
-            name = profile.name or "imported"
-            # Check for --name override in the remaining args
-            for i, a in enumerate(rest):
-                if a == "--name" and i + 1 < len(rest):
-                    name = rest[i + 1]
-                    break
-            new_argv = argv[:add_idx + 1] + ["share", name, first_pos]
-            # Append any remaining flags after the link
-            if first_pos_idx is not None:
-                for a in rest[first_pos_idx + 1 :]:
-                    if a.startswith("--name"):
-                        continue  # already handled
-                    if a == name:
-                        continue  # skip the name we already consumed
-                    new_argv.append(a)
-            return new_argv
-    except Exception:  # noqa: BLE001
-        pass
-    return argv
-
-
 def main(argv: list[str] | None = None) -> int:
-    argv = _rewrite_link_argv(argv)
     args = build_parser().parse_args(argv)
 
     if args.config_dir:
@@ -1650,6 +1595,14 @@ def _profile_add_command(store: ConfigStore, args) -> int:
             print(f"invalid share link: {exc}", file=sys.stderr)
             return 1
         profile.name = args.name or profile.name
+    elif kind == "link":
+        try:
+            profile = decode_link(args.link)
+        except ShareLinkError as exc:
+            print(f"invalid share link: {exc}", file=sys.stderr)
+            return 1
+        if args.name:
+            profile.name = args.name
     elif kind == "raw":
         try:
             source = Path(args.source)
