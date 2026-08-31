@@ -121,10 +121,12 @@ def test_download_accepts_explicit_proxy(tmp_path, monkeypatch):
     captured = {}
 
     class Response:
+        headers = {"content-length": "7"}
+
         def raise_for_status(self):
             return None
 
-        def iter_bytes(self):
+        def iter_bytes(self, chunk_size=None):
             return [b"archive"]
 
     class Stream:

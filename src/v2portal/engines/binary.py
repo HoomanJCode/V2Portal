@@ -14,6 +14,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 from .. import config
 from ..errors import V2RayCLIError
@@ -175,9 +184,20 @@ def download_binary(
         with httpx.Client(**client_options) as client:
             with client.stream("GET", url) as resp:
                 resp.raise_for_status()
-                with open(archive_path, "wb") as fh:
-                    for chunk in resp.iter_bytes():
+                total = int(resp.headers.get("content-length", 0)) or None
+                progress = Progress(
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(),
+                    DownloadColumn(),
+                    TransferSpeedColumn(),
+                    TimeRemainingColumn(),
+                    console=Console(stderr=True),
+                )
+                task = progress.add_task(f"Downloading {engine}", total=total)
+                with progress, open(archive_path, "wb") as fh:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
                         fh.write(chunk)
+                        progress.advance(task, len(chunk))
     except (httpx.HTTPError, OSError) as exc:
         archive_path.unlink(missing_ok=True)
         raise BinaryError(f"download failed: {exc}") from exc
