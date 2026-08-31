@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from v2raycli.engines.binary import (
+from v2portal.engines.binary import (
     BinaryError,
     _extract,
     _latest_tag,
@@ -32,13 +32,13 @@ def test_release_asset_mapping():
 
 
 def test_effective_platform_android(monkeypatch):
-    monkeypatch.setattr("v2raycli.engines.binary.is_android", lambda: True)
+    monkeypatch.setattr("v2portal.engines.binary.is_android", lambda: True)
     assert effective_platform("sing-box", "linux") == "android"
     assert effective_platform("xray", "linux") == "linux"
 
 
 def test_effective_platform_not_android(monkeypatch):
-    monkeypatch.setattr("v2raycli.engines.binary.is_android", lambda: False)
+    monkeypatch.setattr("v2portal.engines.binary.is_android", lambda: False)
     assert effective_platform("sing-box", "linux") == "linux"
 
 
@@ -56,7 +56,7 @@ def test_locate_rejects_malformed_options(tmp_path):
 
 
 def test_download_rejects_unsafe_release_tag(tmp_path):
-    from v2raycli.engines.binary import download_binary
+    from v2portal.engines.binary import download_binary
 
     with pytest.raises(BinaryError, match="safe text tag"):
         download_binary("xray", "../bad", "linux", "amd64", bin_dir=tmp_path)
@@ -83,7 +83,7 @@ def test_latest_tag_requires_release_metadata(monkeypatch):
         def get(self, url, headers):
             return FakeResponse()
 
-    monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", FakeClient)
+    monkeypatch.setattr("v2portal.engines.binary.httpx.Client", FakeClient)
     with pytest.raises(BinaryError, match="missing tag_name"):
         _latest_tag("example/repo")
 
@@ -111,7 +111,7 @@ def test_latest_tag_accepts_explicit_proxy(monkeypatch):
         def get(self, url, headers):
             return Response()
 
-    monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", Client)
+    monkeypatch.setattr("v2portal.engines.binary.httpx.Client", Client)
 
     assert _latest_tag("example/repo", proxy="socks5://proxy.example:1080") == "v1.2.3"
     assert captured["proxy"] == "socks5://proxy.example:1080"
@@ -150,8 +150,8 @@ def test_download_accepts_explicit_proxy(tmp_path, monkeypatch):
     def fake_extract(archive, dest, kind, binary_name):
         (dest / binary_name).write_bytes(b"binary")
 
-    monkeypatch.setattr("v2raycli.engines.binary.httpx.Client", Client)
-    monkeypatch.setattr("v2raycli.engines.binary._extract", fake_extract)
+    monkeypatch.setattr("v2portal.engines.binary.httpx.Client", Client)
+    monkeypatch.setattr("v2portal.engines.binary._extract", fake_extract)
 
     binary = download_binary(
         "xray", "v1.2.3", "linux", "amd64", bin_dir=tmp_path,
@@ -203,7 +203,7 @@ def test_update_rejects_custom_and_running_engines(tmp_path):
 
 
 def test_update_forwards_ephemeral_proxy(tmp_path, monkeypatch):
-    from v2raycli.engines import binary
+    from v2portal.engines import binary
 
     captured = {}
 
@@ -227,7 +227,7 @@ def test_update_forwards_ephemeral_proxy(tmp_path, monkeypatch):
 
 
 def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
-    from v2raycli.engines import binary
+    from v2portal.engines import binary
 
     binary_name = "xray.exe" if sys.platform == "win32" else "xray"
 
@@ -248,7 +248,7 @@ def test_update_stages_verifies_and_replaces_auto_binary(tmp_path, monkeypatch):
 
 
 def test_update_rolls_back_when_replaced_binary_fails_verification(tmp_path, monkeypatch):
-    from v2raycli.engines import binary
+    from v2portal.engines import binary
 
     binary_name = "xray.exe" if sys.platform == "win32" else "xray"
     target = tmp_path / binary_name

@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from v2raycli.diagnostics import platform_report
+from v2portal.diagnostics import platform_report
 
 
 def main(argv: list[str] | None = None) -> int:

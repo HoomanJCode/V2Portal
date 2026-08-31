@@ -1,9 +1,9 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from v2raycli.models import Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.subs.health import check_subscriptions, human_bytes, parse_iso, subscription_status
+from v2portal.models import Subscription
+from v2portal.storage import ConfigStore
+from v2portal.subs.health import check_subscriptions, human_bytes, parse_iso, subscription_status
 
 
 def test_human_bytes():
@@ -60,7 +60,7 @@ def test_check_subscriptions_skips_disabled(tmp_path):
 
 
 def test_health_flag(tmp_path, capsys):
-    from v2raycli import app
+    from v2portal import app
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -74,7 +74,7 @@ def test_health_flag(tmp_path, capsys):
 
 
 def test_health_flag_no_subs(tmp_path, capsys):
-    from v2raycli import app
+    from v2portal import app
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -83,7 +83,7 @@ def test_health_flag_no_subs(tmp_path, capsys):
 
 
 def test_health_check_warns(tmp_path, capsys):
-    from v2raycli import app
+    from v2portal import app
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()

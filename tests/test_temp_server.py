@@ -2,7 +2,7 @@
 
 import pytest
 
-from v2raycli.app import _parse_proxy_url
+from v2portal.app import _parse_proxy_url
 
 
 class TestParseProxyUrl:

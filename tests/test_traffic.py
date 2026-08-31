@@ -3,10 +3,10 @@ import json
 import httpx
 import pytest
 
-from v2raycli import traffic
-from v2raycli.connection import ConnectionController
-from v2raycli.models import Group, Profile, Settings
-from v2raycli.storage import ConfigStore
+from v2portal import traffic
+from v2portal.connection import ConnectionController
+from v2portal.models import Group, Profile, Settings
+from v2portal.storage import ConfigStore
 
 from conftest import make_fake_script
 

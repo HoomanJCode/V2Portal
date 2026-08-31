@@ -3,8 +3,8 @@ import re
 
 import pytest
 
-from v2raycli.models import Group, Profile, Subscription
-from v2raycli.storage import ConfigLoadError, ConfigStore
+from v2portal.models import Group, Profile, Subscription
+from v2portal.storage import ConfigLoadError, ConfigStore
 
 
 def test_first_run_creates_default(tmp_path):
@@ -124,7 +124,7 @@ def test_update_settings_and_engine(tmp_path):
 
 def test_remove_profile_cleans_routing_rules(tmp_path):
     """Routing rules targeting a deleted profile are removed."""
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -148,7 +148,7 @@ def test_remove_profile_cleans_routing_rules(tmp_path):
 
 def test_remove_group_cleans_routing_rules(tmp_path):
     """Routing rules targeting a deleted group are removed."""
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -167,7 +167,7 @@ def test_remove_group_cleans_routing_rules(tmp_path):
 
 def test_remove_profile_cleans_group_profile_ids_and_routing(tmp_path):
     """Removing a profile cleans it from groups and routing rules."""
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -208,7 +208,7 @@ def test_remove_group_prunes_nested_members(tmp_path):
 
 def test_remove_server_prunes_group_server_members(tmp_path):
     """Removing a server prunes it from groups that list it as a member."""
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = ConfigStore(tmp_path / "config.json")
     store.load()
@@ -235,7 +235,7 @@ def test_load_rejects_malformed_group_server_ids(tmp_path):
 
 
 def test_new_id_is_short_numeric():
-    from v2raycli.models import new_id
+    from v2portal.models import new_id
 
     ids = [new_id() for _ in range(5)]
     assert all(len(i) <= 4 for i in ids)
@@ -260,7 +260,7 @@ def test_store_next_id_is_sequential(tmp_path):
 
 def test_migrate_v2_uuid_ids_to_v3_numeric(tmp_path):
     """A v2 config with UUID ids is migrated to v3 with short numeric ids."""
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     path = tmp_path / "config.json"
     sub_id = "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb"

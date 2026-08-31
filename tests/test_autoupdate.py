@@ -2,10 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from v2raycli.models import Profile, Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.subs import parser
-from v2raycli.subs.parser import auto_update_subscriptions, is_stale
+from v2portal.models import Profile, Subscription
+from v2portal.storage import ConfigStore
+from v2portal.subs import parser
+from v2portal.subs.parser import auto_update_subscriptions, is_stale
 
 
 def _iso(dt):
@@ -97,7 +97,7 @@ def test_auto_update_saves_profiles(tmp_path, monkeypatch):
 
 
 def test_app_auto_update_flag(tmp_path, monkeypatch):
-    from v2raycli import app, config
+    from v2portal import app, config
 
     monkeypatch.setattr(config, "CONFIG_PATH", tmp_path / "config.json")
     monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")

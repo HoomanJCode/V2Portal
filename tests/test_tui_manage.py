@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli.models import Profile, Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.tui import manage
+from v2portal.models import Profile, Subscription
+from v2portal.storage import ConfigStore
+from v2portal.tui import manage
 
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -65,7 +65,7 @@ def test_manage_creates_balancer_and_chain(tmp_path, monkeypatch):
 
 def test_subscriptions_table_renders_health(tmp_path, monkeypatch, capsys):
     store = _store(tmp_path)
-    from v2raycli.models import Subscription
+    from v2portal.models import Subscription
 
     store.add_subscription(Subscription(name="fresh", url="paste://x", last_updated="2024-01-01T00:00:00+00:00"))
     store.add_subscription(Subscription(name="stale", url="paste://x"))

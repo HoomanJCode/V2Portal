@@ -1,4 +1,4 @@
-from v2raycli import diagnostics, runner
+from v2portal import diagnostics, runner
 
 
 def test_platform_report_is_read_only_and_structured(monkeypatch, tmp_path):

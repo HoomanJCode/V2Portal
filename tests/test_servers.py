@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from v2raycli import app
-from v2raycli.models import Group, Profile, Server, Subscription
-from v2raycli.servers import ServerManager, ServerState, _check_stderr_for_errors
-from v2raycli.storage import ConfigStore
+from v2portal import app
+from v2portal.models import Group, Profile, Server, Subscription
+from v2portal.servers import ServerManager, ServerState, _check_stderr_for_errors
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -157,7 +157,7 @@ def test_server_list_shows_outbound_id(tmp_path, capsys):
 
 
 def test_server_list_resolves_balancer_group(tmp_path, capsys, monkeypatch):
-    from v2raycli.models import Group
+    from v2portal.models import Group
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="US proxy", kind="socks", outbound=SOCKS))
@@ -171,7 +171,7 @@ def test_server_list_resolves_balancer_group(tmp_path, capsys, monkeypatch):
     store.save()
 
     # Simulate a running engine reporting the most recent active outbound.
-    from v2raycli import traffic
+    from v2portal import traffic
     monkeypatch.setattr(
         traffic, "read_active_outbound", lambda host, port, timeout=3.0: p2.id
     )
@@ -252,7 +252,7 @@ def test_server_state_tracking(tmp_path):
 
 def test_server_config_includes_split_routing_targets(tmp_path):
     """Server config generation enriches the target with routing extras."""
-    from v2raycli.models import Group, RoutingConfig, RoutingRule
+    from v2portal.models import Group, RoutingConfig, RoutingRule
 
     store = _store(tmp_path)
     main = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
@@ -282,7 +282,7 @@ def test_server_config_includes_split_routing_targets(tmp_path):
 
 def test_server_config_with_balancer_routing_target(tmp_path):
     """Server config includes balancer group constructs from routing rules."""
-    from v2raycli.models import Group, RoutingConfig, RoutingRule
+    from v2portal.models import Group, RoutingConfig, RoutingRule
 
     store = _store(tmp_path)
     main = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
@@ -313,7 +313,7 @@ def test_server_config_with_balancer_routing_target(tmp_path):
 
 
 def _probe_result(profile, tcp_ms, tcp_status="ok"):
-    from v2raycli.test.latency import EndpointResult
+    from v2portal.test.latency import EndpointResult
 
     return EndpointResult(profile_id=profile.id, name=profile.name, tcp_ms=tcp_ms, tcp_status=tcp_status)
 
@@ -321,8 +321,8 @@ def _probe_result(profile, tcp_ms, tcp_status="ok"):
 def test_balancer_server_pins_to_fastest_reachable_endpoint(tmp_path, monkeypatch):
     """Starting a balancer server pins to the lowest-TCP-delay reachable node
     and drops dead endpoints."""
-    from v2raycli import servers as servers_module
-    from v2raycli.test import latency
+    from v2portal import servers as servers_module
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     fast = store.add_profile(Profile(name="fast", kind="socks", outbound=SOCKS))
@@ -356,7 +356,7 @@ def test_balancer_server_pins_to_fastest_reachable_endpoint(tmp_path, monkeypatc
 
 
 def test_balancer_server_start_fails_when_all_endpoints_dead(tmp_path, monkeypatch):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
@@ -381,7 +381,7 @@ def test_balancer_server_start_fails_when_all_endpoints_dead(tmp_path, monkeypat
 def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
     """Failover-enabled server keeps a health-checked balancer over healthy
     nodes (fastest first) instead of pinning to one."""
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     fast = store.add_profile(Profile(name="fast", kind="socks", outbound=SOCKS))
@@ -417,7 +417,7 @@ def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
 
 
 def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     a = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
@@ -565,7 +565,7 @@ def test_server_start_reports_immediate_crash(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
     # Patch locate_binary to skip download
     monkeypatch.setattr(
-        "v2raycli.engines.binary.locate_binary",
+        "v2portal.engines.binary.locate_binary",
         lambda engine, opts: tmp_path / "fake-bin",
     )
 
@@ -612,7 +612,7 @@ def test_server_edit_switch_profile(tmp_path, capsys):
 
 
 def test_server_edit_switch_to_direct(tmp_path, capsys):
-    from v2raycli.models import Group
+    from v2portal.models import Group
 
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
@@ -756,7 +756,7 @@ def test_server_edit_allows_valid_chain(tmp_path, capsys):
 
 
 def test_resolve_server_outbound_builds_socks_hop(tmp_path):
-    from v2raycli.outbounds.groups import resolve_outbound
+    from v2portal.outbounds.groups import resolve_outbound
 
     store = _store(tmp_path)
     target = store.add_server(
@@ -775,7 +775,7 @@ def test_resolve_server_outbound_builds_socks_hop(tmp_path):
 
 
 def test_resolve_server_outbound_http_protocol(tmp_path):
-    from v2raycli.outbounds.groups import resolve_outbound
+    from v2portal.outbounds.groups import resolve_outbound
 
     store = _store(tmp_path)
     target = store.add_server(Server(name="web", port=3128, protocol="http"))
@@ -785,7 +785,7 @@ def test_resolve_server_outbound_http_protocol(tmp_path):
 
 
 def test_resolve_server_outbound_includes_auth(tmp_path):
-    from v2raycli.outbounds.groups import resolve_outbound
+    from v2portal.outbounds.groups import resolve_outbound
 
     store = _store(tmp_path)
     target = store.add_server(Server(
@@ -799,7 +799,7 @@ def test_resolve_server_outbound_includes_auth(tmp_path):
 
 
 def test_resolve_server_outbound_rejects_cycle(tmp_path):
-    from v2raycli.outbounds.groups import resolve_outbound
+    from v2portal.outbounds.groups import resolve_outbound
 
     store = _store(tmp_path)
     a = store.add_server(Server(name="a", port=1080))

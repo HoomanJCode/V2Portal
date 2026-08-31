@@ -1,7 +1,7 @@
 import pytest
 
-from v2raycli.models import Profile
-from v2raycli.outbounds.vpn import (
+from v2portal.models import Profile
+from v2portal.outbounds.vpn import (
     add_openconnect,
     add_openvpn,
     detect_clients,

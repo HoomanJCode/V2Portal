@@ -1,5 +1,5 @@
-from v2raycli import runner
-from v2raycli.runner import Proc
+from v2portal import runner
+from v2portal.runner import Proc
 
 from conftest import make_fake_script
 

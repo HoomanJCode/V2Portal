@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from v2raycli.models import Group
-from v2raycli.storage import ConfigStore
-from v2raycli.subs.parser import _userinfo, import_subscription, parse_payload, update_subscription
+from v2portal.models import Group
+from v2portal.storage import ConfigStore
+from v2portal.subs.parser import _userinfo, import_subscription, parse_payload, update_subscription
 
 
 FIXTURE_LINKS = [

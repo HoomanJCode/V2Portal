@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from v2raycli import backup, config
-from v2raycli.models import Profile, RoutingRule
-from v2raycli.storage import ConfigStore
+from v2portal import backup, config
+from v2portal.models import Profile, RoutingRule
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 

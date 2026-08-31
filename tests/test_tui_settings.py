@@ -4,9 +4,9 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli.engines.binary import BinaryError, UpdateInfo
-from v2raycli.storage import ConfigStore
-from v2raycli.tui import settings_screen
+from v2portal.engines.binary import BinaryError, UpdateInfo
+from v2portal.storage import ConfigStore
+from v2portal.tui import settings_screen
 
 
 def test_settings_can_toggle_lan_sharing(tmp_path, monkeypatch):

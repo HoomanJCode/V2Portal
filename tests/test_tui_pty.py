@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from v2raycli.models import Profile
-from v2raycli.storage import ConfigStore
+from v2portal.models import Profile
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 

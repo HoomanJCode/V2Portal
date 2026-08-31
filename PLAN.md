@@ -122,7 +122,7 @@ v2ray-cli/
 ├── AGENTS.md
 ├── todos/                       # phase docs + index (all phases complete)
 ├── scripts/                     # verify_acceptance / verify_engines / verify_platform
-├── src/v2raycli/
+├── src/v2portal/
 │   ├── __init__.py
 │   ├── __main__.py
 │   ├── app.py                   # CLI parser + command handlers

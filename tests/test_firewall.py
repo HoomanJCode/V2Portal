@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from v2raycli import firewall
+from v2portal import firewall
 
 
 def test_rule_display_name():
@@ -134,8 +134,8 @@ def test_list_rules_returns_list(monkeypatch):
 
 
 def test_firewall_command_not_on_windows(monkeypatch, tmp_path, capsys):
-    from v2raycli import app
-    from v2raycli.storage import ConfigStore
+    from v2portal import app
+    from v2portal.storage import ConfigStore
 
     monkeypatch.setattr("sys.platform", "linux")
     store = ConfigStore(tmp_path / "config.json")
@@ -147,8 +147,8 @@ def test_firewall_command_not_on_windows(monkeypatch, tmp_path, capsys):
 
 
 def test_firewall_command_list_no_rules(monkeypatch, tmp_path, capsys):
-    from v2raycli import app
-    from v2raycli.storage import ConfigStore
+    from v2portal import app
+    from v2portal.storage import ConfigStore
 
     monkeypatch.setattr("sys.platform", "win32")
     monkeypatch.setattr(firewall, "list_rules", lambda: [])
@@ -161,8 +161,8 @@ def test_firewall_command_list_no_rules(monkeypatch, tmp_path, capsys):
 
 
 def test_firewall_command_allow_both(monkeypatch, tmp_path, capsys):
-    from v2raycli import app
-    from v2raycli.storage import ConfigStore
+    from v2portal import app
+    from v2portal.storage import ConfigStore
 
     monkeypatch.setattr("sys.platform", "win32")
     store = ConfigStore(tmp_path / "config.json")
@@ -183,7 +183,7 @@ def test_firewall_command_allow_both(monkeypatch, tmp_path, capsys):
         call_log.append(engine)
         return f"rule added for {engine}"
 
-    monkeypatch.setattr("v2raycli.engines.binary.locate_binary", fake_locate)
+    monkeypatch.setattr("v2portal.engines.binary.locate_binary", fake_locate)
     monkeypatch.setattr(firewall, "add_rule", fake_add)
 
     args = app.build_parser().parse_args(["settings", "firewall", "allow", "both"])
@@ -196,8 +196,8 @@ def test_firewall_command_allow_both(monkeypatch, tmp_path, capsys):
 
 
 def test_firewall_command_remove(monkeypatch, tmp_path, capsys):
-    from v2raycli import app
-    from v2raycli.storage import ConfigStore
+    from v2portal import app
+    from v2portal.storage import ConfigStore
 
     monkeypatch.setattr("sys.platform", "win32")
     store = ConfigStore(tmp_path / "config.json")
@@ -206,7 +206,7 @@ def test_firewall_command_remove(monkeypatch, tmp_path, capsys):
     fake_binary = tmp_path / "sing-box.exe"
     fake_binary.write_bytes(b"fake")
 
-    monkeypatch.setattr("v2raycli.engines.binary.locate_binary", lambda engine, opts, **kw: fake_binary)
+    monkeypatch.setattr("v2portal.engines.binary.locate_binary", lambda engine, opts, **kw: fake_binary)
     monkeypatch.setattr(firewall, "remove_rule", lambda engine: f"rule removed for {engine}")
 
     args = app.build_parser().parse_args(["settings", "firewall", "remove", "sing-box"])
@@ -215,8 +215,8 @@ def test_firewall_command_remove(monkeypatch, tmp_path, capsys):
 
 
 def test_firewall_command_no_action_shows_usage(monkeypatch, tmp_path, capsys):
-    from v2raycli import app
-    from v2raycli.storage import ConfigStore
+    from v2portal import app
+    from v2portal.storage import ConfigStore
 
     monkeypatch.setattr("sys.platform", "win32")
     store = ConfigStore(tmp_path / "config.json")

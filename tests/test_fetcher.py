@@ -1,7 +1,7 @@
 import pytest
 
-from v2raycli.subs import fetcher
-from v2raycli.subs.fetcher import FetchError, fetch
+from v2portal.subs import fetcher
+from v2portal.subs.fetcher import FetchError, fetch
 
 
 def test_file_fetch(tmp_path):
@@ -109,7 +109,7 @@ def test_invalid_proxy_type_raises():
 
 
 def _store(tmp_path):
-    from v2raycli.storage import ConfigStore
+    from v2portal.storage import ConfigStore
 
     store = ConfigStore(tmp_path / "c.json")
     store.load()
@@ -131,7 +131,7 @@ def test_resolve_proxy_arg_url_passthrough(tmp_path):
 
 
 def test_resolve_proxy_arg_server_id(tmp_path):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="s", port=1081, protocol="mixed"))

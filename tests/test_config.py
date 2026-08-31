@@ -1,4 +1,4 @@
-from v2raycli import config
+from v2portal import config
 
 
 def test_windows_config_dir_fallback(monkeypatch, tmp_path):

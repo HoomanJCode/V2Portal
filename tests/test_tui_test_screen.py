@@ -2,10 +2,10 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli.models import Profile
-from v2raycli.storage import ConfigStore
-from v2raycli.test.latency import EndpointResult, TestResult, WebSocketResult
-from v2raycli.tui import test_screen
+from v2portal.models import Profile
+from v2portal.storage import ConfigStore
+from v2portal.test.latency import EndpointResult, TestResult, WebSocketResult
+from v2portal.tui import test_screen
 
 
 def test_interactive_test_saves_results(tmp_path, monkeypatch):

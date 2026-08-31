@@ -1,4 +1,4 @@
-from v2raycli.engines import AUTO, SINGBOX, XRAY, engine_for_kind, get_adapter, resolve_engine
+from v2portal.engines import AUTO, SINGBOX, XRAY, engine_for_kind, get_adapter, resolve_engine
 
 
 def test_engine_for_kind():

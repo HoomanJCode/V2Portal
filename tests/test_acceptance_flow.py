@@ -5,12 +5,12 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli import app, connection
-from v2raycli.models import Profile, RoutingConfig, Subscription
-from v2raycli.routing.rules import add_rule
-from v2raycli.storage import ConfigStore
-from v2raycli.test import latency
-from v2raycli.tui import manage
+from v2portal import app, connection
+from v2portal.models import Profile, RoutingConfig, Subscription
+from v2portal.routing.rules import add_rule
+from v2portal.storage import ConfigStore
+from v2portal.test import latency
+from v2portal.tui import manage
 
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -52,7 +52,7 @@ def _store(tmp_path):
 
 
 def test_mixed_subscription_nodes_fail_individually(tmp_path, monkeypatch):
-    from v2raycli.subs.parser import import_subscription
+    from v2portal.subs.parser import import_subscription
 
     path = tmp_path / "mixed.json"
     path.write_text(json.dumps(MIXED_JSON), encoding="utf-8")

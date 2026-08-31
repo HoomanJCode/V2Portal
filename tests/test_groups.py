@@ -1,8 +1,8 @@
 import pytest
 
-from v2raycli.models import Group, Profile, Server, Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.outbounds.groups import (
+from v2portal.models import Group, Profile, Server, Subscription
+from v2portal.storage import ConfigStore
+from v2portal.outbounds.groups import (
     classify_id,
     classify_ids,
     classify_refs,
@@ -15,7 +15,7 @@ from v2raycli.outbounds.groups import (
     server_profile,
     server_reaches_group,
 )
-from v2raycli.outbounds.vpn import add_openvpn
+from v2portal.outbounds.vpn import add_openvpn
 
 
 def _store(tmp_path):
@@ -198,7 +198,7 @@ def test_add_member(tmp_path):
     store, a, b = _store(tmp_path)
     g = Group(name="g", type="balancer", profile_ids=[a.id])
     store.add_group(g)
-    from v2raycli.outbounds.groups import add_member
+    from v2portal.outbounds.groups import add_member
 
     add_member(g, b.id)
     assert g.profile_ids == [a.id, b.id]
@@ -207,7 +207,7 @@ def test_add_member(tmp_path):
 def test_remove_member(tmp_path):
     store, a, b = _store(tmp_path)
     g = Group(name="g", type="balancer", profile_ids=[a.id, b.id])
-    from v2raycli.outbounds.groups import remove_member
+    from v2portal.outbounds.groups import remove_member
 
     remove_member(g, b.id)
     assert g.profile_ids == [a.id]
@@ -215,7 +215,7 @@ def test_remove_member(tmp_path):
 
 def test_subscription_membership(tmp_path):
     store, a, b = _store(tmp_path)
-    from v2raycli.models import Subscription
+    from v2portal.models import Subscription
 
     sub = store.add_subscription(Subscription(name="sub1", profile_ids=[b.id]))
     g = create_balancer_group("bal", "latency", [a.id], store, subscription_ids=[sub.id])

@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from v2raycli.models import Group, Profile, Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.outbounds.manual import (
+from v2portal.models import Group, Profile, Subscription
+from v2portal.storage import ConfigStore
+from v2portal.outbounds.manual import (
     add_hysteria2,
     add_http_proxy,
     add_manual_config,

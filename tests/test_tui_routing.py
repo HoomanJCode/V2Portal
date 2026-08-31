@@ -2,9 +2,9 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
-from v2raycli.storage import ConfigStore
-from v2raycli.tui import routing_screen
+from v2portal.models import Group, Profile, RoutingConfig, RoutingRule
+from v2portal.storage import ConfigStore
+from v2portal.tui import routing_screen
 
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -203,7 +203,7 @@ def test_resolve_target_name_group(tmp_path):
 
 
 def test_resolve_target_name_server(tmp_path):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="local", port=1081))
@@ -213,7 +213,7 @@ def test_resolve_target_name_server(tmp_path):
 
 
 def test_pick_target_includes_servers(tmp_path, monkeypatch):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="local", port=1081))

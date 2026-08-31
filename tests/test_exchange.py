@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from v2raycli import backup, exchange
-from v2raycli.models import Group, Profile, Subscription
-from v2raycli.storage import ConfigStore
+from v2portal import backup, exchange
+from v2portal.models import Group, Profile, Subscription
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -231,7 +231,7 @@ def test_share_link_export_matches_encode(tmp_path):
     path = tmp_path / "links.txt"
     links = exchange.export_share_links(store.list_profiles(), path)
 
-    from v2raycli.subs.share import encode_link
+    from v2portal.subs.share import encode_link
 
     assert links == [encode_link(socks), encode_link(vm)]
     assert path.read_text().splitlines() == links

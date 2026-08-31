@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from v2raycli.models import Group, Profile, Server, Subscription
-from v2raycli.outbounds.groups import resolve_refs, resolve_target
-from v2raycli.storage import ConfigStore
+from v2portal.models import Group, Profile, Server, Subscription
+from v2portal.outbounds.groups import resolve_refs, resolve_target
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -45,7 +45,7 @@ class _FakeServer:
 
 
 def _server_resolve(store, server):
-    from v2raycli.servers import ServerManager
+    from v2portal.servers import ServerManager
     return ServerManager(store).resolve_outbound_target(server)
 
 
@@ -126,7 +126,7 @@ def test_remove_subscription_prunes_group_and_server_errors_clearly(tmp_path):
     assert store.get_profile(ids[0]) is None  # profiles deleted
     assert group.subscription_ids == []
     # Server still references the removed subscription: clear error, not crash.
-    from v2raycli.outbounds.groups import resolve_outbound
+    from v2portal.outbounds.groups import resolve_outbound
     with pytest.raises(ValueError, match="unknown subscription id"):
         resolve_outbound(store, "subscription", sub.id)
 
@@ -139,7 +139,7 @@ def test_resolve_ref_entity_by_any_ref(tmp_path):
     sv = store.add_server(Server(name="local", port=1081))
     store.save()
 
-    from v2raycli.outbounds.groups import resolve_ref_entity
+    from v2portal.outbounds.groups import resolve_ref_entity
 
     assert resolve_ref_entity(store, p.id) is p
     assert resolve_ref_entity(store, sub.id) is sub

@@ -1,6 +1,6 @@
 import json
 
-from v2raycli.models import (
+from v2portal.models import (
     Config,
     Group,
     Profile,

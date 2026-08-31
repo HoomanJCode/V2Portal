@@ -1,9 +1,9 @@
 import pytest
 
-from v2raycli.engines import get_adapter
-from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
-from v2raycli.storage import ConfigStore
-from v2raycli.outbounds.groups import resolve_target
+from v2portal.engines import get_adapter
+from v2portal.models import Group, Profile, RoutingConfig, RoutingRule
+from v2portal.storage import ConfigStore
+from v2portal.outbounds.groups import resolve_target
 
 
 def _vmess(name="a"):
@@ -785,8 +785,8 @@ def test_manual_xray_outbound(tmp_path):
 # Split-routing to specific profiles / groups
 # ---------------------------------------------------------------------------
 
-from v2raycli.outbounds.groups import enrich_target_with_routing
-from v2raycli.models import RoutingConfig, RoutingRule
+from v2portal.outbounds.groups import enrich_target_with_routing
+from v2portal.models import RoutingConfig, RoutingRule
 
 
 def _generate_with_extras(store, selection, routing, default="sing-box"):
@@ -838,7 +838,7 @@ def test_enrich_target_adds_extra_group_and_members(tmp_path):
 
 def test_enrich_target_adds_extra_server(tmp_path):
     """A routing rule targeting a server id adds its local socks/http profile."""
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     a = store.add_profile(_vmess("main"))

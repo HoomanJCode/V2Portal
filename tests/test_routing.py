@@ -1,7 +1,7 @@
 import pytest
 
-from v2raycli.models import RoutingConfig, RoutingRule
-from v2raycli.routing.rules import add_rule, normalize_rules, reorder_rules
+from v2portal.models import RoutingConfig, RoutingRule
+from v2portal.routing.rules import add_rule, normalize_rules, reorder_rules
 
 
 def test_add_rule_validates():

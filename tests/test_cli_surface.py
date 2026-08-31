@@ -11,7 +11,7 @@ import argparse
 
 import pytest
 
-from v2raycli import app
+from v2portal import app
 
 RESOURCES = {
     "profile": {"list", "add", "edit", "remove"},

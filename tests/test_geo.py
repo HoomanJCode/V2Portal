@@ -1,6 +1,6 @@
-from v2raycli import geo
-from v2raycli.models import RoutingConfig, RoutingRule
-from v2raycli.routing.rules import uses_geo
+from v2portal import geo
+from v2portal.models import RoutingConfig, RoutingRule
+from v2portal.routing.rules import uses_geo
 
 
 def test_uses_geo():

@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from v2raycli.connection import ConnectionController, ProxyConnectionError
-from v2raycli.errors import V2RayCLIError
-from v2raycli.models import Group, Profile
-from v2raycli.storage import ConfigStore
+from v2portal.connection import ConnectionController, ProxyConnectionError
+from v2portal.errors import V2RayCLIError
+from v2portal.models import Group, Profile
+from v2portal.storage import ConfigStore
 
 from conftest import make_fake_script
 
@@ -83,7 +83,7 @@ class TestConnectionErrorToStatus:
         def bad_validate(engine, path, binary=None, env=None):
             raise RuntimeError("config validation failed: unknown field")
 
-        with patch("v2raycli.connection.validate_config", bad_validate):
+        with patch("v2portal.connection.validate_config", bad_validate):
             ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
             status = ctl.connect(profile)
 
@@ -129,7 +129,7 @@ class TestConnectionErrorToStatus:
                 pass
 
         monkeypatch.setattr(
-            "v2raycli.connection.Proc", FailingProc
+            "v2portal.connection.Proc", FailingProc
         )
         ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
         status = ctl.connect(profile)
@@ -177,7 +177,7 @@ class TestConnectionErrorToStatus:
         )
 
         monkeypatch.setattr(
-            "v2raycli.connection.detect_clients",
+            "v2portal.connection.detect_clients",
             lambda: {"openconnect": None, "openvpn": None},
         )
 
@@ -197,7 +197,7 @@ class TestStorageSaveFailure:
         store = ConfigStore(tmp_path / "config.json")
         store.load()
 
-        with patch("v2raycli.storage.os.replace", side_effect=OSError("disk full")):
+        with patch("v2portal.storage.os.replace", side_effect=OSError("disk full")):
             with pytest.raises(ValueError, match="failed to save config"):
                 store.save()
 
@@ -205,7 +205,7 @@ class TestStorageSaveFailure:
         store = ConfigStore(tmp_path / "config.json")
         store.load()
 
-        with patch("v2raycli.storage.os.replace", side_effect=OSError("disk full")):
+        with patch("v2portal.storage.os.replace", side_effect=OSError("disk full")):
             with pytest.raises(ValueError) as exc_info:
                 store.save()
             assert isinstance(exc_info.value.__cause__, OSError)
@@ -215,12 +215,12 @@ class TestStorageSaveFailure:
         store = ConfigStore(tmp_path / "config.json")
         store.load()
 
-        original_fdopen = __import__("v2raycli.storage", fromlist=["os"]).os.fdopen
+        original_fdopen = __import__("v2portal.storage", fromlist=["os"]).os.fdopen
 
         def failing_fdopen(*args, **kwargs):
             raise OSError("cannot write")
 
-        with patch("v2raycli.storage.os.fdopen", failing_fdopen):
+        with patch("v2portal.storage.os.fdopen", failing_fdopen):
             with pytest.raises(ValueError, match="failed to save config"):
                 store.save()
 
@@ -228,7 +228,7 @@ class TestStorageSaveFailure:
         store = ConfigStore(tmp_path / "config.json")
         store.load()
 
-        with patch("v2raycli.storage.os.replace", side_effect=OSError("disk full")):
+        with patch("v2portal.storage.os.replace", side_effect=OSError("disk full")):
             with pytest.raises(ValueError):
                 store.save()
 

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from v2raycli import app
-from v2raycli.models import Group, Profile, Subscription
-from v2raycli.storage import ConfigStore
+from v2portal import app
+from v2portal.models import Group, Profile, Subscription
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -222,7 +222,7 @@ def test_group_add_accepts_single_subscription(tmp_path, capsys):
 
 
 def test_group_add_balancer_detects_server_ref(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
@@ -237,7 +237,7 @@ def test_group_add_balancer_detects_server_ref(tmp_path, capsys):
 
 
 def test_group_add_member_detects_server_id(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
@@ -251,7 +251,7 @@ def test_group_add_member_detects_server_id(tmp_path, capsys):
 
 
 def test_group_remove_member_detects_server_id(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="local", port=1081))
@@ -264,7 +264,7 @@ def test_group_remove_member_detects_server_id(tmp_path, capsys):
 
 
 def test_group_add_member_rejects_server_forwarding_to_group(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     p = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
@@ -280,7 +280,7 @@ def test_group_add_member_rejects_server_forwarding_to_group(tmp_path, capsys):
 
 
 def test_profile_add_server_creates_localhost_profile(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="local", port=1081, protocol="mixed", listen="127.0.0.1"))
@@ -304,7 +304,7 @@ def test_profile_add_server_unknown_id_fails(tmp_path, capsys):
 
 
 def test_subscription_update_proxy_accepts_server_id(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     sv = store.add_server(Server(name="local", port=1081))
@@ -334,7 +334,7 @@ def test_subscription_update_proxy_unknown_id_fails(tmp_path, capsys):
 
 
 def test_group_tree_command_renders_hierarchy(tmp_path, capsys):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="p1", kind="vmess", outbound=SOCKS))
@@ -462,7 +462,7 @@ def test_routing_list_empty(tmp_path, capsys):
 
 
 def test_routing_list_json(tmp_path, capsys):
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = _store(tmp_path)
     store.config.routing.mode = "split"
@@ -548,7 +548,7 @@ def test_routing_parser_parsing(tmp_path):
 
 
 def test_routing_move_up_and_down(tmp_path, capsys):
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = _store(tmp_path)
     r1 = RoutingRule(action="block", match={"domains": ["a.com"]})
@@ -569,7 +569,7 @@ def test_routing_move_up_and_down(tmp_path, capsys):
 
 
 def test_routing_move_edge_rejected(tmp_path, capsys):
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = _store(tmp_path)
     r1 = RoutingRule(action="block", match={"domains": ["a.com"]})
@@ -588,7 +588,7 @@ def test_routing_move_unknown_id(tmp_path, capsys):
 
 
 def test_routing_enable_and_disable(tmp_path, capsys):
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = _store(tmp_path)
     r = RoutingRule(action="block", match={"domains": ["ads.dev"]})
@@ -685,7 +685,7 @@ def test_settings_port_bool_rejected(tmp_path, capsys):
 
 
 def test_routing_list_shows_disabled(tmp_path, capsys):
-    from v2raycli.models import RoutingRule
+    from v2portal.models import RoutingRule
 
     store = _store(tmp_path)
     store.config.routing.mode = "split"

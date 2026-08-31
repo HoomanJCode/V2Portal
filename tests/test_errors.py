@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from v2raycli.errors import V2RayCLIError
-from v2raycli.connection import ProxyConnectionError
-from v2raycli.engines.binary import BinaryError
-from v2raycli.geo import GeoError
-from v2raycli.storage import ConfigLoadError
-from v2raycli.subs.fetcher import FetchError
-from v2raycli.subs.share import ShareLinkError
+from v2portal.errors import V2RayCLIError
+from v2portal.connection import ProxyConnectionError
+from v2portal.engines.binary import BinaryError
+from v2portal.geo import GeoError
+from v2portal.storage import ConfigLoadError
+from v2portal.subs.fetcher import FetchError
+from v2portal.subs.share import ShareLinkError
 
 
 ALL_PROJECT_ERRORS = [

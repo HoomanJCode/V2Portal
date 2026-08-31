@@ -28,12 +28,12 @@ import tempfile
 import time
 from pathlib import Path
 
-from v2raycli.connection import ConnectionController, lan_ips
-from v2raycli.engines import get_adapter
-from v2raycli.engines.binary import download_binary, platform_name, arch_name
-from v2raycli.models import Profile, RoutingConfig, RoutingRule
-from v2raycli.outbounds.groups import create_balancer_group, create_chain_group, resolve_target
-from v2raycli.storage import ConfigStore
+from v2portal.connection import ConnectionController, lan_ips
+from v2portal.engines import get_adapter
+from v2portal.engines.binary import download_binary, platform_name, arch_name
+from v2portal.models import Profile, RoutingConfig, RoutingRule
+from v2portal.outbounds.groups import create_balancer_group, create_chain_group, resolve_target
+from v2portal.storage import ConfigStore
 
 TEST_URL = "http://example.com/"
 SOCKS_OUTBOUND = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -472,7 +472,7 @@ def check_websocket_transport(checks: Checks, singbox: Path) -> None:
     import hashlib
     import threading
 
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     ws_port, proxy_port = free_port(), free_port()
     ready = threading.Event()

@@ -1,7 +1,7 @@
-from v2raycli import connection
-from v2raycli.connection import ConnectionController
-from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule
-from v2raycli.storage import ConfigStore
+from v2portal import connection
+from v2portal.connection import ConnectionController
+from v2portal.models import Group, Profile, RoutingConfig, RoutingRule
+from v2portal.storage import ConfigStore
 
 from conftest import make_fake_script
 

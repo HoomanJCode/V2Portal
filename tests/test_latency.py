@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from v2raycli.engines.binary import BinaryError
-from v2raycli.models import Profile, Subscription
-from v2raycli.storage import ConfigStore
-from v2raycli.test import latency
+from v2portal.engines.binary import BinaryError
+from v2portal.models import Profile, Subscription
+from v2portal.storage import ConfigStore
+from v2portal.test import latency
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -258,7 +258,7 @@ def test_probe_many_returns_input_order(tmp_path, monkeypatch):
 
 
 def test_probe_server_targets_own_local_inbound(tmp_path, monkeypatch):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1081, protocol="mixed", listen="127.0.0.1"))
@@ -279,7 +279,7 @@ def test_probe_server_targets_own_local_inbound(tmp_path, monkeypatch):
 
 
 def test_probe_server_falls_back_to_loopback_for_any_listen(tmp_path, monkeypatch):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1082, protocol="socks", listen="0.0.0.0"))
@@ -294,7 +294,7 @@ def test_probe_server_falls_back_to_loopback_for_any_listen(tmp_path, monkeypatc
 
 
 def test_probe_server_invalid_port_is_invalid(tmp_path):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=0, protocol="mixed"))
@@ -306,7 +306,7 @@ def test_probe_server_invalid_port_is_invalid(tmp_path):
 
 
 def test_probe_servers_returns_input_order(tmp_path, monkeypatch):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     a = store.add_server(Server(name="a", port=1081))
@@ -322,7 +322,7 @@ def test_probe_servers_returns_input_order(tmp_path, monkeypatch):
 
 
 def test_server_websocket_result_is_not_testable(tmp_path):
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1081, protocol="mixed"))
@@ -524,7 +524,7 @@ def test_scope_selectors(tmp_path):
 
 
 def test_collect_routing_target_profiles(tmp_path):
-    from v2raycli.models import Group, RoutingConfig, RoutingRule
+    from v2portal.models import Group, RoutingConfig, RoutingRule
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="main", kind="socks", outbound=SOCKS))
@@ -574,7 +574,7 @@ def test_collect_routing_target_profiles(tmp_path):
     assert latency.collect_routing_target_profiles(store) == []
 
     # Server target resolves to a socks/http profile through its inbound
-    from v2raycli.models import Server
+    from v2portal.models import Server
 
     sv = store.add_server(Server(name="local", port=1081, protocol="mixed"))
     store.config.routing = RoutingConfig(
@@ -589,7 +589,7 @@ def test_collect_routing_target_profiles(tmp_path):
 
 
 def test_scope_routing_targets(tmp_path):
-    from v2raycli.models import RoutingConfig, RoutingRule
+    from v2portal.models import RoutingConfig, RoutingRule
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))

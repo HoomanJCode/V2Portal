@@ -1,7 +1,7 @@
-from v2raycli.connection import ConnectionController
-from v2raycli.models import Profile
-from v2raycli.outbounds.vpn import add_openconnect, add_openvpn
-from v2raycli.storage import ConfigStore
+from v2portal.connection import ConnectionController
+from v2portal.models import Profile
+from v2portal.outbounds.vpn import add_openconnect, add_openvpn
+from v2portal.storage import ConfigStore
 
 from conftest import make_fake_script
 

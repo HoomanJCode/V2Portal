@@ -1,6 +1,6 @@
-from v2raycli import app, config
-from v2raycli.models import Profile, Subscription
-from v2raycli.storage import ConfigStore
+from v2portal import app, config
+from v2portal.models import Profile, Subscription
+from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 
@@ -50,7 +50,7 @@ def test_main_reports_malformed_config(tmp_path, capsys):
 
 
 def test_probe_flag_resolves_scope_and_returns_failure(tmp_path, monkeypatch):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
@@ -102,8 +102,8 @@ def test_update_parser_option():
 
 
 def test_update_cli_reports_each_engine(tmp_path, monkeypatch, capsys):
-    from v2raycli.engines import binary
-    from v2raycli.engines.binary import UpdateInfo
+    from v2portal.engines import binary
+    from v2portal.engines.binary import UpdateInfo
 
     store = _store(tmp_path)
     calls = []
@@ -120,8 +120,8 @@ def test_update_cli_reports_each_engine(tmp_path, monkeypatch, capsys):
 
 
 def test_update_cli_forwards_ephemeral_proxy(tmp_path, monkeypatch):
-    from v2raycli.engines import binary
-    from v2raycli.engines.binary import UpdateInfo
+    from v2portal.engines import binary
+    from v2portal.engines.binary import UpdateInfo
 
     store = _store(tmp_path)
     captured = {}
@@ -139,7 +139,7 @@ def test_update_cli_forwards_ephemeral_proxy(tmp_path, monkeypatch):
 
 
 def test_ws_test_skips_non_websocket_profiles(tmp_path, monkeypatch):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
@@ -156,7 +156,7 @@ def test_ws_test_skips_non_websocket_profiles(tmp_path, monkeypatch):
 
 
 def test_test_flag_all(tmp_path, monkeypatch):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
@@ -180,7 +180,7 @@ def test_test_flag_no_match(tmp_path):
 
 
 def test_test_flag_scope_resolution(tmp_path, monkeypatch, capsys):
-    from v2raycli.test import latency
+    from v2portal.test import latency
 
     store = _store(tmp_path)
     sub = store.add_subscription(Subscription(name="sub"))
@@ -206,8 +206,8 @@ def test_test_flag_scope_resolution(tmp_path, monkeypatch, capsys):
 
 
 def test_test_flag_group_and_server_scope(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Group, Server
+    from v2portal.test import latency
+    from v2portal.models import Group, Server
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
@@ -239,8 +239,8 @@ def test_test_flag_group_and_server_scope(tmp_path, monkeypatch):
 
 
 def test_probe_server_scope_probes_server_inbound_not_subprofiles(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Group, Server
+    from v2portal.test import latency
+    from v2portal.models import Group, Server
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
@@ -262,9 +262,9 @@ def test_probe_server_scope_probes_server_inbound_not_subprofiles(tmp_path, monk
 
 
 def test_probe_server_scope_attaches_running_state(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Server
-    from v2raycli import servers as servers_mod
+    from v2portal.test import latency
+    from v2portal.models import Server
+    from v2portal import servers as servers_mod
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1081))
@@ -284,9 +284,9 @@ def test_probe_server_scope_attaches_running_state(tmp_path, monkeypatch):
 
 
 def test_probe_server_scope_attaches_stopped_state(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Server
-    from v2raycli import servers as servers_mod
+    from v2portal.test import latency
+    from v2portal.models import Server
+    from v2portal import servers as servers_mod
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1081))
@@ -306,8 +306,8 @@ def test_probe_server_scope_attaches_stopped_state(tmp_path, monkeypatch):
 
 
 def test_probe_server_scope_failure_exit_code(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Server
+    from v2portal.test import latency
+    from v2portal.models import Server
 
     store = _store(tmp_path)
     server = store.add_server(Server(name="srv", port=1081))
@@ -324,8 +324,8 @@ def test_probe_server_scope_failure_exit_code(tmp_path, monkeypatch):
 
 
 def test_ws_test_server_scope_marks_not_testable(tmp_path, monkeypatch):
-    from v2raycli.test import latency
-    from v2raycli.models import Group, Server
+    from v2portal.test import latency
+    from v2portal.models import Group, Server
 
     store = _store(tmp_path)
     p1 = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
@@ -346,7 +346,7 @@ def test_ws_test_server_scope_marks_not_testable(tmp_path, monkeypatch):
 
 
 def test_backup_flag(tmp_path, monkeypatch, capsys):
-    from v2raycli import backup
+    from v2portal import backup
 
     monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
     store = _store(tmp_path)
@@ -359,7 +359,7 @@ def test_backup_flag(tmp_path, monkeypatch, capsys):
 
 
 def test_list_backups_flag(tmp_path, monkeypatch, capsys):
-    from v2raycli import backup
+    from v2portal import backup
 
     monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
     store = _store(tmp_path)
@@ -373,7 +373,7 @@ def test_list_backups_flag(tmp_path, monkeypatch, capsys):
 
 
 def test_restore_flag(tmp_path, monkeypatch, capsys):
-    from v2raycli import backup
+    from v2portal import backup
 
     monkeypatch.setattr(config, "BACKUP_DIR", tmp_path / "backup")
     store = _store(tmp_path)
@@ -390,7 +390,7 @@ def test_restore_flag(tmp_path, monkeypatch, capsys):
 
 
 def test_install_service_flag(tmp_path, monkeypatch, capsys):
-    from v2raycli import service
+    from v2portal import service
 
     store = _store(tmp_path)
     store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))
@@ -402,7 +402,7 @@ def test_install_service_flag(tmp_path, monkeypatch, capsys):
 
 
 def test_uninstall_service_flag(tmp_path, monkeypatch, capsys):
-    from v2raycli import service
+    from v2portal import service
 
     monkeypatch.setattr(service, "uninstall_service", lambda: None)
     assert app._uninstall_service() == 0

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from v2raycli.models import Group, Profile, RoutingConfig, RoutingRule, Server, Subscription
-from v2raycli.outbounds.groups import (
+from v2portal.models import Group, Profile, RoutingConfig, RoutingRule, Server, Subscription
+from v2portal.outbounds.groups import (
     enrich_target_with_routing,
     resolve_refs,
     resolve_target,
     subscription_target,
 )
-from v2raycli.storage import ConfigStore
+from v2portal.storage import ConfigStore
 
 
 def _store(tmp_path):

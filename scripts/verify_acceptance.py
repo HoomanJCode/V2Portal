@@ -19,13 +19,13 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from v2raycli import app, connection
-from v2raycli.models import Profile, RoutingConfig
-from v2raycli.outbounds.vpn import add_openconnect, add_openvpn
-from v2raycli.routing.rules import add_rule
-from v2raycli.storage import ConfigStore
-from v2raycli.subs.parser import import_subscription
-from v2raycli.test import latency
+from v2portal import app, connection
+from v2portal.models import Profile, RoutingConfig
+from v2portal.outbounds.vpn import add_openconnect, add_openvpn
+from v2portal.routing.rules import add_rule
+from v2portal.storage import ConfigStore
+from v2portal.subs.parser import import_subscription
+from v2portal.test import latency
 
 
 MIXED_PAYLOAD = [

@@ -1,16 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for a single-folder v2portal bundle.
 
-Build with:  pip install pyinstaller && pyinstaller v2raycli.spec
+Build with:  pip install pyinstaller && pyinstaller v2portal.spec
 Engine binaries and geo assets are NOT bundled; they download on first run.
 """
 
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules("v2raycli")
+hiddenimports = collect_submodules("v2portal")
 
 a = Analysis(
-    ["src/v2raycli/__main__.py"],
+    ["src/v2portal/__main__.py"],
     pathex=["src"],
     binaries=[],
     datas=[],

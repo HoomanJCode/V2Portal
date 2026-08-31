@@ -19,7 +19,7 @@ from .models import (
     Settings,
     Subscription,
 )
-import v2raycli.models as _models
+import v2portal.models as _models
 
 
 class ConfigLoadError(V2RayCLIError, ValueError):

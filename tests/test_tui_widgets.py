@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("prompt_toolkit")
 
-from v2raycli.tui import widgets
+from v2portal.tui import widgets
 
 
 class _FakeSession:

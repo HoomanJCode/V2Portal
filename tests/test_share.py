@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from v2raycli.models import Profile
-from v2raycli.subs.share import ShareLinkError, decode_link, encode_link
+from v2portal.models import Profile
+from v2portal.subs.share import ShareLinkError, decode_link, encode_link
 
 
 def _b64(data) -> str:
