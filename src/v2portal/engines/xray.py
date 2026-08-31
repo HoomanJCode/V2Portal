@@ -349,13 +349,12 @@ class XrayAdapter(EngineAdapter):
             known_ids.update(g.id for g in target.extra_groups)
             for rule in normalize_rules(routing, selected, known_target_ids=known_ids):
                 rules.append(self._rule(rule))
-        rules.append(
-            {
-                "type": "field",
-                "inboundTag": inbound_tags,
-                "outboundTag": selected,
-            }
-        )
+        catch_all: dict = {"type": "field", "inboundTag": inbound_tags}
+        if selected == BALANCER_TAG:
+            catch_all["balancerTag"] = BALANCER_TAG
+        else:
+            catch_all["outboundTag"] = selected
+        rules.append(catch_all)
 
         config: dict = {
             "log": {"loglevel": settings.log_level},

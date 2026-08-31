@@ -279,7 +279,7 @@ def test_xray_balancer_and_chain(tmp_path):
     bal = store.add_group(Group(name="bal", type="balancer", strategy="latency", profile_ids=[a.id, b.id]))
     cfg = _generate(store, bal, default="xray")
     assert cfg["routing"]["balancers"][0]["strategy"]["type"] == "leastPing"
-    assert cfg["routing"]["rules"][-1]["outboundTag"] == "balancer"
+    assert cfg["routing"]["rules"][-1]["balancerTag"] == "balancer"
 
     chain = store.add_group(Group(name="chain", type="chain", profile_ids=[a.id, b.id]))
     cfg2 = _generate(store, chain, default="xray")
