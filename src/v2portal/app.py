@@ -2659,6 +2659,10 @@ def _uninstall_service() -> int:
         print("no service installed")
         return 0
     print(f"removed service -> {removed}")
+    if service.platform() == "linux":
+        print("disable with: systemctl --user disable --now v2portal")
+    elif service.platform() == "darwin":
+        print("unload with: launchctl unload ~/Library/LaunchAgents/v2portal.plist")
     return 0
 
 
