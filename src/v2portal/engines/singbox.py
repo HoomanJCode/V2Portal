@@ -230,7 +230,12 @@ def _validate_settings(settings) -> None:
         raise ValueError("sing-box allow_lan must be boolean")
 
     mixed_port = getattr(settings, "mixed_port", None)
-    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int) or not 1 <= mixed_port <= 65535:
+    socks_port = getattr(settings, "socks_port", 0)
+    http_port = getattr(settings, "http_port", 0)
+    has_dedicated = (isinstance(socks_port, int) and socks_port > 0) or (isinstance(http_port, int) and http_port > 0)
+    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int):
+        raise ValueError("sing-box mixed_port must be between 1 and 65535")
+    if not (1 <= mixed_port <= 65535) and not has_dedicated:
         raise ValueError("sing-box mixed_port must be between 1 and 65535")
 
     auth = getattr(settings, "inbound_auth", None)
@@ -357,18 +362,19 @@ class SingBoxAdapter(EngineAdapter):
         inbounds: list[dict] = []
         inbound_tags: list[str] = []
 
-        mixed_inbound: dict = {
-            "type": "mixed",
-            "tag": INBOUND_TAG,
-            "listen": listen,
-            "listen_port": settings.mixed_port,
-        }
-        if settings.inbound_auth.get("enabled"):
-            mixed_inbound["users"] = [
-                {"username": settings.inbound_auth["username"], "password": settings.inbound_auth["password"]}
-            ]
-        inbounds.append(mixed_inbound)
-        inbound_tags.append(INBOUND_TAG)
+        if settings.mixed_port:
+            mixed_inbound: dict = {
+                "type": "mixed",
+                "tag": INBOUND_TAG,
+                "listen": listen,
+                "listen_port": settings.mixed_port,
+            }
+            if settings.inbound_auth.get("enabled"):
+                mixed_inbound["users"] = [
+                    {"username": settings.inbound_auth["username"], "password": settings.inbound_auth["password"]}
+                ]
+            inbounds.append(mixed_inbound)
+            inbound_tags.append(INBOUND_TAG)
 
         socks_inbound: dict | None = None
         http_inbound: dict | None = None
