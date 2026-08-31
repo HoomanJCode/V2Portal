@@ -516,7 +516,38 @@ def parse_tuic(raw: str) -> Profile:
 
 
 def parse_wireguard(raw: str) -> Profile:
-    payload = unquote(raw[len("wireguard://") :])
+    rest = raw[len("wireguard://") :]
+
+    # -- URI format (v2rayNG / sing-box compatible) --
+    # wireguard://secretKey@host:port?publicKey=...&reserved=...#name
+    if "@" in rest and "?" in rest:
+        userinfo, host, port, query, name = _split_authority(rest)
+        port = port.rstrip("/")  # URL may include path separator after port
+        q = _query_dict(query)
+        address = q.get("address", "")
+        address_list = [a.strip() for a in address.split(",") if a.strip()] if address else []
+        peer = {
+            "publicKey": q.get("publickey", ""),
+            "endpoint": f"{host}:{port}" if port else host,
+            "allowedIps": [],
+        }
+        if q.get("presharedkey"):
+            peer["preSharedKey"] = q["presharedkey"]
+        if q.get("reserved"):
+            peer["reserved"] = q["reserved"]
+        outbound: dict = {
+            "settings": {
+                "secretKey": unquote(userinfo),
+                "address": address_list,
+                "peers": [peer],
+            }
+        }
+        if q.get("mtu"):
+            outbound["settings"]["mtu"] = int(q["mtu"])
+        return _make_profile(raw, "wireguard", name or "wireguard", outbound)
+
+    # -- JSON format (base64-encoded or inline) --
+    payload = unquote(rest)
     if "#" in payload:
         payload, _ = payload.split("#", 1)
     try:
@@ -526,7 +557,7 @@ def parse_wireguard(raw: str) -> Profile:
             data = json.loads(_b64decode(payload).decode("utf-8"))
     except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ShareLinkError(
-            "wireguard payload is not valid base64-encoded JSON"
+            "wireguard payload is not valid base64-encoded JSON or URI format"
         ) from exc
 
     peers = []
@@ -540,7 +571,7 @@ def parse_wireguard(raw: str) -> Profile:
             entry["preSharedKey"] = peer["preshared_key"]
         peers.append(entry)
 
-    outbound: dict = {
+    outbound = {
         "settings": {
             "secretKey": data.get("private_key", ""),
             "address": data.get("address", []),
