@@ -406,7 +406,14 @@ class ServerManager:
                 time.sleep(0.1)
             # Force kill if still running
             if state.is_running():
-                os.kill(state.pid, signal.SIGKILL)
+                if os.name == "nt":
+                    import subprocess
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", str(state.pid)],
+                        capture_output=True,
+                    )
+                else:
+                    os.kill(state.pid, signal.SIGKILL)
         except (OSError, ProcessLookupError):
             pass
         state.pid = None

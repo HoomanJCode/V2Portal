@@ -3082,7 +3082,14 @@ def _temp_server_start(store: ConfigStore, args) -> int:
                     break
                 time.sleep(0.1)
             if proc.poll() is None:
-                os.kill(proc.pid, signal.SIGKILL)
+                if os.name == "nt":
+                    import subprocess
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", str(proc.pid)],
+                        capture_output=True,
+                    )
+                else:
+                    os.kill(proc.pid, signal.SIGKILL)
         except (OSError, ProcessLookupError):
             pass
         _cleanup_temp_proxy(store, args)
