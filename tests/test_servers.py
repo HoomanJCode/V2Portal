@@ -392,7 +392,7 @@ def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
     )
     server = store.add_server(
         Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group",
-               failover=True, failover_timeout=5)
+               failover=5)
     )
 
     results = {
@@ -427,7 +427,7 @@ def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch)
     )
     server = store.add_server(
         Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group",
-               failover=True, failover_timeout=5)
+               failover=5)
     )
 
     monkeypatch.setattr(

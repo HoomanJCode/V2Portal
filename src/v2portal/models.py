@@ -215,8 +215,7 @@ class Server:
     )
     enabled: bool = True
     traffic_api_port: int = 0  # 0 = disabled; enables sing-box Clash API for live node reads
-    failover: bool = False  # auto-switch to another node when the active one stops responding
-    failover_timeout: int = 0  # seconds; 0 = engine default (10s) when failover is enabled
+    failover: int = -1  # seconds between health probes; -1 = off, 0 = engine default (10s), >0 = custom
     traffic_up: int = 0
     traffic_down: int = 0
 

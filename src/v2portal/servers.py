@@ -264,8 +264,8 @@ class ServerManager:
             # lowest-delay node (no failover) or keep a health-checked balancer
             # over the healthy nodes (failover enabled).
             healthy = self._probe_healthy(target)
-            if getattr(server, "failover", False):
-                timeout = getattr(server, "failover_timeout", 0) or self.DEFAULT_FAILOVER_TIMEOUT
+            if server.failover >= 0:
+                timeout = server.failover or self.DEFAULT_FAILOVER_TIMEOUT
                 if timeout <= 0:
                     raise ValueError("failover timeout must be a positive number of seconds")
                 target = self._failover_target(target, healthy, timeout)

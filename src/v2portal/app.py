@@ -1194,10 +1194,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_add.add_argument("--listen", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
     server_add.add_argument("--api-port", type=int, default=0,
                             help="Clash API port to expose the live active outbound (0 = disabled)")
-    server_add.add_argument("--failover", action="store_true", default=False,
-                            help="auto-switch to another node when the active one stops responding")
-    server_add.add_argument("--failover-timeout", type=int, default=0,
-                            help="seconds between health probes; 0 = engine default (10s) when --failover is set")
+    server_add.add_argument("--failover", type=int, default=-1,
+                            help="seconds between health probes (-1 = off, 0 = default 10s, >0 = custom)")
     # Back-compat: --profile/--group flags (deprecated, auto-detected now).
     server_outbound.add_argument("--profile", help=argparse.SUPPRESS, dest="legacy_profile")
     server_outbound.add_argument("--group", help=argparse.SUPPRESS, dest="legacy_group")
@@ -1239,6 +1237,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                              help="upstream proxy URL for temporary server (e.g. socks5://host:port)")
     server_start.add_argument("--listen", default="0.0.0.0",
                              help="listen address for temporary server (default: 0.0.0.0)")
+    server_start.add_argument("--failover", type=int, default=-1,
+                             help="override failover timeout for this start (-1 = off, 0 = default, >0 = custom)")
 
     server_stop = server_commands.add_parser(
         "stop",
@@ -1298,12 +1298,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_edit.add_argument("--listen", default=None, help="new listen address")
     server_edit.add_argument("--api-port", type=int, default=None,
                             help="Clash API port (0 disables; −1 leaves unchanged)")
-    server_edit.add_argument("--failover", action="store_true", default=False,
-                            help="enable auto-switch to a healthy node on timeout")
-    server_edit.add_argument("--failover-off", action="store_true", default=False,
-                            help="disable failover (pin to a single node)")
-    server_edit.add_argument("--failover-timeout", type=int, default=None,
-                            help="seconds between health probes (−1 leaves unchanged)")
+    server_edit.add_argument("--failover", type=int, default=None,
+                            help="set failover timeout in seconds (-1 = off, 0 = default, >0 = custom)")
     server_outbound_edit = server_edit.add_mutually_exclusive_group()
     server_outbound_edit.add_argument("--outbound", default=None, metavar="REF",
                                       help="switch outbound to a profile/subscription/group/server ID (auto-detected)")
@@ -2226,8 +2222,9 @@ def _outbound_label(row: dict) -> str:
                 label += f" → {active} ({by_id[active]})"
             elif active != "direct":
                 label += f" → {active}"
-    if row.get("failover"):
-        label += f"  [failover:{row.get('failover_timeout') or 'default'}s]"
+    fo = row.get("failover", -1)
+    if fo >= 0:
+        label += f"  [failover:{fo or 'default'}s]"
     return label
 
 
@@ -2306,8 +2303,7 @@ def _server_command(store: ConfigStore, args) -> int:
                 "active_outbound": active_outbound,
                 "enabled": s.enabled,
                 "running": running,
-                "failover": getattr(s, "failover", False),
-                "failover_timeout": getattr(s, "failover_timeout", 0),
+                "failover": getattr(s, "failover", -1),
             })
         if getattr(args, 'json', False):
             print(json.dumps(rows, ensure_ascii=False))
@@ -2336,18 +2332,13 @@ def _server_command(store: ConfigStore, args) -> int:
         return 0
 
     if action == "add":
-        from .servers import DEFAULT_FAILOVER_TIMEOUT
-
         server = Server(
             name=args.name,
             port=args.port,
             protocol=args.protocol,
             listen=args.listen,
             traffic_api_port=getattr(args, "api_port", 0) or 0,
-            failover=getattr(args, "failover", False),
-            failover_timeout=(
-                getattr(args, "failover_timeout", 0) or DEFAULT_FAILOVER_TIMEOUT
-            ) if getattr(args, "failover", False) else 0,
+            failover=getattr(args, "failover", -1),
         )
         ref = getattr(args, "out", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
@@ -2356,6 +2347,10 @@ def _server_command(store: ConfigStore, args) -> int:
             except ValueError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
+            # Auto-enable failover for multi-node outbounds (group/subscription)
+            # unless the user explicitly opted out (--failover -1).
+            if server.outbound_type in ("group", "subscription") and server.failover == -1:
+                server.failover = 0  # engine default
         else:
             server.outbound_type = "direct"
             server.outbound_id = ""
@@ -2367,9 +2362,16 @@ def _server_command(store: ConfigStore, args) -> int:
     if action == "start":
         if getattr(args, "temp", False):
             return _temp_server_start(store, args)
-        from .servers import ServerManager
+        from .servers import ServerManager, DEFAULT_FAILOVER_TIMEOUT
 
         mgr = ServerManager(store)
+
+        def _apply_failover_override(srv):
+            """Temporarily override failover for a server during this start."""
+            fo = getattr(args, "failover", -1)
+            if fo >= 0:
+                srv.failover = fo
+
         # Default to --all when no specific ID is given.
         if not args.id and not args.start_all:
             args.start_all = True
@@ -2381,6 +2383,7 @@ def _server_command(store: ConfigStore, args) -> int:
             failed = False
             for s in servers:
                 try:
+                    _apply_failover_override(s)
                     state = mgr.start(s.id)
                     if state.error:
                         failed = True
@@ -2395,6 +2398,9 @@ def _server_command(store: ConfigStore, args) -> int:
             print("server start requires ID or --all", file=sys.stderr)
             return 2
         try:
+            srv = store.get_server(args.id)
+            if srv:
+                _apply_failover_override(srv)
             state = mgr.start(args.id)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -2486,19 +2492,9 @@ def _server_command(store: ConfigStore, args) -> int:
         api_port = getattr(args, "api_port", None)
         if api_port is not None and api_port != -1:
             server.traffic_api_port = api_port
-        from .servers import DEFAULT_FAILOVER_TIMEOUT
-
-        ft = getattr(args, "failover_timeout", None)
-        if getattr(args, "failover", False):
-            server.failover = True
-            server.failover_timeout = (ft or DEFAULT_FAILOVER_TIMEOUT) if ft is not None else (
-                server.failover_timeout or DEFAULT_FAILOVER_TIMEOUT
-            )
-        if getattr(args, "failover_off", False):
-            server.failover = False
-            server.failover_timeout = 0
-        elif ft is not None and ft != -1:
-            server.failover_timeout = ft
+        ft = getattr(args, "failover", None)
+        if ft is not None:
+            server.failover = ft
         ref = getattr(args, "outbound", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
             try:
