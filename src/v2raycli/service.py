@@ -34,7 +34,7 @@ def platform() -> str:
 
 
 def _cmdline(config_dir: str | None = None) -> str:
-    args = [shlex.quote(sys.executable), "-m", "v2portal", "server", "start", "--all"]
+    args = [shlex.quote(sys.executable), "-m", "v2raycli", "server", "start", "--all"]
     if config_dir:
         args += ["--config-dir", shlex.quote(config_dir)]
     return " ".join(args)
