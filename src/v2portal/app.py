@@ -160,37 +160,21 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     profile_add = profile_commands.add_parser(
         "add",
-        help="add a new profile (pick a type below)",
+        help="add a new profile (link or pick a type below)",
         description=(
-            "Add a profile by type. Each type has its own required arguments.\n\n"
-            "Supported types: link, share, raw, socks, http, wireguard, hysteria2,\n"
+            "Add a profile by type or paste a share link directly.\n\n"
+            "Supported types: link, raw, socks, http, wireguard, hysteria2,\n"
             "tuic, openvpn, openconnect, server.\n\n"
             "Examples:\n"
             "  v2portal profile add link 'vless://uuid@host:443?...#name'\n"
             "  v2portal profile add socks office 127.0.0.1 1080\n"
             "  v2portal profile add socks office 127.0.0.1 1080 --username u --password p\n"
-            "  v2portal profile add share us 'vless://...'\n"
             "  v2portal profile add http proxy 10.0.0.1 8080\n"
             "  v2portal profile add server via-server SERVER_ID  # socks/http profile on localhost"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     profile_add_commands = profile_add.add_subparsers(dest="profile_add_command", metavar="TYPE")
-
-    share = profile_add_commands.add_parser(
-        "share",
-        help="add a v2ray share link (vmess://, vless://, trojan://, ss://, ...)",
-        description=(
-            "Decode a share link and add the resulting profile.\n"
-            "Supported schemes: vmess, vless, trojan, ss, hysteria2, tuic,\n"
-            "wireguard, socks, http.\n\n"
-            "Example:\n"
-            "  v2portal profile add share my-node 'vless://uuid@host:443?...'"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    share.add_argument("name", help="display name for this profile")
-    share.add_argument("link", help="the full share link string")
 
     link = profile_add_commands.add_parser(
         "link",
@@ -1588,14 +1572,7 @@ def _profile_add_command(store: ConfigStore, args) -> int:
     from .subs.share import ShareLinkError, decode_link
 
     kind = args.profile_add_command
-    if kind == "share":
-        try:
-            profile = decode_link(args.link)
-        except ShareLinkError as exc:
-            print(f"invalid share link: {exc}", file=sys.stderr)
-            return 1
-        profile.name = args.name or profile.name
-    elif kind == "link":
+    if kind == "link":
         try:
             profile = decode_link(args.link)
         except ShareLinkError as exc:
