@@ -163,9 +163,10 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="add a new profile (pick a type below)",
         description=(
             "Add a profile by type. Each type has its own required arguments.\n\n"
-            "Supported types: share, raw, socks, http, wireguard, hysteria2,\n"
+            "Supported types: link, share, raw, socks, http, wireguard, hysteria2,\n"
             "tuic, openvpn, openconnect, server.\n\n"
             "Examples:\n"
+            "  v2portal profile add link 'vless://uuid@host:443?...#name'\n"
             "  v2portal profile add socks office 127.0.0.1 1080\n"
             "  v2portal profile add socks office 127.0.0.1 1080 --username u --password p\n"
             "  v2portal profile add share us 'vless://...'\n"
@@ -190,6 +191,24 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     share.add_argument("name", help="display name for this profile")
     share.add_argument("link", help="the full share link string")
+
+    link = profile_add_commands.add_parser(
+        "link",
+        help="add a profile by pasting a share link (auto-detects name)",
+        description=(
+            "Paste a share link and add it as a profile. The name is\n"
+            "auto-extracted from the link (fragment #name or vmess ps field).\n"
+            "Optionally override with --name.\n\n"
+            "Supported schemes: vmess, vless, trojan, ss, hysteria2, tuic,\n"
+            "wireguard, socks, http.\n\n"
+            "Examples:\n"
+            "  v2portal profile add link 'vless://uuid@host:443?...#my-node'\n"
+            "  v2portal profile add link 'vmess://...' --name 'US proxy'"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    link.add_argument("link", help="the full share link string")
+    link.add_argument("--name", help="override the display name (default: extracted from link)")
 
     raw = profile_add_commands.add_parser(
         "raw",
@@ -1576,6 +1595,14 @@ def _profile_add_command(store: ConfigStore, args) -> int:
             print(f"invalid share link: {exc}", file=sys.stderr)
             return 1
         profile.name = args.name or profile.name
+    elif kind == "link":
+        try:
+            profile = decode_link(args.link)
+        except ShareLinkError as exc:
+            print(f"invalid share link: {exc}", file=sys.stderr)
+            return 1
+        if args.name:
+            profile.name = args.name
     elif kind == "raw":
         try:
             source = Path(args.source)
