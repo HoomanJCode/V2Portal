@@ -142,6 +142,12 @@ def test_hysteria2_tuic_wireguard():
     assert w2.outbound["settings"]["address"] == ["10.0.0.2/32"]
     assert w2.outbound["settings"]["mtu"] == 1280
 
+    # URI format with trailing slash after port (Cloudflare WARP style)
+    uri2 = "wireguard://key@engage.cloudflareclient.com:2408/?publickey=pk&address=172.16.0.2/32#cf-warp"
+    w3 = decode_link(uri2)
+    assert w3.outbound["settings"]["peers"][0]["endpoint"] == "engage.cloudflareclient.com:2408"
+    assert w3.outbound["settings"]["address"] == ["172.16.0.2/32"]
+
 
 def test_wireguard_binary_payload_reports_clean_error():
     # base64 of raw binary that is not UTF-8 text (corrupt subscription link)

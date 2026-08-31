@@ -522,6 +522,7 @@ def parse_wireguard(raw: str) -> Profile:
     # wireguard://secretKey@host:port?publicKey=...&reserved=...#name
     if "@" in rest and "?" in rest:
         userinfo, host, port, query, name = _split_authority(rest)
+        port = port.rstrip("/")  # URL may include path separator after port
         q = _query_dict(query)
         address = q.get("address", "")
         address_list = [a.strip() for a in address.split(",") if a.strip()] if address else []
