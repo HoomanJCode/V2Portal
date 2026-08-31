@@ -1,6 +1,6 @@
 # AGENTS.md — Rules for AI agents
 
-Project: `v2raycli` — an interactive v2ray CLI client (sing-box + xray-core).
+Project: `v2portal` — an interactive v2ray CLI client (sing-box + xray-core).
 
 ## Read first
 

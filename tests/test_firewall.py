@@ -13,8 +13,8 @@ from v2raycli import firewall
 
 
 def test_rule_display_name():
-    assert firewall._rule_display_name("sing-box") == "v2raycli sing-box"
-    assert firewall._rule_display_name("xray") == "v2raycli xray"
+    assert firewall._rule_display_name("sing-box") == "v2portal sing-box"
+    assert firewall._rule_display_name("xray") == "v2portal xray"
 
 
 def test_is_windows_returns_false_on_posix(monkeypatch):
@@ -47,7 +47,7 @@ def test_add_rule_success(monkeypatch, tmp_path):
     fake_binary = tmp_path / "sing-box.exe"
     fake_binary.write_bytes(b"fake")
 
-    completed = subprocess.CompletedProcess([], returncode=0, stdout="v2raycli sing-box\n", stderr="")
+    completed = subprocess.CompletedProcess([], returncode=0, stdout="v2portal sing-box\n", stderr="")
     monkeypatch.setattr(firewall, "_run_powershell", lambda cmd: completed)
 
     result = firewall.add_rule("sing-box", fake_binary)
@@ -65,7 +65,7 @@ def test_add_rule_detects_existing(monkeypatch, tmp_path):
     # PowerShell returns empty (rule already exists)
     empty = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
     monkeypatch.setattr(firewall, "_run_powershell", lambda cmd: empty)
-    monkeypatch.setattr(firewall, "check_rule", lambda engine: {"DisplayName": "v2raycli sing-box"})
+    monkeypatch.setattr(firewall, "check_rule", lambda engine: {"DisplayName": "v2portal sing-box"})
 
     result = firewall.add_rule("sing-box", fake_binary)
     assert "already exists" in result
@@ -95,13 +95,13 @@ def test_check_rule_returns_none_on_non_windows(monkeypatch):
 
 def test_check_rule_returns_dict_when_found(monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
-    rule_json = json.dumps({"DisplayName": "v2raycli sing-box", "Enabled": True})
+    rule_json = json.dumps({"DisplayName": "v2portal sing-box", "Enabled": True})
     completed = subprocess.CompletedProcess([], returncode=0, stdout=rule_json, stderr="")
     monkeypatch.setattr(firewall, "_run_powershell", lambda cmd: completed)
 
     result = firewall.check_rule("sing-box")
     assert result is not None
-    assert result["DisplayName"] == "v2raycli sing-box"
+    assert result["DisplayName"] == "v2portal sing-box"
 
 
 def test_check_rule_returns_none_when_not_found(monkeypatch):
@@ -120,8 +120,8 @@ def test_list_rules_returns_empty_on_non_windows(monkeypatch):
 def test_list_rules_returns_list(monkeypatch):
     monkeypatch.setattr("sys.platform", "win32")
     rules_json = json.dumps([
-        {"DisplayName": "v2raycli sing-box", "Enabled": True},
-        {"DisplayName": "v2raycli xray", "Enabled": False},
+        {"DisplayName": "v2portal sing-box", "Enabled": True},
+        {"DisplayName": "v2portal xray", "Enabled": False},
     ])
     completed = subprocess.CompletedProcess([], returncode=0, stdout=rules_json, stderr="")
     monkeypatch.setattr(firewall, "_run_powershell", lambda cmd: completed)
@@ -157,7 +157,7 @@ def test_firewall_command_list_no_rules(monkeypatch, tmp_path, capsys):
 
     args = app.build_parser().parse_args(["settings", "firewall", "list"])
     assert app._settings_command(store, args) == 0
-    assert "no v2raycli firewall rules" in capsys.readouterr().out
+    assert "no v2portal firewall rules" in capsys.readouterr().out
 
 
 def test_firewall_command_allow_both(monkeypatch, tmp_path, capsys):

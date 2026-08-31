@@ -1,4 +1,4 @@
-"""Config persistence and CRUD for v2raycli."""
+"""Config persistence and CRUD for v2portal."""
 
 from __future__ import annotations
 

@@ -68,7 +68,7 @@ def test_cli_launches_and_exits_on_pty(tmp_path):
         "PYTHONPATH": str(src) + os.pathsep + os.environ.get("PYTHONPATH", ""),
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "v2raycli", "--config-dir", str(tmp_path), "--no-auto-update"],
+        [sys.executable, "-m", "v2portal", "--config-dir", str(tmp_path), "--no-auto-update"],
         stdin=slave,
         stdout=slave,
         stderr=slave,
@@ -89,5 +89,5 @@ def test_cli_launches_and_exits_on_pty(tmp_path):
     text = output.decode("utf-8", errors="replace")
     assert rc == 0, f"CLI exited {rc}; output:\n{text}"
     # The CLI prints a summary (version + config path + counts).
-    assert "v2raycli" in text
+    assert "v2portal" in text
     assert "profiles" in text

@@ -29,7 +29,7 @@ def run(store) -> int:
         _guide_first_run(store)
         while True:
             action = widgets.menu(
-                "v2raycli",
+                "v2portal",
                 [
                     ("connect", "Connect (select config)"),
                     ("servers", "Servers (dashboard)"),

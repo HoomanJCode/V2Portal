@@ -27,7 +27,7 @@ class TestV2RayCLIErrorHierarchy:
     """Every project exception must be a V2RayCLIError subclass."""
 
     @pytest.mark.parametrize("exc_class", ALL_PROJECT_ERRORS, ids=lambda c: c.__name__)
-    def test_is_v2raycli_error(self, exc_class: type) -> None:
+    def test_is_v2portal_error(self, exc_class: type) -> None:
         assert issubclass(exc_class, V2RayCLIError)
 
     @pytest.mark.parametrize("exc_class", ALL_PROJECT_ERRORS, ids=lambda c: c.__name__)

@@ -1,4 +1,4 @@
-"""Base exception hierarchy for v2raycli.
+"""Base exception hierarchy for v2portal.
 
 All project-specific exceptions inherit from :class:`V2RayCLIError`, making
 it easy for top-level handlers to catch every application error with a single
@@ -13,4 +13,4 @@ from __future__ import annotations
 
 
 class V2RayCLIError(Exception):
-    """Base class for all v2raycli application errors."""
+    """Base class for all v2portal application errors."""

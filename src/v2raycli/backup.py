@@ -126,10 +126,10 @@ def restore_backup(path, store, backup_dir=None) -> Config:
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("not a valid v2raycli backup")
+            raise ValueError("not a valid v2portal backup")
         sv = data.get("schema_version")
         if not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
-            raise ValueError("not a valid v2raycli backup")
+            raise ValueError("not a valid v2portal backup")
         _validate_persisted_shape(data)
         restored = Config.from_dict(data)
         # Migrate older schemas to the current version
@@ -141,7 +141,7 @@ def restore_backup(path, store, backup_dir=None) -> Config:
             tmp._id_seq = 0
             tmp._migrate(sv)
     except (OSError, ValueError, TypeError, AttributeError, KeyError, UnicodeError) as exc:
-        if isinstance(exc, ValueError) and str(exc) == "not a valid v2raycli backup":
+        if isinstance(exc, ValueError) and str(exc) == "not a valid v2portal backup":
             raise
         raise ValueError(f"invalid backup: {exc}") from exc
 

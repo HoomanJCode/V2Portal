@@ -94,7 +94,7 @@ def _latest_tag(repo: str, proxy: str | None = None) -> str:
         with httpx.Client(**client_options) as client:
             resp = client.get(
                 url,
-                headers={"Accept": "application/vnd.github+json", "User-Agent": "v2raycli"},
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "v2portal"},
             )
             resp.raise_for_status()
             payload = resp.json()
@@ -104,7 +104,7 @@ def _latest_tag(repo: str, proxy: str | None = None) -> str:
             hint = (
                 f"cannot reach GitHub ({exc}). "
                 "Check your internet connection or use a proxy:\n"
-                "  v2raycli settings engine update sing-box --proxy socks5://HOST:PORT"
+                "  v2portal settings engine update sing-box --proxy socks5://HOST:PORT"
             )
             raise BinaryError(hint) from exc
         raise BinaryError(f"could not resolve latest release: {exc}") from exc

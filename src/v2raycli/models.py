@@ -1,4 +1,4 @@
-"""Core data models for v2raycli.
+"""Core data models for v2portal.
 
 These dataclasses are the single source of truth for the on-disk config.
 Storage, config generation, and the TUI all consume them.

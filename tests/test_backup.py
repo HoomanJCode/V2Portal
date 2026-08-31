@@ -90,7 +90,7 @@ def test_restore_rejects_unsupported_schema_before_safety_backup(tmp_path):
     path.parent.mkdir()
     path.write_text(json.dumps({"schema_version": 999}))
 
-    with pytest.raises(ValueError, match="valid v2raycli backup"):
+    with pytest.raises(ValueError, match="valid v2portal backup"):
         backup.restore_backup(path, store, backup_dir=bdir)
 
     assert [p.name for p in store.config.profiles] == ["old"]

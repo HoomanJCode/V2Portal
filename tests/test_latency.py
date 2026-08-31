@@ -43,7 +43,7 @@ def _install_fakes(monkeypatch, captured):
     def fake_write(engine, config_dict):
         captured["engine"] = engine
         captured["config"] = config_dict
-        return str(Path("/tmp") / "v2raycli-probe.json")
+        return str(Path("/tmp") / "v2portal-probe.json")
 
     monkeypatch.setattr(latency, "_write_temp_config", fake_write)
 
@@ -119,7 +119,7 @@ def test_test_profile_success_structured_result(tmp_path, monkeypatch):
     proc = FakeProc.instances[-1]
     assert Path(proc.argv[0]) == Path("/fake/sing-box")
     assert proc.argv[1] == "run"
-    assert "v2raycli-probe.json" in proc.argv[3]
+    assert "v2portal-probe.json" in proc.argv[3]
     assert captured["config"]["route"]["final"] == profile.id
     # process is always cleaned up
     assert proc.stopped is True
@@ -475,7 +475,7 @@ def test_websocket_handshake_rejects_non_101():
 
 
 def test_websocket_ping_requires_matching_pong():
-    sock = FakeWebSocketSocket(b"\x8a\x08v2raycli")
+    sock = FakeWebSocketSocket(b"\x8a\x08v2portal")
 
     ok, elapsed, status = latency._websocket_ping(sock)
 

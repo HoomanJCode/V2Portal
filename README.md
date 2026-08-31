@@ -1,4 +1,4 @@
-# v2raycli
+# v2portal
 
 Non-interactive CLI client for v2ray proxy management. It wraps two proxy
 engines — **sing-box** (default) and **xray-core** — behind a single config,
@@ -44,8 +44,8 @@ pip install .
 pip install -e .[dev]
 ```
 
-> **Tip:** If the `v2raycli` command is not found after install, use
-> `python -m v2raycli` as a fallback, or install with `pipx install .`
+> **Tip:** If the `v2portal` command is not found after install, use
+> `python -m v2portal` as a fallback, or install with `pipx install .`
 > (install pipx first: `pip install pipx`). `pipx` handles PATH setup
 > automatically.
 
@@ -57,7 +57,7 @@ pip install .
 ```
 
 The engine binaries (sing-box / xray) download automatically to
-`~/.config/v2raycli/bin` on first use, with arm64 assets on Termux.
+`~/.config/v2portal/bin` on first use, with arm64 assets on Termux.
 
 > Note: OpenVPN / OpenConnect may require root on Android and are not
 > chainable/balanceable — they run the system client directly.
@@ -68,7 +68,7 @@ The engine binaries (sing-box / xray) download automatically to
 pip install .
 ```
 
-After installing, the `v2raycli` command is placed in Python's `Scripts`
+After installing, the `v2portal` command is placed in Python's `Scripts`
 directory (e.g. `%LOCALAPPDATA%\Python\pythonX.Y-64\Scripts`). If the
 command is not found, **one of these will work**:
 
@@ -82,11 +82,11 @@ command is not found, **one of these will work**:
    ```
    Then restart your terminal.
 
-2. Or use `python -m v2raycli` instead of `v2raycli` — this always works
+2. Or use `python -m v2portal` instead of `v2portal` — this always works
    regardless of PATH.
 
-Config lives in `%APPDATA%\v2raycli`. Engine binaries download to
-`%APPDATA%\v2raycli\bin`. When LAN sharing is enabled, allow the program
+Config lives in `%APPDATA%\v2portal`. Engine binaries download to
+`%APPDATA%\v2portal\bin`. When LAN sharing is enabled, allow the program
 through the Windows firewall.
 
 ### PyInstaller (single folder)
@@ -95,7 +95,7 @@ A spec is included:
 
 ```bash
 pip install pyinstaller
-pyinstaller v2raycli.spec
+pyinstaller v2portal.spec
 ```
 
 Engine binaries and geo assets still download on first run.
@@ -103,18 +103,18 @@ Engine binaries and geo assets still download on first run.
 ## Quickstart
 
 The primary interface is non-interactive and safe for scripts. Run
-`v2raycli --help` or `v2raycli COMMAND --help` for the complete tree. The
-interactive TUI (run `v2raycli` with no arguments) is a modern rich-styled
+`v2portal --help` or `v2portal COMMAND --help` for the complete tree. The
+interactive TUI (run `v2portal` with no arguments) is a modern rich-styled
 panel UI with screens for Connect, a Servers dashboard (live status +
 start/stop), a Groups tree, Subscriptions, Test, Routing, and Settings:
 
 ```bash
-v2raycli status
-v2raycli profile list
-v2raycli subscription list
-v2raycli group list
-v2raycli group tree
-v2raycli test latency all
+v2portal status
+v2portal profile list
+v2portal subscription list
+v2portal group list
+v2portal group tree
+v2portal test latency all
 ```
 
 Every mutating command uses explicit arguments and writes the config only after
@@ -146,69 +146,69 @@ Examples:
 
 ```bash
 # Add a manual profile
-v2raycli profile add socks office-proxy 127.0.0.1 1080
-v2raycli profile add share us-node 'vless://...'
-v2raycli profile edit ID --name "Office proxy" --host 10.0.0.2
+v2portal profile add socks office-proxy 127.0.0.1 1080
+v2portal profile add share us-node 'vless://...'
+v2portal profile edit ID --name "Office proxy" --host 10.0.0.2
 
 # Import a subscription
-v2raycli subscription add my-provider https://example.com/sub
-v2raycli subscription edit SUB_ID --name 'Renamed provider'
-v2raycli profile list --subscription SUB_ID
+v2portal subscription add my-provider https://example.com/sub
+v2portal subscription edit SUB_ID --name 'Renamed provider'
+v2portal profile list --subscription SUB_ID
 
 # Groups accept profiles, subscriptions, groups, and servers (auto-detected)
-v2raycli group add balancer fastest PROFILE_A SUB_ID GROUP_B SERVER_ID --strategy latency
-v2raycli group add chain chained PROFILE_A PROFILE_B
-v2raycli group edit GROUP_ID --strategy random
+v2portal group add balancer fastest PROFILE_A SUB_ID GROUP_B SERVER_ID --strategy latency
+v2portal group add chain chained PROFILE_A PROFILE_B
+v2portal group edit GROUP_ID --strategy random
 
 # Render the nested group/subscription/server hierarchy
-v2raycli group tree
+v2portal group tree
 
 # Add a running server as a local socks/http profile
-v2raycli profile add server via-server SERVER_ID
+v2portal profile add server via-server SERVER_ID
 
 # Start a proxy server on a port — REF is auto-detected
-v2raycli server add --port 1080 REF --name 'US proxy'
-v2raycli server edit SERVER_ID --outbound REF
-v2raycli server start SERVER_ID
+v2portal server add --port 1080 REF --name 'US proxy'
+v2portal server edit SERVER_ID --outbound REF
+v2portal server start SERVER_ID
 
 # Servers run in the background and survive terminal close
-v2raycli server list
-v2raycli sv stop SERVER_ID
-v2raycli sv restart --all
+v2portal server list
+v2portal sv stop SERVER_ID
+v2portal sv restart --all
 
 # View and change settings
-v2raycli settings
-v2raycli settings test-url
-v2raycli settings mixed-port 1081
-v2raycli settings default-engine xray
-v2raycli settings engine update both
+v2portal settings
+v2portal settings test-url
+v2portal settings mixed-port 1081
+v2portal settings default-engine xray
+v2portal settings engine update both
 
 # Update all subscriptions, filter profiles by kind
-v2raycli subscription update --all
-v2raycli profile list --kind socks
+v2portal subscription update --all
+v2portal profile list --kind socks
 
 # Test by group, subscription, or profile ID
-v2raycli test latency GROUP_ID
-v2raycli test endpoint SUB_ID
+v2portal test latency GROUP_ID
+v2portal test endpoint SUB_ID
 
 # Routing rules can target any reference
-v2raycli routing add block --domain 'keyword:ads'
-v2raycli routing add direct --geoip cn
-v2raycli routing add proxy --domain netflix.com --target SUB_ID
+v2portal routing add block --domain 'keyword:ads'
+v2portal routing add direct --geoip cn
+v2portal routing add proxy --domain netflix.com --target SUB_ID
 
 # Multiple servers on different ports
-v2raycli server add --port 1081 GROUP_ID --protocol http --name 'Balancer'
-v2raycli server start --all
+v2portal server add --port 1081 GROUP_ID --protocol http --name 'Balancer'
+v2portal server start --all
 ```
 
 ### Engine updates
 
-Engine updates are never automatic. Use `v2raycli settings engine update sing-box`,
-`v2raycli settings engine update xray`, or `v2raycli settings engine update both`. Only binaries
+Engine updates are never automatic. Use `v2portal settings engine update sing-box`,
+`v2portal settings engine update xray`, or `v2portal settings engine update both`. Only binaries
 configured with `binary_path: "auto"` are replaceable; custom and system paths
 are protected. Downloads are staged, version-checked, atomically replaced, and
 rolled back if verification fails. For restricted networks, pass an ephemeral
-proxy with `--proxy` on the update command (e.g. `v2raycli settings engine update both --proxy
+proxy with `--proxy` on the update command (e.g. `v2portal settings engine update both --proxy
 socks5://127.0.0.1:1080`); it is never stored.
 
 ### Auto-update
@@ -221,7 +221,7 @@ logged and skipped — they never block startup. Disable per-run with
 ### Subscription health
 
 On startup the CLI warns (to stderr) about expired subscriptions and those
-expiring within 7 days. `v2raycli health` prints a table of expiry status and
+expiring within 7 days. `v2portal health` prints a table of expiry status and
 traffic used for every enabled subscription.
 
 
@@ -252,7 +252,7 @@ You can add proxies via CLI:
   inbound ("localhost calling") — traffic physically passes through it.
   Members are resolved recursively at use time, deduplicated, and cycles
   (group→group and server→group→server) are rejected.
-- `v2raycli group tree` renders the whole hierarchy — top-level groups with
+- `v2portal group tree` renders the whole hierarchy — top-level groups with
   their members (profiles, subscriptions and their current nodes, servers,
   nested groups) plus any subscription/server/profile no group references.
 - VPN profiles cannot join balancers/chains.
@@ -270,31 +270,31 @@ profile, group, `direct` (bypass proxy), or `block` (drop traffic).
 
 ```bash
 # Switch to split mode
-v2raycli routing mode split
+v2portal routing mode split
 
 # Block ads
-v2raycli routing add block --domain keyword:ads
-v2raycli routing add block --geosite category-ads-all
+v2portal routing add block --domain keyword:ads
+v2portal routing add block --geosite category-ads-all
 
 # Bypass local and Chinese IPs
-v2raycli routing add direct --ip 192.168.0.0/16
-v2raycli routing add direct --geoip cn --geoip private
+v2portal routing add direct --ip 192.168.0.0/16
+v2portal routing add direct --geoip cn --geoip private
 
 # Route specific sites through a profile, group, or server
-v2raycli routing add proxy --domain netflix.com --target PROFILE_ID
-v2raycli routing add proxy --geosite gfw --target GROUP_ID
-v2raycli routing add proxy --domain intranet.corp --target SERVER_ID
+v2portal routing add proxy --domain netflix.com --target PROFILE_ID
+v2portal routing add proxy --geosite gfw --target GROUP_ID
+v2portal routing add proxy --domain intranet.corp --target SERVER_ID
 
 # List all rules
-v2raycli routing list
-v2raycli routing list --json
+v2portal routing list
+v2portal routing list --json
 
 # Reorder rules (first match wins)
-v2raycli routing move RULE_ID up
-v2raycli routing move RULE_ID down
+v2portal routing move RULE_ID up
+v2portal routing move RULE_ID down
 
 # Remove a rule
-v2raycli routing remove RULE_ID
+v2portal routing remove RULE_ID
 ```
 
 ### Match types
@@ -318,13 +318,13 @@ traffic through different outbounds:
 
 ```bash
 # Route Netflix through a US profile
-v2raycli routing add proxy --domain netflix.com --target US_PROFILE_ID
+v2portal routing add proxy --domain netflix.com --target US_PROFILE_ID
 
 # Route streaming through a low-latency balancer group
-v2raycli routing add proxy --geosite streaming --target BALANCER_GROUP_ID
+v2portal routing add proxy --geosite streaming --target BALANCER_GROUP_ID
 
 # No --target: the rule follows the server's own outbound
-v2raycli routing add proxy --domain example.com
+v2portal routing add proxy --domain example.com
 ```
 
 ### Automatic cleanup
@@ -359,18 +359,18 @@ Keep all enabled servers running across reboots (no ad-hoc `connect` command
 — connections are servers):
 
 ```bash
-v2raycli server add --port 1080 REF
-v2raycli server start --all
-v2raycli service install
+v2portal server add --port 1080 REF
+v2portal server start --all
+v2portal service install
 ```
 
 - **Linux** — writes a systemd *user* unit to
-  `~/.config/systemd/user/v2raycli.service`; enable it with
-  `systemctl --user enable --now v2raycli`.
+  `~/.config/systemd/user/v2portal.service`; enable it with
+  `systemctl --user enable --now v2portal`.
 - **Termux** — writes a `termux-services` run script to
-  `~/.termux/sv/v2raycli/run`; enable with `sv-enable v2raycli`.
+  `~/.termux/sv/v2portal/run`; enable with `sv-enable v2portal`.
 
-Remove it with `v2raycli service uninstall`.
+Remove it with `v2portal service uninstall`.
 
 ## Engine selection
 
@@ -388,36 +388,36 @@ rules. Here's a practical setup:
 
 ```bash
 # Enable split routing
-v2raycli routing mode split
+v2portal routing mode split
 
 # Route Epic Games traffic through a Berlin profile
-v2raycli routing add proxy --domain epicgames.com --target BERLIN_PROFILE_ID
-v2raycli routing add proxy --domain fortnite.com --target BERLIN_PROFILE_ID
+v2portal routing add proxy --domain epicgames.com --target BERLIN_PROFILE_ID
+v2portal routing add proxy --domain fortnite.com --target BERLIN_PROFILE_ID
 
 # Route YouTube traffic through a balancer group
-v2raycli routing add proxy --domain youtube.com --target GROUP_1_ID
-v2raycli routing add proxy --domain googlevideo.com --target GROUP_1_ID
+v2portal routing add proxy --domain youtube.com --target GROUP_1_ID
+v2portal routing add proxy --domain googlevideo.com --target GROUP_1_ID
 
 # Route everything else through a subscription (auto-detected as a member)
-v2raycli group add balancer default SUB_ID_A SUB_ID_2
+v2portal group add balancer default SUB_ID_A SUB_ID_2
 
 # Route Russian websites directly (no proxy)
-v2raycli routing add direct --geoip ru
-v2raycli routing add direct --geosite ru
+v2portal routing add direct --geoip ru
+v2portal routing add direct --geosite ru
 
 # Block ads globally
-v2raycli routing add block --geosite category-ads-all
+v2portal routing add block --geosite category-ads-all
 
 # Review your rules
-v2raycli routing list
+v2portal routing list
 ```
 
-Rules are evaluated in order; the first match wins. Use `v2raycli routing move`
+Rules are evaluated in order; the first match wins. Use `v2portal routing move`
 to reorder them.
 
 ## Troubleshooting
 
-- **Port in use** — change the port with `v2raycli settings mixed-port <port>`.
+- **Port in use** — change the port with `v2portal settings mixed-port <port>`.
 - **"binary not found"** — binaries download on first use; if download fails,
   set `engines.<name>.binary_path` in the config to a local binary, or
   `"system"` to use one on `PATH`.
@@ -428,9 +428,9 @@ to reorder them.
   network).
 - **VPN client missing** — install `openvpn` / `openconnect` and ensure it's on
   `PATH`.
-- **`v2raycli` command not found after `pip install .`** — the script is in
+- **`v2portal` command not found after `pip install .`** — the script is in
   Python's `Scripts` directory which may not be on `PATH`. Fix: use
-  `python -m v2raycli`, add `Scripts` to your `PATH`, or reinstall with
+  `python -m v2portal`, add `Scripts` to your `PATH`, or reinstall with
   `pipx install .`.
 
 ## Config layout

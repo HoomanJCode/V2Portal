@@ -704,7 +704,7 @@ def test_routing_list_shows_disabled(tmp_path, capsys):
 
 
 def test_invalid_top_level_command_shows_help(capsys):
-    """Typing 'v2raycli foo' prints the top-level usage and exits 2."""
+    """Typing 'v2portal foo' prints the top-level usage and exits 2."""
     with pytest.raises(SystemExit, match="2"):
         app.build_parser().parse_args(["foo"])
     err = capsys.readouterr().out + capsys.readouterr().err
@@ -712,7 +712,7 @@ def test_invalid_top_level_command_shows_help(capsys):
 
 
 def test_invalid_profile_action_shows_profile_help(capsys):
-    """Typing 'v2raycli profile foo' prints profile usage and exits 2."""
+    """Typing 'v2portal profile foo' prints profile usage and exits 2."""
     with pytest.raises(SystemExit, match="2"):
         app.build_parser().parse_args(["profile", "foo"])
     err = capsys.readouterr().out + capsys.readouterr().err
@@ -720,7 +720,7 @@ def test_invalid_profile_action_shows_profile_help(capsys):
 
 
 def test_invalid_subscription_action_shows_subscription_help(capsys):
-    """Typing 'v2raycli subscription foo' prints subscription usage and exits 2."""
+    """Typing 'v2portal subscription foo' prints subscription usage and exits 2."""
     with pytest.raises(SystemExit, match="2"):
         app.build_parser().parse_args(["subscription", "foo"])
     err = capsys.readouterr().out + capsys.readouterr().err
@@ -728,7 +728,7 @@ def test_invalid_subscription_action_shows_subscription_help(capsys):
 
 
 def test_invalid_server_action_shows_server_help(capsys):
-    """Typing 'v2raycli server foo' prints server usage and exits 2."""
+    """Typing 'v2portal server foo' prints server usage and exits 2."""
     with pytest.raises(SystemExit, match="2"):
         app.build_parser().parse_args(["server", "foo"])
     err = capsys.readouterr().out + capsys.readouterr().err
@@ -736,7 +736,7 @@ def test_invalid_server_action_shows_server_help(capsys):
 
 
 def test_invalid_routing_action_shows_routing_help(capsys):
-    """Typing 'v2raycli routing foo' prints routing usage and exits 2."""
+    """Typing 'v2portal routing foo' prints routing usage and exits 2."""
     with pytest.raises(SystemExit, match="2"):
         app.build_parser().parse_args(["routing", "foo"])
     err = capsys.readouterr().out + capsys.readouterr().err
@@ -744,7 +744,7 @@ def test_invalid_routing_action_shows_routing_help(capsys):
 
 
 def test_bare_test_scope_defaults_to_endpoint():
-    """Typing 'v2raycli test <id>' treats the token as a scope and defaults
+    """Typing 'v2portal test <id>' treats the token as a scope and defaults
     to an endpoint probe rather than erroring on an unknown type."""
     args = app.build_parser().parse_args(["test", "foo"])
     assert args.test_type == "foo"
@@ -756,7 +756,7 @@ def test_bare_test_scope_defaults_to_endpoint():
 
 
 def test_settings_bare_shows_all(tmp_path, capsys):
-    """'v2raycli settings' with no subcommand prints all settings as JSON."""
+    """'v2portal settings' with no subcommand prints all settings as JSON."""
     store = _store(tmp_path)
     args = app.build_parser().parse_args(["settings"])
     assert app._settings_command(store, args) == 0
@@ -767,7 +767,7 @@ def test_settings_bare_shows_all(tmp_path, capsys):
 
 
 def test_settings_get_single(tmp_path, capsys):
-    """'v2raycli settings mixed-port' prints current value."""
+    """'v2portal settings mixed-port' prints current value."""
     store = _store(tmp_path)
     args = app.build_parser().parse_args(["settings", "mixed-port"])
     assert app._settings_command(store, args) == 0
@@ -776,7 +776,7 @@ def test_settings_get_single(tmp_path, capsys):
 
 
 def test_settings_set_single(tmp_path, capsys):
-    """'v2raycli settings mixed-port 1081' sets the value."""
+    """'v2portal settings mixed-port 1081' sets the value."""
     store = _store(tmp_path)
     args = app.build_parser().parse_args(["settings", "mixed-port", "1081"])
     assert app._settings_command(store, args) == 0

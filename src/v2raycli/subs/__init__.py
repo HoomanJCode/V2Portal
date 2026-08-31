@@ -1,1 +1,1 @@
-"""Subscription fetching and share-link parsing for v2raycli."""
+"""Subscription fetching and share-link parsing for v2portal."""

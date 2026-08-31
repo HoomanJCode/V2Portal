@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live verification of v2raycli's engine integration.
+"""Live verification of v2portal's engine integration.
 
 Downloads sing-box + xray, validates generated configs with each engine's own
 check command, and runs end-to-end proxy smoke tests. Requires network access.
@@ -12,7 +12,7 @@ out to the internet). Run it on any platform to confirm the engine layer works:
     python scripts/verify_engines.py --proxy socks5://127.0.0.1:10808
 
 The optional proxy is used only for GitHub release metadata and binary
-downloads; it is never written to the v2raycli config.
+downloads; it is never written to the v2portal config.
 
 Exit code is non-zero if any check fails.
 """
@@ -579,7 +579,7 @@ def acquire_binaries(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Verify v2raycli engine integration live.")
+    parser = argparse.ArgumentParser(description="Verify v2portal engine integration live.")
     parser.add_argument("--bin-dir", type=Path, default=None, help="cache engine binaries here")
     parser.add_argument("--skip-download", action="store_true", help="reuse --bin-dir binaries, don't download")
     parser.add_argument(
@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     checks = Checks()
-    bin_dir = args.bin_dir or Path(tempfile.mkdtemp(prefix="v2raycli-verify-"))
+    bin_dir = args.bin_dir or Path(tempfile.mkdtemp(prefix="v2portal-verify-"))
     bin_dir.mkdir(parents=True, exist_ok=True)
 
     binaries = acquire_binaries(

@@ -415,7 +415,7 @@ def _websocket_handshake(sock, host: str, path: str, headers: dict, timeout: flo
     return True, elapsed, "ok"
 
 
-def _websocket_ping(sock, payload: bytes = b"v2raycli", timeout: float = 5.0) -> tuple[bool, float, str]:
+def _websocket_ping(sock, payload: bytes = b"v2portal", timeout: float = 5.0) -> tuple[bool, float, str]:
     """Send a masked client ping and require the matching server pong."""
     started = time.monotonic()
     mask = secrets.token_bytes(4)
@@ -726,7 +726,7 @@ def build_test_config(profile: Profile, settings, port: int) -> tuple[str, dict]
 
 
 def _write_temp_config(engine: str, config_dict: dict) -> str:
-    fd, path = tempfile.mkstemp(prefix=f"v2raycli-{engine}-", suffix=".json")
+    fd, path = tempfile.mkstemp(prefix=f"v2portal-{engine}-", suffix=".json")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(config_dict, fh, ensure_ascii=False, indent=2)
     return path

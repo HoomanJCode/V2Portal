@@ -45,7 +45,7 @@ _ENGINE_ERROR_PATTERNS = (
 _FIREWALL_HINT_WINDOWS = (
     "On Windows, the engine binary may need a firewall rule to make outbound connections.\n"
     "Try: Windows Security → Firewall → Allow an app → browse to sing-box.exe or xray.exe\n"
-    "Or run PowerShell as Admin: New-NetFirewallRule -DisplayName 'v2raycli engine' "
+    "Or run PowerShell as Admin: New-NetFirewallRule -DisplayName 'v2portal engine' "
     "-Direction Outbound -Program '<path-to-engine>' -Action Allow"
 )
 

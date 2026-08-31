@@ -2,9 +2,9 @@
 
 > **Superseded (historical):** the ad-hoc `connect` command and the thin
 > `connector` module this phase planned were later removed — proxy connections
-> are now persistent **servers** (`src/v2raycli/connection.py` +
-> `src/v2raycli/servers.py` + `service.py`), and `resolve_ref_entity` lives in
-> `src/v2raycli/outbounds/groups.py`. Kept as a record of what Phase 05 delivered.
+> are now persistent **servers** (`src/v2portal/connection.py` +
+> `src/v2portal/servers.py` + `service.py`), and `resolve_ref_entity` lives in
+> `src/v2portal/outbounds/groups.py`. Kept as a record of what Phase 05 delivered.
 
 **Goal:** one `connector` code path is used by CLI connect, the TUI connect
 screen, and the boot service; all accept any reference
@@ -14,7 +14,7 @@ screen, and the boot service; all accept any reference
 
 ### 5.1 `connector` module (new, thin)
 
-- Create `src/v2raycli/connector.py`:
+- Create `src/v2portal/connector.py`:
   - `resolve_connection(store, ref: str, controller) -> ConnectionStatus`
   - `ref` is a string id; type auto-detected; resolution via Phase-01
     `resolve_refs` / `resolve_target`; returns the connection status.
@@ -23,9 +23,9 @@ screen, and the boot service; all accept any reference
 
 ### 5.2 CLI — `connect`
 
-- Add `v2raycli connect REF` subcommand (new):
+- Add `v2portal connect REF` subcommand (new):
   - REF auto-detected; connects until Ctrl+C / `--stop`.
-  - `v2raycli connect --help` documents REF = profile | subscription | group.
+  - `v2portal connect --help` documents REF = profile | subscription | group.
 - `service install REF` — now accepts subscription too (validation via
   `classify_id`).
 

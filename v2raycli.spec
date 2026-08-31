@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for a single-folder v2raycli bundle.
+"""PyInstaller spec for a single-folder v2portal bundle.
 
 Build with:  pip install pyinstaller && pyinstaller v2raycli.spec
 Engine binaries and geo assets are NOT bundled; they download on first run.
@@ -29,7 +29,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="v2raycli",
+    name="v2portal",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,5 +49,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="v2raycli",
+    name="v2portal",
 )

@@ -18,7 +18,7 @@ from v2raycli.diagnostics import platform_report
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Print read-only v2raycli platform diagnostics.")
+    parser = argparse.ArgumentParser(description="Print read-only v2portal platform diagnostics.")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     args = parser.parse_args(argv)
     report = platform_report()

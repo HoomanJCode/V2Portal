@@ -1,4 +1,4 @@
-"""Settings defaults and platform paths for v2raycli."""
+"""Settings defaults and platform paths for v2portal."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - stdlib fallback for minimal dev setups
 
 from .models import Settings
 
-APP_NAME = "v2raycli"
+APP_NAME = "v2portal"
 SCHEMA_VERSION = 3
 
 
@@ -35,7 +35,7 @@ def _user_config_dir(appname: str) -> str:
 
 
 def config_dir() -> Path:
-    """Platform config directory (Linux/Termux ~/.config/v2raycli, Windows %APPDATA%/v2raycli)."""
+    """Platform config directory (Linux/Termux ~/.config/v2portal, Windows %APPDATA%/v2portal)."""
     return Path(_user_config_dir(APP_NAME))
 
 

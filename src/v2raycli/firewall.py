@@ -16,7 +16,7 @@ from pathlib import Path
 
 _log = logging.getLogger(__name__)
 
-_RULE_PREFIX = "v2raycli"
+_RULE_PREFIX = "v2portal"
 
 
 def is_windows() -> bool:
@@ -93,7 +93,7 @@ def add_rule(engine: str, binary_path: str | Path, *, elevate: bool = True) -> s
     cmd = (
         f"New-NetFirewallRule -DisplayName '{name}' "
         f"-Direction Outbound -Program '{binary}' -Action Allow "
-        f"-Description 'v2raycli auto-generated rule for {engine}' "
+        f"-Description 'v2portal auto-generated rule for {engine}' "
         f"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name"
     )
 
@@ -160,7 +160,7 @@ def check_rule(engine: str) -> dict | None:
 
 
 def list_rules() -> list[dict]:
-    """Return all v2raycli firewall rules."""
+    """Return all v2portal firewall rules."""
     if not is_windows():
         return []
 

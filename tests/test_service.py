@@ -54,7 +54,7 @@ def test_install_service_linux(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "systemd_unit_dir", lambda: unit_dir)
 
     path = service.install_service()
-    assert path == unit_dir / "v2raycli.service"
+    assert path == unit_dir / "v2portal.service"
     assert "server start --all" in path.read_text(encoding="utf-8")
 
 
@@ -62,10 +62,10 @@ def test_install_service_termux(tmp_path, monkeypatch):
     _store(tmp_path)
     sv_dir = tmp_path / "sv"
     monkeypatch.setattr(service, "platform", lambda: "termux")
-    monkeypatch.setattr(service, "termux_service_dir", lambda: sv_dir / "v2raycli")
+    monkeypatch.setattr(service, "termux_service_dir", lambda: sv_dir / "v2portal")
 
     path = service.install_service()
-    assert path == sv_dir / "v2raycli" / "run"
+    assert path == sv_dir / "v2portal" / "run"
     assert path.exists()
     assert "server start --all" in path.read_text(encoding="utf-8")
 
@@ -83,7 +83,7 @@ def test_install_service_unsupported(tmp_path, monkeypatch):
 
 def test_uninstall_service_removes(tmp_path, monkeypatch):
     unit_dir = tmp_path / "systemd"
-    unit = unit_dir / "v2raycli.service"
+    unit = unit_dir / "v2portal.service"
     unit.parent.mkdir(parents=True)
     unit.write_text("x")
     monkeypatch.setattr(service, "platform", lambda: "linux")

@@ -1,11 +1,11 @@
-"""Install v2raycli as a background service.
+"""Install v2portal as a background service.
 
 A service keeps the persistent proxy servers running across reboots by
-launching ``v2raycli server start --all`` on boot:
+launching ``v2portal server start --all`` on boot:
 
 - **Linux** — a systemd *user* unit under
   ``$XDG_CONFIG_HOME/systemd/user`` (or ``~/.config/systemd/user``).
-- **Termux** — a ``termux-services`` run script under ``~/.termux/sv/v2raycli``.
+- **Termux** — a ``termux-services`` run script under ``~/.termux/sv/v2portal``.
 
 Other platforms (Windows, macOS) are not supported and raise.
 """
@@ -18,7 +18,7 @@ import shlex
 import sys
 from pathlib import Path
 
-SERVICE_NAME = "v2raycli"
+SERVICE_NAME = "v2portal"
 _log = logging.getLogger(__name__)
 
 
@@ -34,7 +34,7 @@ def platform() -> str:
 
 
 def _cmdline(config_dir: str | None = None) -> str:
-    args = [shlex.quote(sys.executable), "-m", "v2raycli", "server", "start", "--all"]
+    args = [shlex.quote(sys.executable), "-m", "v2portal", "server", "start", "--all"]
     if config_dir:
         args += ["--config-dir", shlex.quote(config_dir)]
     return " ".join(args)
@@ -47,7 +47,7 @@ def build_systemd_unit(
     exec_start = _cmdline(config_dir)
     return (
         "[Unit]\n"
-        "Description=v2raycli LAN proxy\n"
+        "Description=v2portal LAN proxy\n"
         "After=network-online.target\n"
         "Wants=network-online.target\n"
         "\n"

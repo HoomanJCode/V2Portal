@@ -21,13 +21,13 @@ def test_main_runs_and_exits_zero(tmp_path, monkeypatch, capsys):
 
     assert app.main([]) == 0
     out = capsys.readouterr().out
-    assert "v2raycli v" in out
+    assert "v2portal v" in out
     assert "profiles: 0" in out
 
 
 def test_version_flag(capsys):
     assert app.main(["--version"]) == 0
-    assert "v2raycli v" in capsys.readouterr().out
+    assert "v2portal v" in capsys.readouterr().out
 
 
 def test_config_dir_flag(tmp_path):

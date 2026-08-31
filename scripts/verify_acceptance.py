@@ -113,7 +113,7 @@ def run_smoke(checks: Checks | None = None) -> bool:
     checks = checks or Checks()
     FakeProc.instances.clear()
 
-    with tempfile.TemporaryDirectory(prefix="v2raycli-acceptance-") as directory:
+    with tempfile.TemporaryDirectory(prefix="v2portal-acceptance-") as directory:
         root = Path(directory)
         store = ConfigStore(root / "config.json")
         store.load()
@@ -227,7 +227,7 @@ def run_smoke(checks: Checks | None = None) -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run a credential-free v2raycli acceptance smoke flow.")
+    parser = argparse.ArgumentParser(description="Run a credential-free v2portal acceptance smoke flow.")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
 

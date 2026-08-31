@@ -18,7 +18,7 @@ group), resolved dynamically at start/restart time. No more `--profile` /
 ### 3.2 CLI — `server add` / `server edit`
 
 - Replace `--profile` / `--group` flags with a single positional:
-  `v2raycli server add --port 1080 REF [--name X] [--protocol P] [--listen L]`
+  `v2portal server add --port 1080 REF [--name X] [--protocol P] [--listen L]`
   - REF auto-detected via `classify_id` (profile | subscription | group).
   - `--direct` flag (existing) still forces `direct`; mutually exclusive
     with REF positional.

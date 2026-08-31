@@ -1,4 +1,4 @@
-"""Engine selection helpers shared across v2raycli."""
+"""Engine selection helpers shared across v2portal."""
 
 from __future__ import annotations
 

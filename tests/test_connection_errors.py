@@ -35,13 +35,13 @@ def _fake(tmp_path, body):
 class TestProxyConnectionErrorHierarchy:
     """ProxyConnectionError must be catchable as both V2RayCLIError and Exception."""
 
-    def test_is_v2raycli_error(self):
+    def test_is_v2portal_error(self):
         assert issubclass(ProxyConnectionError, V2RayCLIError)
 
     def test_is_exception(self):
         assert issubclass(ProxyConnectionError, Exception)
 
-    def test_catchable_as_v2raycli_error(self):
+    def test_catchable_as_v2portal_error(self):
         with pytest.raises(V2RayCLIError):
             raise ProxyConnectionError("test")
 

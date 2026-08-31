@@ -7,10 +7,10 @@ IDs are positional and auto-detected everywhere.
 ## The standard shape
 
 ```
-v2raycli <resource> list [--json] [filters]
-v2raycli <resource> add   <...args> [options]
-v2raycli <resource> edit  ID [--name ...] [--fields...]
-v2raycli <resource> remove ID
+v2portal <resource> list [--json] [filters]
+v2portal <resource> add   <...args> [options]
+v2portal <resource> edit  ID [--name ...] [--fields...]
+v2portal <resource> remove ID
 ```
 
 - `resource` ∈ {profile, subscription, group, server, routing(rule)}.

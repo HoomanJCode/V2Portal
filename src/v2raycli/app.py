@@ -1,4 +1,4 @@
-"""Entry point for the v2raycli command."""
+"""Entry point for the v2portal command."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .storage import ConfigStore
 class _SubcommandParser(argparse.ArgumentParser):
     """ArgumentParser that shows context-appropriate help on invalid commands.
 
-    When the user enters an invalid subcommand (e.g. ``v2raycli profile foo``)
+    When the user enters an invalid subcommand (e.g. ``v2portal profile foo``)
     argparse prints an unfriendly "invalid choice" error.  This subclass
     overrides ``error()`` to display the help for the parent command instead,
     making it clear what actions are available.
@@ -57,16 +57,16 @@ class _SubcommandParser(argparse.ArgumentParser):
 
 def build_parser() -> _SubcommandParser:
     parser = _SubcommandParser(
-        prog="v2raycli",
+        prog="v2portal",
         description=(
-            "v2raycli — manage proxy profiles and run inbound servers (sing-box + xray-core).\n\n"
-            "Use 'v2raycli COMMAND --help' for detailed usage of any command.\n\n"
+            "v2portal — manage proxy profiles and run inbound servers (sing-box + xray-core).\n\n"
+            "Use 'v2portal COMMAND --help' for detailed usage of any command.\n\n"
             "Examples:\n"
-            "  v2raycli profile list\n"
-            "  v2raycli server add --port 1080 --profile PROFILE_ID\n"
-            "  v2raycli server start SERVER_ID\n"
-            "  v2raycli subscription add myprovider https://example.com/sub\n"
-            "  v2raycli test latency all"
+            "  v2portal profile list\n"
+            "  v2portal server add --port 1080 --profile PROFILE_ID\n"
+            "  v2portal server start SERVER_ID\n"
+            "  v2portal subscription add myprovider https://example.com/sub\n"
+            "  v2portal test latency all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -99,8 +99,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Print a one-line summary of the loaded config, or emit JSON.\n\n"
             "Examples:\n"
-            "  v2raycli status\n"
-            "  v2raycli status --json"
+            "  v2portal status\n"
+            "  v2portal status --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -113,8 +113,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Print expiry status and traffic used for every enabled subscription.\n\n"
             "Examples:\n"
-            "  v2raycli health\n"
-            "  v2raycli health --json"
+            "  v2portal health\n"
+            "  v2portal health --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -130,11 +130,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Profiles are what you connect to. They can be added manually or\n"
             "imported from a subscription.\n\n"
             "Examples:\n"
-            "  v2raycli profile list\n"
-            "  v2raycli profile list --subscription SUB_ID\n"
-            "  v2raycli profile list --kind socks\n"
-            "  v2raycli profile add socks office 127.0.0.1 1080\n"
-            "  v2raycli profile add share us 'vless://...'"
+            "  v2portal profile list\n"
+            "  v2portal profile list --subscription SUB_ID\n"
+            "  v2portal profile list --kind socks\n"
+            "  v2portal profile add socks office 127.0.0.1 1080\n"
+            "  v2portal profile add share us 'vless://...'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -146,9 +146,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "List all saved profiles. Use --subscription or --kind to filter.\n\n"
             "Examples:\n"
-            "  v2raycli profile list\n"
-            "  v2raycli profile list --subscription abc-123\n"
-            "  v2raycli profile list --kind socks --json"
+            "  v2portal profile list\n"
+            "  v2portal profile list --subscription abc-123\n"
+            "  v2portal profile list --kind socks --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -166,11 +166,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Supported types: share, raw, socks, http, wireguard, hysteria2,\n"
             "tuic, openvpn, openconnect, server.\n\n"
             "Examples:\n"
-            "  v2raycli profile add socks office 127.0.0.1 1080\n"
-            "  v2raycli profile add socks office 127.0.0.1 1080 --username u --password p\n"
-            "  v2raycli profile add share us 'vless://...'\n"
-            "  v2raycli profile add http proxy 10.0.0.1 8080\n"
-            "  v2raycli profile add server via-server SERVER_ID  # socks/http profile on localhost"
+            "  v2portal profile add socks office 127.0.0.1 1080\n"
+            "  v2portal profile add socks office 127.0.0.1 1080 --username u --password p\n"
+            "  v2portal profile add share us 'vless://...'\n"
+            "  v2portal profile add http proxy 10.0.0.1 8080\n"
+            "  v2portal profile add server via-server SERVER_ID  # socks/http profile on localhost"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -184,7 +184,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Supported schemes: vmess, vless, trojan, ss, hysteria2, tuic,\n"
             "wireguard, socks, http.\n\n"
             "Example:\n"
-            "  v2raycli profile add share my-node 'vless://uuid@host:443?...'"
+            "  v2portal profile add share my-node 'vless://uuid@host:443?...'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -198,7 +198,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Paste a raw xray outbound JSON object or provide a file path\n"
             "containing one. The JSON must have a 'protocol' field.\n\n"
             "Example:\n"
-            "  v2raycli profile add raw my-outbound '{\"protocol\":\"vmess\",\"settings\":{...}}'"
+            "  v2portal profile add raw my-outbound '{\"protocol\":\"vmess\",\"settings\":{...}}'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -213,7 +213,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             description=(
                 f"Add a {kind.upper()} proxy profile.\n\n"
                 "Example:\n"
-                f"  v2raycli profile add {kind} my-proxy 127.0.0.1 1080"
+                f"  v2portal profile add {kind} my-proxy 127.0.0.1 1080"
             ),
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -230,7 +230,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Add a WireGuard endpoint. Requires private key, address CIDR,\n"
             "and at least one peer with public key, endpoint, and allowed IPs.\n\n"
             "Example:\n"
-            "  v2raycli profile add wireguard wg0 \\\n"
+            "  v2portal profile add wireguard wg0 \\\n"
             "    --private-key 'key' --address 10.0.0.2/32 \\\n"
             "    --peer-public-key 'peer-key' --peer-endpoint 1.2.3.4:51820 \\\n"
             "    --allowed-ip 0.0.0.0/0"
@@ -252,7 +252,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Add a Hysteria2 proxy profile. Requires server, port, and password.\n\n"
             "Example:\n"
-            "  v2raycli profile add hysteria2 h2 1.2.3.4 443 mypassword"
+            "  v2portal profile add hysteria2 h2 1.2.3.4 443 mypassword"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -270,7 +270,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Add a TUIC proxy profile. Requires server, port, UUID, and password.\n\n"
             "Example:\n"
-            "  v2raycli profile add tuic tuic 1.2.3.4 443 uuid-here password-here"
+            "  v2portal profile add tuic tuic 1.2.3.4 443 uuid-here password-here"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -290,8 +290,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "or --inline with the config content. VPN profiles cannot be\n"
             "chained or balanced with proxy profiles.\n\n"
             "Examples:\n"
-            "  v2raycli profile add openvpn vpn --config-path /etc/openvpn/client.ovpn\n"
-            "  v2raycli profile add openvpn vpn --inline 'client\\n...'"
+            "  v2portal profile add openvpn vpn --config-path /etc/openvpn/client.ovpn\n"
+            "  v2portal profile add openvpn vpn --inline 'client\\n...'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -306,7 +306,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Add an OpenConnect profile. Requires a server address.\n"
             "Uses the system openconnect client.\n\n"
             "Example:\n"
-            "  v2raycli profile add openconnect ac vpn.example.com"
+            "  v2portal profile add openconnect ac vpn.example.com"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -321,7 +321,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "(a socks/http profile on 127.0.0.1). Traffic routed through it\n"
             "passes through that server's configured outbound.\n\n"
             "Example:\n"
-            "  v2raycli profile add server via-server 005"
+            "  v2portal profile add server via-server 005"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -334,7 +334,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove a profile and prune it from all subscriptions and groups.\n\n"
             "Example:\n"
-            "  v2raycli profile remove abc-123"
+            "  v2portal profile remove abc-123"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -346,7 +346,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Rename an existing profile.\n\n"
             "Example:\n"
-            "  v2raycli profile rename abc-123 'US Node 01'"
+            "  v2portal profile rename abc-123 'US Node 01'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -360,9 +360,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Change fields on an existing profile. You can update the name,\n"
             "host/address, port, and authentication for socks/http types.\n\n"
             "Examples:\n"
-            "  v2raycli profile edit abc-123 --name 'New Name'\n"
-            "  v2raycli profile edit abc-123 --host 10.0.0.2 --port 1081\n"
-            "  v2raycli profile edit abc-123 --username u --password p"
+            "  v2portal profile edit abc-123 --name 'New Name'\n"
+            "  v2portal profile edit abc-123 --host 10.0.0.2 --port 1081\n"
+            "  v2portal profile edit abc-123 --username u --password p"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -384,7 +384,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Export a profile as a share link (vmess://, vless://, etc.).\n"
             "Only encodable kinds can be exported.\n\n"
             "Example:\n"
-            "  v2raycli profile export abc-123"
+            "  v2portal profile export abc-123"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -397,13 +397,13 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="manage proxy subscriptions",
         description=(
             "A subscription is a URL that returns a list of proxy nodes.\n"
-            "When you add or update one, v2raycli fetches the URL, decodes\n"
+            "When you add or update one, v2portal fetches the URL, decodes\n"
             "share links, and stores them as profiles. Stale nodes are pruned.\n\n"
             "Examples:\n"
-            "  v2raycli subscription list\n"
-            "  v2raycli subscription add myprovider https://example.com/sub\n"
-            "  v2raycli subscription update abc-123\n"
-            "  v2raycli subscription update --all"
+            "  v2portal subscription list\n"
+            "  v2portal subscription add myprovider https://example.com/sub\n"
+            "  v2portal subscription update abc-123\n"
+            "  v2portal subscription update --all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -415,7 +415,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "List all saved subscriptions.\n\n"
             "Example:\n"
-            "  v2raycli subscription list --json"
+            "  v2portal subscription list --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -429,9 +429,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "them as profiles linked to this subscription.\n\n"
             "Accepted URL schemes: https://, http://, file://, paste://\n\n"
             "Examples:\n"
-            "  v2raycli subscription add myprovider https://example.com/sub\n"
-            "  v2raycli subscription add local paste://vmess://...\n"
-            "  v2raycli subscription add proxied https://example.com/sub --proxy socks5://127.0.0.1:1080"
+            "  v2portal subscription add myprovider https://example.com/sub\n"
+            "  v2portal subscription add local paste://vmess://...\n"
+            "  v2portal subscription add proxied https://example.com/sub --proxy socks5://127.0.0.1:1080"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -449,8 +449,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Unchanged nodes keep their names; nodes that disappeared\n"
             "upstream are deleted.\n\n"
             "Examples:\n"
-            "  v2raycli subscription update abc-123\n"
-            "  v2raycli subscription update --all"
+            "  v2portal subscription update abc-123\n"
+            "  v2portal subscription update --all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -468,11 +468,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Change fields on an existing subscription. Changing the URL\n"
             "does NOT re-fetch; run 'subscription update' afterwards.\n\n"
             "Examples:\n"
-            "  v2raycli subscription edit abc-123 --name 'New name'\n"
-            "  v2raycli subscription edit abc-123 --url https://example.com/new\n"
-            "  v2raycli subscription edit abc-123 --user-agent 'v2raycli'\n"
-            "  v2raycli subscription edit abc-123 --auto-update-days 3\n"
-            "  v2raycli subscription edit abc-123 --enabled false"
+            "  v2portal subscription edit abc-123 --name 'New name'\n"
+            "  v2portal subscription edit abc-123 --url https://example.com/new\n"
+            "  v2portal subscription edit abc-123 --user-agent 'v2portal'\n"
+            "  v2portal subscription edit abc-123 --auto-update-days 3\n"
+            "  v2portal subscription edit abc-123 --enabled false"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -491,7 +491,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Give a subscription a new display name.\n\n"
             "Example:\n"
-            "  v2raycli subscription rename abc-123 'My Provider'"
+            "  v2portal subscription rename abc-123 'My Provider'"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -505,7 +505,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Remove a subscription and unlink/remove all profiles that\n"
             "were imported from it.\n\n"
             "Example:\n"
-            "  v2raycli subscription remove abc-123"
+            "  v2portal subscription remove abc-123"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -523,11 +523,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "be a subscription or nested group that expands to several profiles.\n\n"
         "VPN profiles (OpenVPN, OpenConnect) cannot join groups.\n\n"
         "Examples:\n"
-        "  v2raycli group list\n"
-        "  v2raycli group create balancer fast ID_A ID_B --strategy latency\n"
-        "  v2raycli group create chain tunnel ID_A ID_B\n"
-        "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
-        "  v2raycli group add-sub GROUP_ID SUB_ID"
+        "  v2portal group list\n"
+        "  v2portal group create balancer fast ID_A ID_B --strategy latency\n"
+        "  v2portal group create chain tunnel ID_A ID_B\n"
+        "  v2portal group add-member GROUP_ID PROFILE_ID\n"
+        "  v2portal group add-sub GROUP_ID SUB_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -539,7 +539,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "List all saved groups.\n\n"
             "Example:\n"
-            "  v2raycli group list --json"
+            "  v2portal group list --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -555,8 +555,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "A lone profile cannot form a group on its own — pass 2+ profiles\n"
         "or one subscription/nested group that expands to several.\n\n"
         "Examples:\n"
-        "  v2raycli group add balancer fast ID_A SUB_GROUP/GROUP_ID --strategy latency\n"
-        "  v2raycli group add chain tunnel ID_A ID_B"
+        "  v2portal group add balancer fast ID_A SUB_GROUP/GROUP_ID --strategy latency\n"
+        "  v2portal group add chain tunnel ID_A ID_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -577,9 +577,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  roundRobin   — rotate through profiles in order\n"
             "  leastLoad    — pick the least-loaded (forces xray engine)\n\n"
             "Examples:\n"
-            "  v2raycli group add balancer fast ID_A ID_B --strategy latency\n"
-            "  v2raycli group add balancer pool ID_A SUB_ID\n"
-            "  v2raycli group add balancer fromsub SUB_A GROUP_ID"
+            "  v2portal group add balancer fast ID_A ID_B --strategy latency\n"
+            "  v2portal group add balancer pool ID_A SUB_ID\n"
+            "  v2portal group add balancer fromsub SUB_A GROUP_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -605,9 +605,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "socks/http profiles through their local inbound.\n"
             "Traffic flows through the first proxy, then the second, and so on.\n\n"
             "Examples:\n"
-            "  v2raycli group add chain tunnel ID_A ID_B\n"
-            "  v2raycli group add chain tunnel ID_A SUB_ID\n"
-            "  v2raycli group add chain tunnel ID_A SERVER_ID"
+            "  v2portal group add chain tunnel ID_A ID_B\n"
+            "  v2portal group add chain tunnel ID_A SUB_ID\n"
+            "  v2portal group add chain tunnel ID_A SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -625,7 +625,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove a group. Profiles are not deleted.\n\n"
             "Example:\n"
-            "  v2raycli group remove abc-123"
+            "  v2portal group remove abc-123"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -637,10 +637,10 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Change fields on an existing group.\n\n"
             "Examples:\n"
-            "  v2raycli group edit abc --name 'Fast US'\n"
-            "  v2raycli group edit abc --strategy random\n"
-            "  v2raycli group edit abc --engine xray\n"
-            "  v2raycli group edit abc --enabled false"
+            "  v2portal group edit abc --name 'Fast US'\n"
+            "  v2portal group edit abc --strategy random\n"
+            "  v2portal group edit abc --engine xray\n"
+            "  v2portal group edit abc --enabled false"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -662,8 +662,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Add profiles, subscriptions, nested groups, and/or servers to\n"
             "an existing group. IDs are detected automatically.\n\n"
             "Examples:\n"
-            "  v2raycli group add-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group add-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
+            "  v2portal group add-member GROUP_ID PROFILE_ID\n"
+            "  v2portal group add-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -678,8 +678,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Remove profiles, subscriptions, nested groups, and/or servers\n"
             "from an existing group. IDs are detected automatically.\n\n"
             "Examples:\n"
-            "  v2raycli group remove-member GROUP_ID PROFILE_ID\n"
-            "  v2raycli group remove-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
+            "  v2portal group remove-member GROUP_ID PROFILE_ID\n"
+            "  v2portal group remove-member GROUP_ID PROFILE_A SUB_ID GROUP_ID SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -696,8 +696,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Note: 'group add-member' already auto-detects subscription IDs,\n"
             "so this command is only kept for convenience.\n\n"
             "Examples:\n"
-            "  v2raycli group add-sub GROUP_ID SUB_ID\n"
-            "  v2raycli group add-sub GROUP_ID SUB_A SUB_B"
+            "  v2portal group add-sub GROUP_ID SUB_ID\n"
+            "  v2portal group add-sub GROUP_ID SUB_A SUB_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -710,7 +710,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove a subscription from a group.\n\n"
             "Examples:\n"
-            "  v2raycli group remove-sub GROUP_ID SUB_ID"
+            "  v2portal group remove-sub GROUP_ID SUB_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -727,7 +727,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "server, or profile not referenced by a group is shown as a root\n"
             "so nothing is hidden.\n\n"
             "Example:\n"
-            "  v2raycli group tree"
+            "  v2portal group tree"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -742,12 +742,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "a profile / subscription / group / server ID (auto-detected —\n"
             "IDs are unique across types), or comma-separated profile IDs.\n\n"
             "Examples:\n"
-            "  v2raycli test latency all\n"
-            "  v2raycli test latency SUB_ID\n"
-            "  v2raycli test latency GROUP_ID\n"
-            "  v2raycli test latency SERVER_ID\n"
-            "  v2raycli test endpoint all\n"
-            "  v2raycli test websocket ID_A,ID_B"
+            "  v2portal test latency all\n"
+            "  v2portal test latency SUB_ID\n"
+            "  v2portal test latency GROUP_ID\n"
+            "  v2portal test latency SERVER_ID\n"
+            "  v2portal test endpoint all\n"
+            "  v2portal test websocket ID_A,ID_B"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -769,11 +769,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "View or change app settings. Run without a subcommand to\n"
             "show all settings. Each setting has its own subcommand.\n\n"
             "Examples:\n"
-            "  v2raycli settings\n"
-            "  v2raycli settings test-url\n"
-            "  v2raycli settings test-url https://cp.cloudflare.com/generate_204\n"
-            "  v2raycli settings mixed-port 1081\n"
-            "  v2raycli settings allow-lan false"
+            "  v2portal settings\n"
+            "  v2portal settings test-url\n"
+            "  v2portal settings test-url https://cp.cloudflare.com/generate_204\n"
+            "  v2portal settings mixed-port 1081\n"
+            "  v2portal settings allow-lan false"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -809,9 +809,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Automatic backups are created before destructive operations.\n"
             "Use these commands to create, browse, or restore backups.\n\n"
             "Examples:\n"
-            "  v2raycli settings backup create\n"
-            "  v2raycli settings backup list\n"
-            "  v2raycli settings backup restore /path/to/backup.json"
+            "  v2portal settings backup create\n"
+            "  v2portal settings backup list\n"
+            "  v2portal settings backup restore /path/to/backup.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -823,7 +823,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Create a manual backup of the current config.\n"
             "Old backups beyond 'backup_keep' (default 10) are pruned.\n\n"
             "Example:\n"
-            "  v2raycli settings backup create"
+            "  v2portal settings backup create"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -833,7 +833,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "List all backup files with timestamp, reason, and size.\n\n"
             "Example:\n"
-            "  v2raycli settings backup list"
+            "  v2portal settings backup list"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -844,7 +844,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Restore the config from a backup file. The current config\n"
             "is backed up first as a safety measure.\n\n"
             "Example:\n"
-            "  v2raycli settings backup restore /path/to/backup.json"
+            "  v2portal settings backup restore /path/to/backup.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -859,8 +859,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "a system service. Supported platforms: Linux (systemd user unit),\n"
             "Termux (termux-services).\n\n"
             "Examples:\n"
-            "  v2raycli settings service install\n"
-            "  v2raycli settings service uninstall"
+            "  v2portal settings service install\n"
+            "  v2portal settings service uninstall"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -870,12 +870,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="create a boot service that starts all enabled servers",
         description=(
             "Write a systemd user unit (Linux) or termux-services script\n"
-            "(Termux) that launches 'v2raycli server start --all' on boot.\n\n"
+            "(Termux) that launches 'v2portal server start --all' on boot.\n\n"
             "After install, enable with:\n"
-            "  systemctl --user enable --now v2raycli    (Linux)\n"
-            "  sv-enable v2raycli                        (Termux)\n\n"
+            "  systemctl --user enable --now v2portal    (Linux)\n"
+            "  sv-enable v2portal                        (Termux)\n\n"
             "Example:\n"
-            "  v2raycli settings service install"
+            "  v2portal settings service install"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -885,7 +885,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove the systemd unit or termux-services script.\n\n"
             "Example:\n"
-            "  v2raycli settings service uninstall"
+            "  v2portal settings service uninstall"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -899,11 +899,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "binaries (sing-box, xray) can connect to remote servers.\n"
             "Requires Administrator privileges (UAC prompt will appear).\n\n"
             "Examples:\n"
-            "  v2raycli settings firewall allow sing-box\n"
-            "  v2raycli settings firewall allow xray\n"
-            "  v2raycli settings firewall allow both\n"
-            "  v2raycli settings firewall remove sing-box\n"
-            "  v2raycli settings firewall list"
+            "  v2portal settings firewall allow sing-box\n"
+            "  v2portal settings firewall allow xray\n"
+            "  v2portal settings firewall allow both\n"
+            "  v2portal settings firewall remove sing-box\n"
+            "  v2portal settings firewall list"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -915,9 +915,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Add a Windows Firewall rule that allows the engine binary\n"
             "to make outbound connections. UAC elevation is automatic.\n\n"
             "Examples:\n"
-            "  v2raycli settings firewall allow sing-box\n"
-            "  v2raycli settings firewall allow xray\n"
-            "  v2raycli settings firewall allow both"
+            "  v2portal settings firewall allow sing-box\n"
+            "  v2portal settings firewall allow xray\n"
+            "  v2portal settings firewall allow both"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -929,8 +929,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove a previously added Windows Firewall rule.\n\n"
             "Examples:\n"
-            "  v2raycli settings firewall remove sing-box\n"
-            "  v2raycli settings firewall remove both"
+            "  v2portal settings firewall remove sing-box\n"
+            "  v2portal settings firewall remove both"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -938,11 +938,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                                  help="which engine to remove")
     firewall_action_sub.add_parser(
         "list",
-        help="show existing v2raycli firewall rules",
+        help="show existing v2portal firewall rules",
         description=(
-            "List all v2raycli-generated Windows Firewall rules.\n\n"
+            "List all v2portal-generated Windows Firewall rules.\n\n"
             "Example:\n"
-            "  v2raycli settings firewall list"
+            "  v2portal settings firewall list"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -956,8 +956,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "with binary_path='auto' are replaceable; custom paths are\n"
             "never overwritten.\n\n"
             "Examples:\n"
-            "  v2raycli settings engine update sing-box\n"
-            "  v2raycli settings engine update both --proxy socks5://127.0.0.1:10808"
+            "  v2portal settings engine update sing-box\n"
+            "  v2portal settings engine update both --proxy socks5://127.0.0.1:10808"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -969,8 +969,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Explicitly update the sing-box, xray, or both engine\n"
             "binaries. Downloads are verified and atomic.\n\n"
             "Examples:\n"
-            "  v2raycli settings engine update sing-box\n"
-            "  v2raycli settings engine update both --proxy socks5://127.0.0.1:10808"
+            "  v2portal settings engine update sing-box\n"
+            "  v2portal settings engine update both --proxy socks5://127.0.0.1:10808"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -997,12 +997,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  --ip 10.0.0.0/8                CIDR match\n"
             "  --ip geoip:cn                  sing-box/xray geo-IP list\n\n"
             "Examples:\n"
-            "  v2raycli routing list\n"
-            "  v2raycli routing mode split\n"
-            "  v2raycli routing add block --domain keyword:ads\n"
-            "  v2raycli routing add direct --ip 192.168.0.0/16\n"
-            "  v2raycli routing add proxy --domain example.com --target PROFILE_ID\n"
-            "  v2raycli routing remove RULE_ID"
+            "  v2portal routing list\n"
+            "  v2portal routing mode split\n"
+            "  v2portal routing add block --domain keyword:ads\n"
+            "  v2portal routing add direct --ip 192.168.0.0/16\n"
+            "  v2portal routing add proxy --domain example.com --target PROFILE_ID\n"
+            "  v2portal routing remove RULE_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1014,8 +1014,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Show the current routing mode and ordered rule list.\n\n"
             "Examples:\n"
-            "  v2raycli routing list\n"
-            "  v2raycli routing list --json"
+            "  v2portal routing list\n"
+            "  v2portal routing list --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1029,8 +1029,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Set the routing mode. 'all' sends everything through the\n"
             "connected proxy. 'split' applies the rule list in order.\n\n"
             "Examples:\n"
-            "  v2raycli routing mode all\n"
-            "  v2raycli routing mode split"
+            "  v2portal routing mode all\n"
+            "  v2portal routing mode split"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1049,10 +1049,10 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  direct  — let matching traffic bypass the proxy\n"
             "  block   — drop matching traffic\n\n"
             "Examples:\n"
-            "  v2raycli routing add block --domain keyword:ads\n"
-            "  v2raycli routing add direct --ip 192.168.0.0/16\n"
-            "  v2raycli routing add proxy --domain example.com --target PROFILE_ID\n"
-            "  v2raycli routing add block --geosite category-ads-all"
+            "  v2portal routing add block --domain keyword:ads\n"
+            "  v2portal routing add direct --ip 192.168.0.0/16\n"
+            "  v2portal routing add proxy --domain example.com --target PROFILE_ID\n"
+            "  v2portal routing add block --geosite category-ads-all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1076,7 +1076,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Remove a routing rule. Rules are shown with their IDs\n"
             "in 'routing list'.\n\n"
             "Example:\n"
-            "  v2raycli routing remove RULE_ID"
+            "  v2portal routing remove RULE_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1089,8 +1089,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Move a routing rule up (higher priority) or down (lower priority).\n"
             "Rules are applied in order; the first match wins.\n\n"
             "Example:\n"
-            "  v2raycli routing move RULE_ID up\n"
-            "  v2raycli routing move RULE_ID down"
+            "  v2portal routing move RULE_ID up\n"
+            "  v2portal routing move RULE_ID down"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1104,7 +1104,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Re-enable a disabled routing rule.\n\n"
             "Example:\n"
-            "  v2raycli routing enable RULE_ID"
+            "  v2portal routing enable RULE_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1117,7 +1117,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Disable a routing rule so it is skipped during routing.\n"
             "The rule is kept in the config and can be re-enabled later.\n\n"
             "Example:\n"
-            "  v2raycli routing disable RULE_ID"
+            "  v2portal routing disable RULE_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1132,15 +1132,15 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "and forwards traffic to a specific profile or group. Multiple servers\n"
             "can run simultaneously, each on its own port.\n\n"
             "Examples:\n"
-            "  v2raycli server add --port 1080 --profile abc --name 'US proxy'\n"
-            "  v2raycli server add --port 1081 --group def --protocol http\n"
-            "  v2raycli server list\n"
-            "  v2raycli server start\n"
-            "  v2raycli server start SERVER_ID\n"
-            "  v2raycli server stop\n"
-            "  v2raycli server stop SERVER_ID\n"
-            "  v2raycli server restart\n"
-            "  v2raycli server restart SERVER_ID"
+            "  v2portal server add --port 1080 --profile abc --name 'US proxy'\n"
+            "  v2portal server add --port 1081 --group def --protocol http\n"
+            "  v2portal server list\n"
+            "  v2portal server start\n"
+            "  v2portal server start SERVER_ID\n"
+            "  v2portal server stop\n"
+            "  v2portal server stop SERVER_ID\n"
+            "  v2portal server restart\n"
+            "  v2portal server restart SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1152,9 +1152,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "List all saved servers with their ports and outbound targets.\n\n"
             "Examples:\n"
-            "  v2raycli server list\n"
-            "  v2raycli server list --running\n"
-            "  v2raycli server list --json"
+            "  v2portal server list\n"
+            "  v2portal server list --running\n"
+            "  v2portal server list --json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1172,9 +1172,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "  socks  — SOCKS5 only\n"
             "  http   — HTTP only\n\n"
             "Examples:\n"
-            "  v2raycli server add --port 1080 REF --name 'US proxy'\n"
-            "  v2raycli server add --port 1081 REF --protocol http\n"
-            "  v2raycli server add --port 1082 --direct\n"
+            "  v2portal server add --port 1080 REF --name 'US proxy'\n"
+            "  v2portal server add --port 1081 REF --protocol http\n"
+            "  v2portal server add --port 1082 --direct\n"
             "  REF = profile, subscription, group, or server ID (auto-detected)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1208,12 +1208,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Use --temp to start a one-shot server without saving it to config.\n"
             "The temporary server runs until you press Ctrl+C.\n\n"
             "Examples:\n"
-            "  v2raycli server start\n"
-            "  v2raycli server start SERVER_ID\n"
-            "  v2raycli server start --all\n"
-            "  v2raycli server start --temp --profile PROFILE_ID\n"
-            "  v2raycli server start --temp --proxy socks5://192.168.1.2:10804\n"
-            "  v2raycli server start --temp --proxy http://10.0.0.1:8080 --port 8180"
+            "  v2portal server start\n"
+            "  v2portal server start SERVER_ID\n"
+            "  v2portal server start --all\n"
+            "  v2portal server start --temp --profile PROFILE_ID\n"
+            "  v2portal server start --temp --proxy socks5://192.168.1.2:10804\n"
+            "  v2portal server start --temp --proxy http://10.0.0.1:8080 --port 8180"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1244,9 +1244,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Stop a running server's engine process.\n"
             "Without arguments stops all running servers.\n\n"
             "Examples:\n"
-            "  v2raycli server stop\n"
-            "  v2raycli server stop SERVER_ID\n"
-            "  v2raycli server stop --all"
+            "  v2portal server stop\n"
+            "  v2portal server stop SERVER_ID\n"
+            "  v2portal server stop --all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1261,9 +1261,9 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "Restart a server. Equivalent to stop + start.\n"
             "Without arguments restarts all enabled servers.\n\n"
             "Examples:\n"
-            "  v2raycli server restart\n"
-            "  v2raycli server restart SERVER_ID\n"
-            "  v2raycli server restart --all"
+            "  v2portal server restart\n"
+            "  v2portal server restart SERVER_ID\n"
+            "  v2portal server restart --all"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1279,11 +1279,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
             "port, protocol, listen address, or outbound (profile/group).\n\n"
             "If the server is running, it is restarted automatically.\n\n"
             "Examples:\n"
-            "  v2raycli server edit abc --name 'US proxy'\n"
-            "  v2raycli server edit abc --port 8180\n"
-            "  v2raycli server edit abc --profile NEW_PROFILE_ID\n"
-            "  v2raycli server edit abc --group NEW_GROUP_ID\n"
-            "  v2raycli server edit abc --protocol http"
+            "  v2portal server edit abc --name 'US proxy'\n"
+            "  v2portal server edit abc --port 8180\n"
+            "  v2portal server edit abc --profile NEW_PROFILE_ID\n"
+            "  v2portal server edit abc --group NEW_GROUP_ID\n"
+            "  v2portal server edit abc --protocol http"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1318,7 +1318,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         description=(
             "Remove a server. Stops it first if running.\n\n"
             "Example:\n"
-            "  v2raycli server remove SERVER_ID"
+            "  v2portal server remove SERVER_ID"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1332,7 +1332,7 @@ def main(argv: list[str] | None = None) -> int:
         config.set_config_dir(args.config_dir)
 
     if args.version:
-        print(f"v2raycli v{__version__}")
+        print(f"v2portal v{__version__}")
         return 0
 
     config.ensure_dirs()
@@ -1380,7 +1380,7 @@ def _command(store: ConfigStore, args) -> int:
             if args.test_type in ("websocket", "ws"):
                 return _ws_test(store, args.scope)
             # endpoint/probe, or any other first token interpreted as a scope
-            # (bare `v2raycli test <id>` defaults to an endpoint probe).
+            # (bare `v2portal test <id>` defaults to an endpoint probe).
             scope = args.scope
             if args.test_type not in ("endpoint", "probe"):
                 scope = args.test_type
@@ -1425,7 +1425,7 @@ def _command_help(args, command: str | None = None) -> int:
     if command:
         # argparse's nested parser objects are intentionally not exposed; the
         # top-level help is still more useful than a traceback in scripts.
-        print(f"usage: v2raycli {command} ACTION", file=sys.stderr)
+        print(f"usage: v2portal {command} ACTION", file=sys.stderr)
     else:
         parser.print_help()
     return 2
@@ -2643,9 +2643,9 @@ def _install_service(store: ConfigStore, config_dir: str | None) -> int:
         return 1
     print(f"installed service -> {path}")
     if service.platform() == "linux":
-        print("enable with: systemctl --user enable --now v2raycli")
+        print("enable with: systemctl --user enable --now v2portal")
     elif service.platform() == "termux":
-        print("enable with: sv-enable v2raycli")
+        print("enable with: sv-enable v2portal")
     return 0
 
 
@@ -2672,13 +2672,13 @@ def _firewall_command(store: ConfigStore, args) -> int:
 
     action = getattr(args, "firewall_action", None)
     if action is None:
-        print("usage: v2raycli settings firewall {allow|remove|list}")
+        print("usage: v2portal settings firewall {allow|remove|list}")
         return 2
 
     if action == "list":
         rules = firewall.list_rules()
         if not rules:
-            print("no v2raycli firewall rules found")
+            print("no v2portal firewall rules found")
             return 0
         for rule in rules:
             name = rule.get("DisplayName", "?")
@@ -3130,9 +3130,9 @@ def _summary(store: ConfigStore) -> int:
         table.add_row("groups", str(len(conf.groups)))
         table.add_row("servers", str(len(conf.servers)))
         table.add_row("routing mode", conf.routing.mode)
-        console.print(Panel(table, title=f"v2raycli v{__version__}", border_style="blue"))
+        console.print(Panel(table, title=f"v2portal v{__version__}", border_style="blue"))
     else:
-        print(f"v2raycli v{__version__}")
+        print(f"v2portal v{__version__}")
         print(f"config: {store.path}")
         print(
             f"profiles: {len(conf.profiles)}  "
