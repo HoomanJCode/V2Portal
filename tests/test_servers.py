@@ -413,7 +413,7 @@ def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
     assert fast.id in urltest["outbounds"] and slow.id in urltest["outbounds"]
     assert dead.id not in urltest["outbounds"]
     assert urltest.get("interval") == "5s"
-    assert urltest.get("interrupt_exist_connections") is True
+    assert urltest.get("interrupt_exist_connections") is False
 
 
 def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch):

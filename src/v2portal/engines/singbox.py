@@ -309,7 +309,7 @@ class SingBoxAdapter(EngineAdapter):
                     # probe on the interval and cut live connections to the dead
                     # node so clients switch without waiting.
                     urltest["interval"] = f"{target.health_interval}s"
-                    urltest["interrupt_exist_connections"] = True
+                    urltest["interrupt_exist_connections"] = False
                 outbounds.append(urltest)
             else:
                 outbounds.append(
