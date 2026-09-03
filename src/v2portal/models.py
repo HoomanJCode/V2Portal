@@ -13,7 +13,7 @@ construction) use the module-level fallback counter.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -89,7 +89,7 @@ class EngineName(str, Enum):
 
 def _pick(data: dict, cls: type) -> dict[str, Any]:
     """Filter a raw dict to the dataclass's known fields."""
-    known = {f.name for f in fields(cls)}
+    known = {f.name for f in cls.__dataclass_fields__.values()}
     return {k: v for k, v in data.items() if k in known}
 
 
