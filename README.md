@@ -121,11 +121,14 @@ Rules auto-clean when their target profile, group, or server is deleted.
   hysteria2, tuic, raw JSON. OpenVPN / OpenConnect via system clients.
 - **Chaining** — route traffic through an ordered sequence of proxies.
 - **Traffic stats** — cumulative up/down bytes per profile (sing-box Clash API).
-- **Outbound testing** — `--probe` reachability, `--ws-test` WebSocket
-  handshake, `--test` real proxy latency.
-- **Config** — single JSON file. Automatic rolling backups, full export/import.
-- **Service** — systemd (Linux), termux-services (Termux). Keeps servers
-  running across reboots.
+- **Outbound testing** — `test latency`, `test endpoint`, `test websocket`.
+- **Config** — single JSON file. Automatic rolling backups, full export/import,
+  share-link export/import.
+- **Service** — systemd (Linux), termux-services (Termux), launchd (macOS).
+  Keeps servers running across reboots.
+- **Health checks** — `v2portal health` shows subscription expiry and traffic.
+- **Windows Firewall** — `v2portal settings firewall allow sing-box` adds an
+  outbound rule so engine binaries can reach remote servers.
 
 ---
 
@@ -189,16 +192,24 @@ v2portal routing add proxy --domain netflix.com --target 3f2b
 ### Command tree
 
 ```text
-profile       list | add | rename | edit | remove | export
-subscription  list | add | edit | rename | update | remove
-group         list | add | tree | edit | remove | add-member | remove-member
-server        list | add | edit | start | stop | restart | remove
-routing       list | mode | add | move | enable | disable | remove
-backup        create | list | restore
-settings      show/set app settings, engine update
-config        show | export | import
-service       install | uninstall
+profile       list | add link|raw|socks|http|wireguard|hysteria2|tuic|openvpn|openconnect|server |
+               rename | edit | remove | export
+subscription  list | add | edit | rename | update [--all] | remove
+group         list | add balancer|chain | tree | edit | remove |
+               add-member | remove-member | add-sub | remove-sub
+server        list | add --port PORT [REF] [--protocol mixed|socks|http] [--direct] |
+               start [--all] | stop [--all] | restart [--all] | edit | remove
+routing       list | mode all|split | add proxy|direct|block | move | enable | disable | remove
+settings      listen | mixed-port | socks-port | http-port | allow-lan | dns |
+               log-level | test-url | default-engine | backup-keep | traffic-api |
+               traffic-api-port | subscription-proxy |
+               backup create|list|restore |
+               service install|uninstall |
+               firewall allow|remove|list (Windows) |
+               engine update sing-box|xray|both
 test          latency | endpoint | websocket
+status        show config summary [--json]
+health        show subscription expiry and traffic [--json]
 ```
 
 ---
@@ -216,7 +227,22 @@ python scripts/verify_acceptance.py --json
 
 JSON at `<platform config dir>/v2portal/config.json`.
 
-- `runtime/` — generated engine configs
+- `runtime/` — generated engine configs, test results, server state
 - `bin/` — downloaded engine binaries
-- `geo/` — geoip/geosite assets
+- `geo/` — geoip/geosite assets (xray)
 - `backup/` — automatic config backups
+
+### Schema
+
+- **settings** — listen, ports, auth, DNS, log level, test URL, default engine,
+  backup count, traffic API, subscription proxy.
+- **routing** — `mode` (all|split) and ordered rules (proxy|direct|block by
+  domain/IP/geo).
+- **engines** — per-engine binary path (`auto`/`system`/custom path) and version.
+- **profiles** — one concrete outbound or VPN (vmess/vless/trojan/ss/ssr/socks/http/
+  wireguard/hysteria2/tuic/manual/openvpn/openconnect).
+- **subscriptions** — URL + list of profile IDs, auto-update schedule.
+- **groups** — balancer (latency/random/roundRobin/leastLoad) or chain; members
+  can be profiles, subscriptions, nested groups, or servers.
+- **servers** — persistent inbound (mixed/socks/http) on a port, forwarding to
+  a profile/subscription/group/server/direct.
