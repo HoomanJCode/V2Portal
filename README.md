@@ -223,6 +223,11 @@ pytest
 python scripts/verify_acceptance.py --json
 ```
 
+## Documentation
+
+- **PLAN.md** — architecture, decisions, data model, and config mapping.
+- **REVIEW.md** — code review findings and recommendations.
+
 ## Config
 
 JSON at `<platform config dir>/v2portal/config.json`.
