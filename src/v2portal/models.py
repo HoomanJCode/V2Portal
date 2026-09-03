@@ -2,6 +2,13 @@
 
 These dataclasses are the single source of truth for the on-disk config.
 Storage, config generation, and the TUI all consume them.
+
+ID generation
+-------------
+Short numeric IDs (001, 002, …) are produced by :class:`_IdCounter`. Each
+:class:`ConfigStore` owns its own counter, seeded from the highest existing ID
+in the loaded config. Models created outside a store (tests, manual
+construction) use the module-level fallback counter.
 """
 
 from __future__ import annotations
@@ -12,16 +19,33 @@ from enum import Enum
 from typing import Any
 
 
-# Sequential ID counter — incremented by ConfigStore.next_id() to produce
-# short, easy-to-copy numeric IDs (001, 002, …).  The module-level default
-# only fires for models created outside the store (tests, manual).
-_id_counter: int = 0
+class _IdCounter:
+    """Thread-unsafe sequential ID generator producing short numeric IDs.
+
+    Each ConfigStore creates its own instance seeded from existing config IDs;
+    the module-level fallback is used only for models created outside any store
+    (tests, manual construction).
+    """
+
+    def __init__(self, start: int = 0) -> None:
+        self._next = start
+
+    def next(self) -> str:
+        self._next += 1
+        return f"{self._next:03d}"
+
+
+# Module-level fallback counter for models created outside a store.
+_fallback_counter = _IdCounter()
 
 
 def new_id() -> str:
-    global _id_counter
-    _id_counter += 1
-    return f"{_id_counter:03d}"
+    """Return the next short numeric ID from the fallback counter.
+
+    Prefer using a store-scoped :class:`_IdCounter` via
+    :meth:`ConfigStore.next_id` when a store is available.
+    """
+    return _fallback_counter.next()
 
 
 def now_iso() -> str:
