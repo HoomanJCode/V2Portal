@@ -193,12 +193,14 @@ class ConfigStore:
         self.config = self.default()
         self.pre_write_hooks: list[Callable] = []
         self._id_seq = 0
+        self._id_counter = _models._IdCounter()
 
     def next_id(self) -> str:
         """Return the next sequential short numeric ID (001, 002, …)."""
-        self._id_seq += 1
-        _models._id_counter = self._id_seq
-        return f"{self._id_seq:03d}"
+        result = self._id_counter.next()
+        self._id_seq = self._id_counter._next
+        _models._fallback_counter._next = max(_models._fallback_counter._next, self._id_seq)
+        return result
 
     def _init_seq_from_config(self) -> None:
         """Seed _id_seq from the highest numeric ID already in the config."""
@@ -216,7 +218,8 @@ class ConfigStore:
                 except (ValueError, TypeError):
                     pass
         self._id_seq = max_id
-        _models._id_counter = max_id
+        self._id_counter = _models._IdCounter(max_id)
+        _models._fallback_counter._next = max(_models._fallback_counter._next, max_id)
 
     @staticmethod
     def default() -> Config:
@@ -361,6 +364,8 @@ class ConfigStore:
             if profile_id in group.profile_ids:
                 group.profile_ids.remove(profile_id)
                 summary["pruned_groups"] += 1
+            # Legacy persisted configs may have placed profile ids in group_ids;
+            # tolerate and prune them (new groups must use profile_ids instead).
             if profile_id in group.group_ids:
                 group.group_ids.remove(profile_id)
                 summary["pruned_groups"] += 1
