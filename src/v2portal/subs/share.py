@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, unquote
 from ..engines import engine_for_kind
 from ..errors import V2RayCLIError
 from ..models import Profile
-from .parser import _b64decode
+from . import _b64decode
 
 
 class ShareLinkError(V2RayCLIError, ValueError):
