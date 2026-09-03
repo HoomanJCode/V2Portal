@@ -95,7 +95,15 @@ def _group_ref(
         all_ids.extend(_resolve_subscription_profiles(store, subscription_ids))
     if group_ids:
         # Validate nested groups exist; their profiles resolve at use time.
+        # group_ids is for nested *groups* only — profile IDs belong in
+        # profile_ids (enforced at creation for new groups; persisted configs
+        # with profile ids in group_ids are tolerated and pruned on removal).
         for gid in group_ids:
+            if store.get_group(gid) is None and store.get_profile(gid) is not None:
+                raise ValueError(
+                    f"profile id {gid!r} cannot be a nested group member; "
+                    f"use profile_ids for profiles"
+                )
             if store.get_group(gid) is None:
                 raise ValueError(f"unknown group id: {gid}")
     if server_ids:
