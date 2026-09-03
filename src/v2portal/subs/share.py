@@ -20,17 +20,11 @@ from urllib.parse import parse_qs, quote, unquote
 from ..engines import engine_for_kind
 from ..errors import V2RayCLIError
 from ..models import Profile
+from .parser import _b64decode
 
 
 class ShareLinkError(V2RayCLIError, ValueError):
-    """Raised when a share link cannot be parsed."""
-
-
-def _b64decode(s: str) -> bytes:
-    """Decode base64, tolerating url-safe chars and missing padding."""
-    s = "".join(s.split()).replace("-", "+").replace("_", "/")
-    s += "=" * (-len(s) % 4)
-    return base64.b64decode(s)
+    """Raised when a share link can be parsed."""
 
 
 def _validate_endpoint(kind: str, host, port) -> None:

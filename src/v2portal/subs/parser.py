@@ -30,6 +30,13 @@ def _try_b64(text: str) -> str | None:
     return None
 
 
+def _b64decode(s: str) -> bytes:
+    """Decode base64, tolerating url-safe chars and missing padding."""
+    s = "".join(s.split()).replace("-", "+").replace("_", "/")
+    s += "=" * (-len(s) % 4)
+    return base64.b64decode(s)
+
+
 def parse_payload(body: str) -> list[str]:
     """Turn a subscription body into a list of share-link strings.
 
