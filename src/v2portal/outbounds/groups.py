@@ -59,6 +59,16 @@ def _resolve_group_engine(
     _assert_engine_compatible(profiles, engine)
     if strategy and not strategy_supported(engine, strategy):
         raise ValueError(f"engine {engine} does not support strategy {strategy}")
+    # If the strategy forces xray but some profiles are sing-box-only, the
+    # _assert_engine_compatible check above already rejected them. Give a
+    # clearer message for the common case.
+    if engine == XRAY and strategy in ("leastLoad", "random", "roundRobin"):
+        singbox_only = [p.kind for p in profiles if p.kind in ("hysteria2", "tuic")]
+        if singbox_only:
+            raise ValueError(
+                f"strategy {strategy} requires xray, but profile(s) {singbox_only!r} "
+                f"are sing-box-only"
+            )
     return engine
 
 
@@ -648,9 +658,12 @@ def enrich_target_with_routing(target: Target, routing: RoutingConfig, store) ->
             extra_groups_by_id[tid] = group
         try:
             resolved = resolve_refs(store, [tid])
-        except ValueError:
+        except ValueError as exc:
             # Unknown/dangling reference — skip; resolution at connect will
-            # surface it with a clear error.
+            # surface it with a clear error. Log a warning so the user knows.
+            import logging
+            _log = logging.getLogger(__name__)
+            _log.warning("routing rule target %s could not be resolved: %s", tid, exc)
             continue
         for profile in resolved:
             if profile.id in main_ids or profile.id in extra_profiles_by_id:
