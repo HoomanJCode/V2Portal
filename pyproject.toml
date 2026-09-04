@@ -5,8 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "v2portal"
 version = "0.2.2"
-description = "Interactive v2ray CLI client (sing-box + xray-core) with subscriptions, groups, and split routing"
+description = "Cross-platform V2Ray CLI proxy client for sing-box and Xray-core with subscriptions, proxy groups, split routing, and LAN servers"
 readme = "README.md"
+keywords = [
+    "v2ray",
+    "v2ray-cli",
+    "xray",
+    "xray-core",
+    "sing-box",
+    "proxy-client",
+    "proxy-manager",
+    "proxy-subscription",
+    "split-routing",
+    "split-tunneling",
+    "socks5",
+    "wireguard",
+]
 requires-python = ">=3.10"
 dependencies = [
     "prompt_toolkit>=3.0",
