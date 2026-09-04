@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/HoomanJCode/V2Portal/actions/workflows/ci.yml/badge.svg)](https://github.com/HoomanJCode/V2Portal/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/v2portal)](https://pypi.org/project/v2portal/)
-[![Python](https://img.shields.io/pypi/pyversions/v2portal)](https://pypi.org/project/v2portal/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 
 **v2portal is a headless, cross-platform V2Ray CLI client and proxy manager for
 sing-box and Xray-core.** Manage VLESS, VMess, Trojan, Shadowsocks, SOCKS5,
@@ -65,6 +65,8 @@ an installed binary or configure a custom path.
 ### Install from PyPI
 
 Requires **Python 3.10 or newer**.
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 
 ```bash
 python -m pip install v2portal
