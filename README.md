@@ -1,5 +1,9 @@
 # v2portal — Cross-Platform V2Ray CLI Proxy Client
 
+> **Experimental / laboratory use only.** This project is under active development and
+> its behavior, commands, and configuration format can change between releases.
+> Do not rely on it in production or for network traffic you cannot afford to lose.
+
 [![CI](https://github.com/HoomanJCode/V2Portal/actions/workflows/ci.yml/badge.svg)](https://github.com/HoomanJCode/V2Portal/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/v2portal)](https://pypi.org/project/v2portal/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
