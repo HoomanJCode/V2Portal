@@ -1,8 +1,7 @@
 """Full-config and share-link export/import.
 
-``export_full``/``import_full`` move the whole config (settings, routing,
-profiles, subscriptions, groups) between machines. ``redact=True`` produces a
-share-safe copy with credentials/keys masked.
+``export_full``/``import_full`` move the whole config between machines.
+``redact=True`` produces a share-safe copy with credentials/keys masked.
 """
 
 from __future__ import annotations
@@ -121,6 +120,13 @@ def _merge_config(current: Config, incoming: Config) -> None:
             current.groups[index] = group
         else:
             current.groups.append(group)
+
+    for server in incoming.servers:
+        index = _index_of_id(current.servers, server.id)
+        if index is not None:
+            current.servers[index] = server
+        else:
+            current.servers.append(server)
 
     for name, options in incoming.engines.items():
         current.engines.setdefault(name, {}).update(options)

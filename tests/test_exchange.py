@@ -3,7 +3,7 @@ import json
 import pytest
 
 from v2portal import backup, exchange
-from v2portal.models import Group, Profile, Subscription
+from v2portal.models import Group, Profile, Server, Subscription
 from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -38,7 +38,11 @@ def test_export_import_roundtrip_lossless(tmp_path):
     sub = store.add_subscription(Subscription(name="sub"))
     p1 = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS, subscription_id=sub.id))
     sub.profile_ids = [p1.id]
-    store.add_group(Group(name="g", type="single", profile_ids=[p1.id]))
+    group = store.add_group(Group(name="g", type="single", profile_ids=[p1.id]))
+    server = store.add_server(
+        Server(name="lan", port=1088, outbound_id=group.id, outbound_type="group")
+    )
+    group.server_ids = [server.id]
     store.save()
 
     path = _export(tmp_path, store)
