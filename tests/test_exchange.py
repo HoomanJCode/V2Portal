@@ -225,6 +225,32 @@ def test_import_full_rejects_bad_schema(tmp_path):
         raise AssertionError("expected ValueError")
 
 
+def test_import_full_migrates_legacy_config_without_writing_default_config(tmp_path):
+    store = _store(tmp_path, "destination.json")
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "profiles": [
+                    {
+                        "id": "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+                        "name": "legacy",
+                        "kind": "socks",
+                        "outbound": SOCKS,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exchange.import_full(store, legacy, mode="replace")
+
+    assert store.config.schema_version == 3
+    assert store.config.profiles[0].id.isdigit()
+
+
 def test_share_link_export_matches_encode(tmp_path):
     store = _store(tmp_path)
     socks = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS))

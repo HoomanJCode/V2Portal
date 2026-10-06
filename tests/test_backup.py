@@ -123,6 +123,32 @@ def test_restore_rejects_malformed_shape_before_safety_backup(tmp_path):
     assert backup.list_backups(bdir) == []
 
 
+def test_restore_migrates_legacy_backup(tmp_path):
+    store = _store(tmp_path)
+    path = tmp_path / "legacy-backup.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "profiles": [
+                    {
+                        "id": "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb",
+                        "name": "legacy",
+                        "kind": "socks",
+                        "outbound": SOCKS,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    restored = backup.restore_backup(path, store, backup_dir=tmp_path / "backups")
+
+    assert restored.schema_version == 3
+    assert restored.profiles[0].id.isdigit()
+
+
 def test_hook_fires_on_destructive_op(tmp_path):
     bdir = tmp_path / "b"
     store = _store(tmp_path)

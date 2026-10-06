@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import config
 from .models import Config
-from .storage import _validate_persisted_shape
+from .storage import _validate_persisted_shape, migrate_config
 
 _log = logging.getLogger(__name__)
 
@@ -128,18 +128,13 @@ def restore_backup(path, store, backup_dir=None) -> Config:
         if not isinstance(data, dict):
             raise ValueError("not a valid v2portal backup")
         sv = data.get("schema_version")
-        if not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
+        if isinstance(sv, bool) or not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
             raise ValueError("not a valid v2portal backup")
         _validate_persisted_shape(data)
         restored = Config.from_dict(data)
         # Migrate older schemas to the current version
         if sv < config.SCHEMA_VERSION:
-            from .storage import ConfigStore
-
-            tmp = ConfigStore.__new__(ConfigStore)
-            tmp.config = restored
-            tmp._id_seq = 0
-            tmp._migrate(sv)
+            restored = migrate_config(restored, sv)
     except (OSError, ValueError, TypeError, AttributeError, KeyError, UnicodeError) as exc:
         if isinstance(exc, ValueError) and str(exc) == "not a valid v2portal backup":
             raise

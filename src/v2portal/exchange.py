@@ -12,7 +12,7 @@ from pathlib import Path
 from . import config
 from .backup import create_backup
 from .models import Config, Profile
-from .storage import _validate_persisted_shape
+from .storage import _validate_persisted_shape, migrate_config
 from .subs.parser import _profile_key, parse_payload
 from .subs.share import ShareLinkError, decode_link, encode_link
 
@@ -164,19 +164,14 @@ def _load_full_config(path) -> Config:
     if not isinstance(raw, dict):
         raise ValueError("export must be a JSON object")
     sv = raw.get("schema_version")
-    if not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
+    if isinstance(sv, bool) or not isinstance(sv, int) or sv > config.SCHEMA_VERSION:
         raise ValueError(f"unsupported schema_version: {sv}")
     try:
         _validate_persisted_shape(raw)
         cfg = Config.from_dict(raw)
         # Migrate older schemas to the current version
         if sv < config.SCHEMA_VERSION:
-            from .storage import ConfigStore
-
-            tmp = ConfigStore.__new__(ConfigStore)
-            tmp.config = cfg
-            tmp._id_seq = 0
-            tmp._migrate(sv)
+            cfg = migrate_config(cfg, sv)
         return cfg
     except (ValueError, TypeError, AttributeError, KeyError) as exc:
         raise ValueError(f"invalid export: {exc}") from exc

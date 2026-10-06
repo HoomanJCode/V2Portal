@@ -262,12 +262,13 @@ class ConfigStore:
             raise ConfigLoadError(f"could not load config {self.path}: {exc}") from exc
         return self.config
 
-    def _migrate(self, from_version: int) -> None:
+    def _migrate(self, from_version: int, *, persist: bool = True) -> None:
         """Run schema migrations from *from_version* up to SCHEMA_VERSION."""
         if from_version < 3:
             self._migrate_v2_to_v3()
         self.config.schema_version = config.SCHEMA_VERSION
-        self.save()
+        if persist:
+            self.save()
 
     def _migrate_v2_to_v3(self) -> None:
         """Migrate schema v2 → v3: replace long UUID IDs with short numeric IDs."""
@@ -497,3 +498,12 @@ class ConfigStore:
         engine = self.config.engines.setdefault(name, {})
         engine.update(kwargs)
         return engine
+
+
+def migrate_config(cfg: Config, from_version: int) -> Config:
+    """Migrate an in-memory config without reading or writing a config file."""
+    store = ConfigStore()
+    store.config = cfg
+    store._init_seq_from_config()
+    store._migrate(from_version, persist=False)
+    return store.config
