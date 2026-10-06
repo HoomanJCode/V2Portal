@@ -55,6 +55,23 @@ def test_add_rule_success(monkeypatch, tmp_path):
     assert "sing-box" in result
 
 
+def test_add_rule_quotes_paths_for_powershell(monkeypatch, tmp_path):
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr(firewall, "is_admin", lambda: True)
+    binary = tmp_path / "proxy's engine.exe"
+    binary.write_bytes(b"fake")
+    commands = []
+
+    def fake_run(command):
+        commands.append(command)
+        return subprocess.CompletedProcess([], returncode=0, stdout="created", stderr="")
+
+    monkeypatch.setattr(firewall, "_run_powershell", fake_run)
+    firewall.add_rule("sing-box", binary)
+
+    assert "proxy''s engine.exe" in commands[0]
+
+
 def test_add_rule_detects_existing(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.platform", "win32")
     monkeypatch.setattr(firewall, "is_admin", lambda: True)
@@ -86,6 +103,31 @@ def test_remove_rule_success(monkeypatch):
 
     result = firewall.remove_rule("sing-box")
     assert "removed" in result
+
+
+def test_remove_rule_elevates_after_permission_failure(monkeypatch):
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr(firewall, "is_admin", lambda: False)
+    failed = subprocess.CompletedProcess([], returncode=1, stdout="", stderr="access denied")
+    elevated = subprocess.CompletedProcess([], returncode=0, stdout="", stderr="")
+    calls = []
+    monkeypatch.setattr(firewall, "_run_powershell", lambda command: failed)
+    monkeypatch.setattr(firewall, "_elevated_powershell", lambda command: calls.append(command) or elevated)
+
+    result = firewall.remove_rule("sing-box")
+
+    assert "removed (elevated)" in result
+    assert len(calls) == 1
+
+
+def test_remove_rule_reports_permission_failure_without_elevation(monkeypatch):
+    monkeypatch.setattr("sys.platform", "win32")
+    failed = subprocess.CompletedProcess([], returncode=1, stdout="", stderr="access denied")
+    monkeypatch.setattr(firewall, "_run_powershell", lambda command: failed)
+
+    result = firewall.remove_rule("sing-box", elevate=False)
+
+    assert "failed to remove" in result
 
 
 def test_check_rule_returns_none_on_non_windows(monkeypatch):

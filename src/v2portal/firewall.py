@@ -37,6 +37,11 @@ def _rule_display_name(engine: str) -> str:
     return f"{_RULE_PREFIX} {engine}"
 
 
+def _ps_quote(value: str | Path) -> str:
+    """Quote a value as a PowerShell single-quoted string literal."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _run_powershell(command: str, *, capture: bool = True) -> subprocess.CompletedProcess:
     """Run a single PowerShell command line and return the result."""
     argv = [
@@ -91,9 +96,9 @@ def add_rule(engine: str, binary_path: str | Path, *, elevate: bool = True) -> s
 
     name = _rule_display_name(engine)
     cmd = (
-        f"New-NetFirewallRule -DisplayName '{name}' "
-        f"-Direction Outbound -Program '{binary}' -Action Allow "
-        f"-Description 'v2portal auto-generated rule for {engine}' "
+        f"New-NetFirewallRule -DisplayName {_ps_quote(name)} "
+        f"-Direction Outbound -Program {_ps_quote(binary)} -Action Allow "
+        f"-Description {_ps_quote(f'v2portal auto-generated rule for {engine}')} "
         f"-ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name"
     )
 
@@ -107,8 +112,9 @@ def add_rule(engine: str, binary_path: str | Path, *, elevate: bool = True) -> s
         return f"firewall rule already exists for {engine} ({binary.name})"
 
     if elevate:
-        _elevated_powershell(cmd)
-        return f"firewall rule added (elevated) for {engine} ({binary.name})"
+        elevated = _elevated_powershell(cmd)
+        if elevated.returncode == 0:
+            return f"firewall rule added (elevated) for {engine} ({binary.name})"
 
     return (
         f"failed to add firewall rule — run as Administrator:\n"
@@ -117,21 +123,22 @@ def add_rule(engine: str, binary_path: str | Path, *, elevate: bool = True) -> s
     )
 
 
-def remove_rule(engine: str) -> str:
+def remove_rule(engine: str, *, elevate: bool = True) -> str:
     """Remove the outbound allow rule for *engine*."""
     if not is_windows():
         return "firewall rules are only needed on Windows"
 
     name = _rule_display_name(engine)
-    cmd = f"Remove-NetFirewallRule -DisplayName '{name}' -ErrorAction SilentlyContinue"
+    cmd = f"Remove-NetFirewallRule -DisplayName {_ps_quote(name)} -ErrorAction SilentlyContinue"
 
     result = _run_powershell(cmd)
     if result.returncode == 0:
         return f"firewall rule removed for {engine}"
 
     if elevate:
-        _elevated_powershell(cmd)
-        return f"firewall rule removed (elevated) for {engine}"
+        elevated = _elevated_powershell(cmd)
+        if elevated.returncode == 0:
+            return f"firewall rule removed (elevated) for {engine}"
 
     return f"failed to remove firewall rule — run as Administrator"
 
