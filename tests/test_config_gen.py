@@ -739,6 +739,26 @@ def test_xray_settings_shape_is_preserved(tmp_path):
     assert cfg["inbounds"][1]["settings"]["accounts"] == [{"user": "user", "pass": "pass"}]
 
 
+@pytest.mark.parametrize(
+    ("port_field", "expected_protocol", "inbound_tag"),
+    [("socks_port", "socks", "socks-in"), ("http_port", "http", "http-dedicated-in")],
+)
+def test_xray_supports_single_protocol_inbounds(
+    tmp_path, port_field, expected_protocol, inbound_tag
+):
+    store = _store(tmp_path)
+    profile = store.add_profile(_vmess())
+    store.config.settings.mixed_port = 0
+    setattr(store.config.settings, port_field, 1080)
+
+    cfg = _generate(store, profile, default="xray")
+
+    assert len(cfg["inbounds"]) == 1
+    assert cfg["inbounds"][0]["protocol"] == expected_protocol
+    assert cfg["inbounds"][0]["port"] == 1080
+    assert cfg["routing"]["rules"][-1]["inboundTag"] == [inbound_tag]
+
+
 def test_xray_rejects_malformed_settings(tmp_path):
     store = _store(tmp_path)
     profile = store.add_profile(_vmess("settings"))

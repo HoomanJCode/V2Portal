@@ -179,8 +179,25 @@ def _validate_settings(settings) -> None:
         raise ValueError("xray allow_lan must be boolean")
 
     mixed_port = getattr(settings, "mixed_port", None)
-    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int) or not 1 <= mixed_port <= 65534:
+    socks_port = getattr(settings, "socks_port", 0)
+    http_port_setting = getattr(settings, "http_port", 0)
+    for label, port, maximum in (
+        ("mixed_port", mixed_port, 65534),
+        ("socks_port", socks_port, 65535),
+        ("http_port", http_port_setting, 65535),
+    ):
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= maximum:
+            raise ValueError(f"xray {label} must be between 0 and {maximum}")
+    if not mixed_port and not socks_port and not http_port_setting:
         raise ValueError("xray mixed_port must be between 1 and 65534")
+    occupied_ports = set()
+    if mixed_port:
+        occupied_ports.update((mixed_port, mixed_port + 1))
+    for label, port in (("socks_port", socks_port), ("http_port", http_port_setting)):
+        if port and port in occupied_ports:
+            raise ValueError(f"xray {label} conflicts with another inbound port")
+        if port:
+            occupied_ports.add(port)
 
     auth = getattr(settings, "inbound_auth", None)
     if not isinstance(auth, dict):
@@ -279,48 +296,51 @@ class XrayAdapter(EngineAdapter):
             extra_added.add(group.id)
 
         listen = settings.listen if settings.allow_lan else "127.0.0.1"
-        http_port = settings.mixed_port + 1
-        if http_port > 65535:
-            raise ValueError("xray HTTP inbound requires mixed_port below 65535")
-        inbound = {
-            "tag": INBOUND_TAG,
-            "listen": listen,
-            "port": settings.mixed_port,
-            "protocol": "socks",
-            "settings": {"auth": "noauth", "udp": True},
-        }
-        http_inbound = {
-            "tag": HTTP_INBOUND_TAG,
-            "listen": listen,
-            "port": http_port,
-            "protocol": "http",
-            "settings": {},
-        }
-        if settings.inbound_auth.get("enabled"):
-            accounts = [
-                {
-                    "user": settings.inbound_auth["username"],
-                    "pass": settings.inbound_auth["password"],
-                }
-            ]
-            inbound["settings"] = {
-                "auth": "password",
-                "udp": True,
-                "accounts": accounts,
+        socks_port = getattr(settings, "socks_port", 0)
+        http_port_setting = getattr(settings, "http_port", 0)
+        inbounds: list[dict] = []
+        inbound_tags: list[str] = []
+        accounts = [
+            {
+                "user": settings.inbound_auth["username"],
+                "pass": settings.inbound_auth["password"],
             }
-            http_inbound["settings"] = {"accounts": accounts}
+        ] if settings.inbound_auth.get("enabled") else []
 
-        inbounds = [inbound, http_inbound]
-        inbound_tags = [INBOUND_TAG, HTTP_INBOUND_TAG]
-        if getattr(settings, "socks_port", 0):
-            extra_socks = {
-                "tag": SOCKS_INBOUND_TAG,
+        if settings.mixed_port:
+            inbound = {
+                "tag": INBOUND_TAG,
                 "listen": listen,
-                "port": settings.socks_port,
+                "port": settings.mixed_port,
                 "protocol": "socks",
                 "settings": {"auth": "noauth", "udp": True},
             }
-            if settings.inbound_auth.get("enabled"):
+            http_inbound = {
+                "tag": HTTP_INBOUND_TAG,
+                "listen": listen,
+                "port": settings.mixed_port + 1,
+                "protocol": "http",
+                "settings": {},
+            }
+            if accounts:
+                inbound["settings"] = {
+                    "auth": "password",
+                    "udp": True,
+                    "accounts": accounts,
+                }
+                http_inbound["settings"] = {"accounts": accounts}
+            inbounds.extend((inbound, http_inbound))
+            inbound_tags.extend((INBOUND_TAG, HTTP_INBOUND_TAG))
+
+        if socks_port:
+            extra_socks = {
+                "tag": SOCKS_INBOUND_TAG,
+                "listen": listen,
+                "port": socks_port,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+            }
+            if accounts:
                 extra_socks["settings"] = {
                     "auth": "password",
                     "udp": True,
@@ -328,15 +348,15 @@ class XrayAdapter(EngineAdapter):
                 }
             inbounds.append(extra_socks)
             inbound_tags.append(SOCKS_INBOUND_TAG)
-        if getattr(settings, "http_port", 0):
+        if http_port_setting:
             extra_http = {
                 "tag": DEDICATED_HTTP_INBOUND_TAG,
                 "listen": listen,
-                "port": settings.http_port,
+                "port": http_port_setting,
                 "protocol": "http",
                 "settings": {},
             }
-            if settings.inbound_auth.get("enabled"):
+            if accounts:
                 extra_http["settings"] = {"accounts": accounts}
             inbounds.append(extra_http)
             inbound_tags.append(DEDICATED_HTTP_INBOUND_TAG)
