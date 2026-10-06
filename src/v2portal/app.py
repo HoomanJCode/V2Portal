@@ -120,6 +120,47 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     )
     health.add_argument("--json", action="store_true", help="emit health data as JSON")
 
+    # -- full config exchange -----------------------------------------------
+    config_cmd = commands.add_parser("config", help="validate, import, or export the full config")
+    config_commands = config_cmd.add_subparsers(dest="config_command", metavar="ACTION")
+    config_export = config_commands.add_parser("export", help="export the full config as JSON")
+    config_export.add_argument("path", help="destination JSON path")
+    config_export.add_argument("--redact", action="store_true", help="mask credentials and keys")
+    config_import = config_commands.add_parser("import", help="import a full config JSON file")
+    config_import.add_argument("path", help="source JSON path")
+    config_import.add_argument("--mode", choices=("merge", "replace"), default="merge")
+    config_commands.add_parser("validate", help="validate the loaded config")
+
+    # -- backups -------------------------------------------------------------
+    backup_cmd = commands.add_parser("backup", help="create, list, or restore config backups")
+    backup_commands = backup_cmd.add_subparsers(dest="backup_action", metavar="ACTION")
+    backup_commands.add_parser("create", help="snapshot the current config")
+    backup_commands.add_parser("list", help="list available backups")
+    backup_restore = backup_commands.add_parser("restore", help="restore a backup file")
+    backup_restore.add_argument("path", help="backup JSON path")
+
+    # -- engine update -------------------------------------------------------
+    engine_cmd = commands.add_parser("engine", help="manage sing-box and Xray binaries")
+    engine_commands = engine_cmd.add_subparsers(dest="engine_action", metavar="ACTION")
+    engine_update = engine_commands.add_parser("update", help="update managed engine binaries")
+    engine_update.add_argument("engine", choices=("sing-box", "xray", "both"))
+    engine_update.add_argument("--proxy", help="proxy URL or local server ID for downloads")
+
+    # -- boot service --------------------------------------------------------
+    service_cmd = commands.add_parser("service", help="install or remove the boot service")
+    service_commands = service_cmd.add_subparsers(dest="service_action", metavar="ACTION")
+    service_commands.add_parser("install", help="install a service for enabled servers")
+    service_commands.add_parser("uninstall", help="remove the installed service")
+
+    # -- Windows firewall ----------------------------------------------------
+    firewall_cmd = commands.add_parser("firewall", help="manage Windows engine firewall rules")
+    firewall_commands = firewall_cmd.add_subparsers(dest="firewall_action", metavar="ACTION")
+    firewall_allow = firewall_commands.add_parser("allow", help="allow outbound engine traffic")
+    firewall_allow.add_argument("engine", choices=("sing-box", "xray", "both"))
+    firewall_remove = firewall_commands.add_parser("remove", help="remove engine firewall rules")
+    firewall_remove.add_argument("engine", choices=("sing-box", "xray", "both"))
+    firewall_commands.add_parser("list", help="list v2portal firewall rules")
+
     # -- profile --------------------------------------------------------------
     profile = commands.add_parser(
         "profile", aliases=["profiles"],
@@ -445,7 +486,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                                  help="proxy URL (socks5://host:port, http://host:port) or a local server ID to fetch through")
 
     subscription_update = subscription_commands.add_parser(
-        "update",
+        "update", aliases=["refresh"],
         help="re-fetch a subscription and reconcile its profiles",
         description=(
             "Re-fetch a subscription URL and update its profiles.\n"
@@ -690,6 +731,19 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     group_remove_member.add_argument("profile_ids", nargs="+",
                                   help="profile, subscription, group, or server ID(s) to remove (auto-detected)")
 
+    group_member = group_commands.add_parser("member", help="add or remove group members")
+    group_member_actions = group_member.add_subparsers(dest="group_member_action", metavar="ACTION")
+    for member_action, member_help in (
+        ("add", "add members to a group"),
+        ("remove", "remove members from a group"),
+    ):
+        member_parser = group_member_actions.add_parser(member_action, help=member_help)
+        member_parser.add_argument("id", help="group ID to modify")
+        member_parser.add_argument(
+            "profile_ids", nargs="+",
+            help="profile, subscription, group, or server ID(s) (auto-detected)",
+        )
+
     group_add_sub = group_commands.add_parser(
         "add-sub",
         help="add a subscription to a group",
@@ -769,18 +823,30 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "settings",
         help="view and change app settings",
         description=(
-            "View or change app settings. Run without a subcommand to\n"
-            "show all settings. Each setting has its own subcommand.\n\n"
+            "View all settings, get one value, or set one value.\n\n"
             "Examples:\n"
-            "  v2portal settings\n"
-            "  v2portal settings test-url\n"
-            "  v2portal settings test-url https://cp.cloudflare.com/generate_204\n"
-            "  v2portal settings mixed-port 1081\n"
-            "  v2portal settings allow-lan false"
+            "  v2portal settings show\n"
+            "  v2portal settings get test-url\n"
+            "  v2portal settings set test-url https://cp.cloudflare.com/generate_204\n"
+            "  v2portal settings set mixed-port 1081\n"
+            "  v2portal settings set allow-lan false\n\n"
+            "Legacy 'settings KEY [VALUE]' forms remain accepted."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     settings_sub = settings_cmd.add_subparsers(dest="settings_command", metavar="SETTING")
+
+    settings_sub.add_parser("show", help="show all settings")
+    settings_get = settings_sub.add_parser("get", help="show one setting")
+    setting_names = (
+        "listen", "mixed-port", "socks-port", "http-port", "allow-lan", "dns",
+        "log-level", "test-url", "default-engine", "backup-keep", "traffic-api",
+        "traffic-api-port", "subscription-proxy",
+    )
+    settings_get.add_argument("key", choices=setting_names, metavar="KEY")
+    settings_set = settings_sub.add_parser("set", help="change one setting")
+    settings_set.add_argument("key", choices=setting_names, metavar="KEY")
+    settings_set.add_argument("value", help="new setting value")
 
     def _add_setting(name, help_text, choices=None):
         """Add a setting subcommand that shows/sets a single value."""
@@ -986,7 +1052,7 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
 
     # -- routing ---------------------------------------------------------------
     routing = commands.add_parser(
-        "routing",
+        "routing", aliases=["route"],
         help="manage split-routing rules (proxy / direct / block)",
         description=(
             "Control which traffic goes through the proxy, goes direct,\n"
@@ -1384,9 +1450,14 @@ def _command(store: ConfigStore, args) -> int:
             if args.test_type not in ("endpoint", "probe"):
                 scope = args.test_type
             return _probe(store, scope)
+        if command == "config":
+            return _config_command(store, args)
+        if command in ("backup", "engine", "service", "firewall"):
+            args.settings_command = command
+            return _settings_command(store, args)
         if command == "settings":
             return _settings_command(store, args)
-        if command == "routing":
+        if command in ("routing", "route"):
             return _routing_command(store, args)
         if command in ("server", "sv"):
             return _server_command(store, args)
@@ -1445,6 +1516,23 @@ def _status(store: ConfigStore, as_json: bool = False) -> int:
     else:
         _summary(store)
     return 0
+
+
+def _config_command(store: ConfigStore, args) -> int:
+    from .exchange import export_full, import_full
+
+    if args.config_command == "export":
+        export_full(store, args.path, redact=args.redact)
+        print(f"exported config to {args.path}")
+        return 0
+    if args.config_command == "import":
+        import_full(store, args.path, mode=args.mode)
+        print(f"imported config from {args.path} ({args.mode})")
+        return 0
+    if args.config_command == "validate":
+        print(f"config is valid (schema {store.config.schema_version})")
+        return 0
+    return _command_help(args, "config")
 
 
 def _profile_command(store: ConfigStore, args) -> int:
@@ -1622,6 +1710,8 @@ def _profile_add_command(store: ConfigStore, args) -> int:
 
 def _subscription_command(store: ConfigStore, args) -> int:
     action = args.subscription_command
+    if action == "refresh":
+        action = "update"
     if action is None:
         action = "list"
     if action == "list":
@@ -1741,6 +1831,8 @@ def _subscription_command(store: ConfigStore, args) -> int:
 
 def _group_command(store: ConfigStore, args) -> int:
     action = args.group_command
+    if action == "member":
+        action = "add-member" if args.group_member_action == "add" else "remove-member"
     if action is None:
         action = "list"
     if action == "list":
@@ -1988,6 +2080,13 @@ _SETTINGS_MAP = {
 
 def _settings_command(store: ConfigStore, args) -> int:
     action = args.settings_command
+    if action == "show":
+        action = None
+    elif action in ("get", "set"):
+        setting_action = action
+        action = args.key
+        if setting_action == "get":
+            args.value = None
     if action is None:
         # Show all settings
         s = store.config.settings
@@ -2039,12 +2138,13 @@ def _settings_command(store: ConfigStore, args) -> int:
     if attr is None:
         return _command_help(args, "settings")
     current = getattr(store.config.settings, attr)
-    if args.value is None:
+    value_arg = getattr(args, "value", None)
+    if value_arg is None:
         # Show current value
         print(json.dumps(current, ensure_ascii=False))
         return 0
     # Set new value
-    value = args.value
+    value = value_arg
     if attr in ("allow_lan", "traffic_api"):
         if value.lower() in ("true", "1"):
             value = True

@@ -194,6 +194,7 @@ def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
             keep=store.config.settings.backup_keep,
         )
         store.config = incoming
+        store._init_seq_from_config()
         store.save()
         return store.config
 
@@ -205,6 +206,7 @@ def import_full(store, path, mode: str = "merge", backup_dir=None) -> Config:
     if candidate.to_dict() != store.config.to_dict():
         store.notify_destructive("import-merge")
         store.config = candidate
+        store._init_seq_from_config()
         store.save()
     else:
         # Avoid rewriting the file or creating a backup for a true no-op.

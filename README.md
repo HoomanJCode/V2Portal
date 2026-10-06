@@ -113,12 +113,12 @@ v2portal profile list
 ```
 
 The command prints the new subscription ID and imports its proxy nodes as
-profiles. The same subscription can be updated later:
+profiles. The same subscription can be refreshed later:
 
 ```bash
-v2portal subscription update SUBSCRIPTION_ID
+v2portal subscription refresh SUBSCRIPTION_ID
 # or update every enabled subscription
-v2portal subscription update --all
+v2portal subscription refresh --all
 ```
 
 You can also add an individual V2Ray share link directly:
@@ -189,34 +189,40 @@ Rules can proxy, bypass, or block traffic based on domains, IP/CIDR ranges,
 geo-IP lists, and geo-site lists.
 
 ```bash
-v2portal routing mode split
+v2portal route mode split
 
 # Route streaming through one proxy target.
-v2portal routing add proxy --domain youtube.com --target PROFILE_ID
-v2portal routing add proxy --domain netflix.com --target GROUP_ID
+v2portal route add proxy --domain youtube.com --target PROFILE_ID
+v2portal route add proxy --domain netflix.com --target GROUP_ID
 
 # Bypass private networks.
-v2portal routing add direct --ip 192.168.0.0/16
-v2portal routing add direct --geoip private
+v2portal route add direct --ip 192.168.0.0/16
+v2portal route add direct --geoip private
 
 # Block advertising domains using a geo-site list.
-v2portal routing add block --geosite category-ads-all
+v2portal route add block --geosite category-ads-all
 
-v2portal routing list
+v2portal route list
 ```
 
 Domain matchers support exact domains plus `keyword:` and `regex:` prefixes.
-Use `routing move RULE_ID up|down` to change rule priority.
+Use `route move RULE_ID up|down` to change rule priority. `routing` remains an
+accepted alias for `route`.
 
 ## Common commands
 
 ```text
+config        validate | export | import
 profile       list | add | rename | edit | remove | export
-subscription  list | add | update | edit | rename | remove
-group         list | add | tree | edit | remove | add-member | remove-member
+subscription  list | add | refresh | edit | remove
+group         list | add | member add | member remove | tree | edit | remove
 server        list | add | start | stop | restart | edit | remove
-routing       list | mode | add | move | enable | disable | remove
-settings      view and change ports, DNS, engine, backups, and services
+route         list | mode | add | move | enable | disable | remove
+settings      show | get KEY | set KEY VALUE
+backup        create | list | restore
+engine        update
+service       install | uninstall
+firewall      allow | remove | list
 test          latency | endpoint | websocket
 status        show a configuration summary
 health        show subscription expiry and traffic usage
@@ -228,7 +234,7 @@ Every command provides detailed help:
 v2portal --help
 v2portal subscription --help
 v2portal server add --help
-v2portal routing add --help
+v2portal route add --help
 ```
 
 ### Useful examples
@@ -250,7 +256,19 @@ v2portal subscription list --json
 v2portal server list --json
 
 # Install a boot service for enabled servers.
-v2portal settings service install
+v2portal service install
+
+# Manage group members with a nested action.
+v2portal group member add GROUP_ID PROFILE_OR_GROUP_ID
+v2portal group member remove GROUP_ID PROFILE_OR_GROUP_ID
+
+# Validate and transfer the full configuration.
+v2portal settings show
+v2portal settings get default-engine
+v2portal settings set default-engine sing-box
+v2portal config validate
+v2portal config export ./v2portal-config.json --redact
+v2portal config import ./v2portal-config.json --mode merge
 ```
 
 ## Configuration and data storage
@@ -278,12 +296,12 @@ is not fully trusted.
 Useful settings include:
 
 ```bash
-v2portal settings listen 0.0.0.0
-v2portal settings mixed-port 1080
-v2portal settings allow-lan true
-v2portal settings default-engine sing-box
-v2portal settings backup-keep 10
-v2portal settings subscription-proxy socks5://127.0.0.1:1080
+v2portal settings set listen 0.0.0.0
+v2portal settings set mixed-port 1080
+v2portal settings set allow-lan true
+v2portal settings set default-engine sing-box
+v2portal settings set backup-keep 10
+v2portal settings set subscription-proxy socks5://127.0.0.1:1080
 ```
 
 ## Development

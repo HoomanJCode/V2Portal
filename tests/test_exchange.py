@@ -187,6 +187,20 @@ def test_import_replace_backs_up_first(tmp_path):
     assert any(b.reason == "import-replace" for b in backup.list_backups(bdir))
 
 
+def test_import_replace_advances_store_id_counter(tmp_path):
+    store = _store(tmp_path)
+    incoming = _store(tmp_path, "incoming.json")
+    incoming.add_profile(
+        Profile(id="090", name="imported", kind="socks", outbound=SOCKS)
+    )
+    path = _export(tmp_path, incoming)
+
+    exchange.import_full(store, path, mode="replace")
+    added = store.add_profile(Profile(name="after-import", kind="socks", outbound=SOCKS))
+
+    assert int(added.id) > 90
+
+
 def test_import_full_rejects_malformed_nested_shape_before_backup(tmp_path):
     store = _store(tmp_path)
     backup_dir = tmp_path / "backups"

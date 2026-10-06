@@ -37,6 +37,31 @@ def test_status_command_can_emit_json(tmp_path, monkeypatch, capsys):
     assert data["groups"] == 0
 
 
+def test_settings_get_and_set_commands(tmp_path, capsys):
+    store = _store(tmp_path)
+    get_args = app.build_parser().parse_args(["settings", "get", "listen"])
+    assert app._settings_command(store, get_args) == 0
+    assert json.loads(capsys.readouterr().out) == "0.0.0.0"
+
+    set_args = app.build_parser().parse_args(
+        ["settings", "set", "listen", "127.0.0.1"]
+    )
+    assert app._settings_command(store, set_args) == 0
+    assert store.config.settings.listen == "127.0.0.1"
+
+
+def test_config_export_command_writes_full_config(tmp_path, capsys):
+    store = _store(tmp_path)
+    path = tmp_path / "export.json"
+    args = app.build_parser().parse_args(["config", "export", str(path), "--redact"])
+
+    assert app._config_command(store, args) == 0
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["schema_version"] == store.config.schema_version
+    assert "profiles" in data and "servers" in data
+
+
 def test_profile_add_list_rename_remove_are_non_interactive(tmp_path, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="old", kind="socks", outbound=SOCKS))

@@ -12,6 +12,7 @@ import argparse
 import pytest
 
 from v2portal import app
+from v2portal.storage import ConfigStore
 
 RESOURCES = {
     "profile": {"list", "add", "edit", "remove"},
@@ -80,4 +81,44 @@ def test_no_selector_flags_in_server_add_help():
     assert "--profile" not in out
     assert "--group" not in out
     assert "REF" in out
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["subscription", "refresh", "--all"],
+        ["group", "member", "add", "001", "002"],
+        ["group", "member", "remove", "001", "002"],
+        ["route", "mode", "split"],
+        ["settings", "show"],
+        ["settings", "get", "listen"],
+        ["settings", "set", "listen", "127.0.0.1"],
+        ["config", "validate"],
+        ["config", "export", "config.json", "--redact"],
+        ["config", "import", "config.json", "--mode", "replace"],
+        ["backup", "restore", "backup.json"],
+        ["engine", "update", "both"],
+        ["service", "install"],
+        ["firewall", "list"],
+    ],
+)
+def test_recommended_command_shapes_parse(argv):
+    args = app.build_parser().parse_args(argv)
+    assert args.command
+
+
+def test_nested_group_member_arguments_are_normalized_by_handler(tmp_path):
+    from v2portal.models import Group, Profile
+
+    store = ConfigStore(tmp_path / "config.json")
+    store.load()
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound={
+        "settings": {"servers": [{"address": "127.0.0.1", "port": 1080}]}
+    }))
+    group = store.add_group(Group(name="g", type="balancer", profile_ids=[profile.id]))
+    store.save()
+
+    args = app.build_parser().parse_args(["group", "member", "remove", group.id, profile.id])
+    assert app._group_command(store, args) == 0
+    assert profile.id not in group.profile_ids
 
