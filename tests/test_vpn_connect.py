@@ -3,7 +3,7 @@ from v2portal.models import Profile
 from v2portal.outbounds.vpn import add_openconnect, add_openvpn
 from v2portal.storage import ConfigStore
 
-from conftest import make_fake_script
+from tests.conftest import make_fake_script
 
 
 def _store(tmp_path):

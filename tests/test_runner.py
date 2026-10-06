@@ -1,7 +1,7 @@
 from v2portal import runner
 from v2portal.runner import Proc
 
-from conftest import make_fake_script
+from tests.conftest import make_fake_script
 
 
 def _script(tmp_path, body):

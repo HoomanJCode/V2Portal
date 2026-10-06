@@ -3,7 +3,7 @@ from v2portal.connection import ConnectionController
 from v2portal.models import Group, Profile, RoutingConfig, RoutingRule
 from v2portal.storage import ConfigStore
 
-from conftest import make_fake_script
+from tests.conftest import make_fake_script
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 

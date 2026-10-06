@@ -13,7 +13,7 @@ from v2portal.errors import V2RayCLIError
 from v2portal.models import Group, Profile
 from v2portal.storage import ConfigStore
 
-from conftest import make_fake_script
+from tests.conftest import make_fake_script
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 CHECK_GUARD = 'if [ "$1" = "check" ] || [ "$2" = "-test" ]; then exit 0; fi'

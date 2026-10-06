@@ -14,7 +14,7 @@ from v2portal.engines.binary import (
     update_binary,
 )
 
-from conftest import make_fake_script
+from tests.conftest import make_fake_script
 
 
 def test_release_asset_mapping():
