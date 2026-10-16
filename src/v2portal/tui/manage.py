@@ -257,6 +257,7 @@ def _transfer(store) -> None:
 def _render_subscriptions_table(store, subs) -> None:
     """Rich table of subscriptions with profile counts and health status."""
     from rich.console import Console
+    from rich.markup import escape
     from rich.table import Table
 
     from ..subs.health import subscription_status
@@ -266,6 +267,7 @@ def _render_subscriptions_table(store, subs) -> None:
     table.add_column("Profiles", justify="right")
     table.add_column("Status")
     table.add_column("Name")
+    table.add_column("URL", overflow="fold")
     for sub in subs:
         status = subscription_status(sub)
         if status["expired"]:
@@ -276,7 +278,14 @@ def _render_subscriptions_table(store, subs) -> None:
             label = "[green]ok[/green]"
         else:
             label = "[dim]never updated[/dim]"
-        table.add_row(sub.id, str(len(sub.profile_ids)), label, sub.name)
+        # URLs may contain Rich markup characters supplied by the provider.
+        table.add_row(
+            sub.id,
+            str(len(sub.profile_ids)),
+            label,
+            sub.name,
+            escape(sub.url or "(not configured)"),
+        )
     Console().print(table)
 
 
@@ -289,14 +298,25 @@ def _subscriptions(store) -> None:
     action = widgets.menu(
         "Subscriptions",
         [
-            ("update", "Update one"),
+            ("view_url", "View subscription URL"),
+            ("update", "Fetch / update one"),
             ("update_all", "Update all"),
             ("remove", "Remove"),
             ("back", "Back"),
         ],
         text="Subscriptions update on demand; auto-update follows each sub's schedule.",
     )
-    if action == "update":
+    if action == "view_url":
+        choice = widgets.menu("Pick subscription", [(s.id, s.name) for s in subs])
+        if choice:
+            sub = store.get_subscription(choice)
+            if sub:
+                from rich.markup import escape
+
+                widgets.show_message(
+                    "Subscription URL", escape(sub.url) if sub.url else "No URL configured."
+                )
+    elif action == "update":
         choice = widgets.menu("Pick", [(s.id, s.name) for s in subs])
         if choice:
             _do_update(store, choice)
