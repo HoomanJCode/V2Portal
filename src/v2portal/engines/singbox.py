@@ -305,9 +305,10 @@ class SingBoxAdapter(EngineAdapter):
             if target.strategy == "latency":
                 urltest: dict = {"type": "urltest", "tag": BALANCER_TAG, "outbounds": tags}
                 if target.health_interval:
-                    # Fail over quickly when the active node stops answering:
-                    # probe on the interval and cut live connections to the dead
-                    # node so clients switch without waiting.
+                    # Refresh health and selection at the requested interval.
+                    # Keep existing flows attached to their current outbound;
+                    # a flow already broken by a dead node must be retried by
+                    # its client after the balancer selects a healthy node.
                     urltest["interval"] = f"{target.health_interval}s"
                     urltest["interrupt_exist_connections"] = False
                 outbounds.append(urltest)

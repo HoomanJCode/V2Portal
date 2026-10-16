@@ -159,6 +159,13 @@ v2portal server start --all
 Use `v2portal server stop SERVER_ID` to stop one server or
 `v2portal server stop --all` to stop every running server.
 
+Multi-node subscription and group servers enable health-based failover by
+default, probing every 10 seconds. Set `--failover 0` for the engine default,
+`--failover N` for a custom interval, or `--failover -1` to disable it. With
+failover enabled, `random` and `roundRobin` server targets use latency-based
+selection so unhealthy nodes can be skipped and rejoin after recovery. Existing
+connections through a failed node may still need to be retried by the client.
+
 ### 3. Create a proxy group
 
 IDs are automatically detected as profile, subscription, group, or server IDs.

@@ -1260,8 +1260,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     server_add.add_argument("--listen", default="0.0.0.0", help="listen address (default: 0.0.0.0)")
     server_add.add_argument("--api-port", type=int, default=0,
                             help="Clash API port to expose the live active outbound (0 = disabled)")
-    server_add.add_argument("--failover", type=int, default=-1,
-                            help="seconds between health probes (-1 = off, 0 = default 10s, >0 = custom)")
+    server_add.add_argument("--failover", type=int, default=None,
+                            help="multi-node health checks (default: on; -1 = off, 0 = default 10s, >0 = custom; random/roundRobin use latency selection while enabled)")
     # Back-compat: --profile/--group flags (deprecated, auto-detected now).
     server_outbound.add_argument("--profile", help=argparse.SUPPRESS, dest="legacy_profile")
     server_outbound.add_argument("--group", help=argparse.SUPPRESS, dest="legacy_group")
@@ -1303,8 +1303,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
                              help="upstream proxy URL for temporary server (e.g. socks5://host:port)")
     server_start.add_argument("--listen", default="0.0.0.0",
                              help="listen address for temporary server (default: 0.0.0.0)")
-    server_start.add_argument("--failover", type=int, default=-1,
-                             help="override failover timeout for this start (-1 = off, 0 = default, >0 = custom)")
+    server_start.add_argument("--failover", type=int, default=None,
+                             help="override failover timeout for this start (-1 = off, 0 = default 10s, >0 = custom; omitted = saved setting)")
 
     server_stop = server_commands.add_parser(
         "stop",
@@ -2432,13 +2432,14 @@ def _server_command(store: ConfigStore, args) -> int:
         return 0
 
     if action == "add":
+        requested_failover = getattr(args, "failover", None)
         server = Server(
             name=args.name,
             port=args.port,
             protocol=args.protocol,
             listen=args.listen,
             traffic_api_port=getattr(args, "api_port", 0) or 0,
-            failover=getattr(args, "failover", -1),
+            failover=-1 if requested_failover is None else requested_failover,
         )
         ref = getattr(args, "out", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
@@ -2447,9 +2448,9 @@ def _server_command(store: ConfigStore, args) -> int:
             except ValueError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
-            # Auto-enable failover for multi-node outbounds (group/subscription)
-            # unless the user explicitly opted out (--failover -1).
-            if server.outbound_type in ("group", "subscription") and server.failover == -1:
+            # Auto-enable failover for multi-node outbounds when the user did
+            # not specify --failover. An explicit -1 remains an opt-out.
+            if server.outbound_type in ("group", "subscription") and requested_failover is None:
                 server.failover = 0  # engine default
         else:
             server.outbound_type = "direct"
@@ -2462,14 +2463,14 @@ def _server_command(store: ConfigStore, args) -> int:
     if action == "start":
         if getattr(args, "temp", False):
             return _temp_server_start(store, args)
-        from .servers import ServerManager, DEFAULT_FAILOVER_TIMEOUT
+        from .servers import ServerManager
 
         mgr = ServerManager(store)
 
         def _apply_failover_override(srv):
             """Temporarily override failover for a server during this start."""
-            fo = getattr(args, "failover", -1)
-            if fo >= 0:
+            fo = getattr(args, "failover", None)
+            if fo is not None:
                 srv.failover = fo
 
         # Default to --all when no specific ID is given.

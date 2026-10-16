@@ -233,20 +233,29 @@ class ServerManager:
         )
 
     def _failover_target(self, target, healthy: list, timeout: int):
-        """Turn a balancer target into a health-checked balancer over the
-        healthy nodes, keeping the fastest endpoint first (the engine's
-        initial default) and probing every ``timeout`` seconds to fail over
-        quickly when the active node stops responding.
+        """Build a health-checked target, with reachable nodes first.
+
+        Keep initially unhealthy nodes in the target so engine health checks
+        can use them if they recover. Random and round-robin engine selectors
+        do not consult health observations, so failover uses latency selection
+        for those strategies.
         """
         from dataclasses import replace
 
-        if len(healthy) <= 1:
-            # Nothing to balance — degrade to a single node.
+        if len(target.profiles) <= 1:
             return self._pin_to_fastest_endpoint(healthy, target.engine)
+        healthy_ids = {profile.id for profile in healthy}
+        ordered_profiles = list(healthy) + [
+            profile for profile in target.profiles if profile.id not in healthy_ids
+        ]
+        strategy = target.strategy
+        if strategy in ("random", "roundRobin"):
+            strategy = "latency"
         return replace(
             target,
-            profiles=list(healthy),
-            profile_ids=[p.id for p in healthy],
+            profiles=ordered_profiles,
+            profile_ids=[p.id for p in ordered_profiles],
+            strategy=strategy,
             health_interval=int(timeout),
         )
 
@@ -259,22 +268,19 @@ class ServerManager:
         self.selected_pinned = None
         self.failover_active = None
         if target.type == "balancer":
-            # Real endpoint delay is always the selection ground truth: probe
-            # members, drop dead endpoints. Then either pin to the single
-            # lowest-delay node (no failover) or keep a health-checked balancer
-            # over the healthy nodes (failover enabled).
+            # Use a TCP probe to choose the initial node. With failover enabled,
+            # leave all members in the engine balancer so periodic health checks
+            # can also detect nodes that recover after startup.
             healthy = self._probe_healthy(target)
             if server.failover >= 0:
                 timeout = server.failover or DEFAULT_FAILOVER_TIMEOUT
                 if timeout <= 0:
                     raise ValueError("failover timeout must be a positive number of seconds")
                 target = self._failover_target(target, healthy, timeout)
-                # If there is only one healthy node the failover target degrades
-                # to a single pin — record it for the status line.
-                if len(healthy) == 1:
+                if len(target.profiles) == 1:
                     self.selected_pinned = healthy[0]
                 else:
-                    self.failover_active = (len(healthy), timeout)
+                    self.failover_active = (len(target.profiles), timeout)
             else:
                 target = self._pin_to_fastest_endpoint(
                     healthy, self.store.config.settings.default_engine

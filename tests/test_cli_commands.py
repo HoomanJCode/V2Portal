@@ -353,6 +353,56 @@ def test_profile_add_server_creates_localhost_profile(tmp_path, capsys):
     assert profile.outbound["settings"]["servers"][0]["port"] == 1081
 
 
+@pytest.mark.parametrize(
+    ("extra_args", "expected_failover"),
+    [([], 0), (["--failover", "-1"], -1), (["--failover", "5"], 5)],
+)
+def test_server_add_failover_default_and_explicit_values(
+    tmp_path, capsys, extra_args, expected_failover,
+):
+    from v2portal.models import Server
+
+    store = _store(tmp_path)
+    profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))
+    sub = store.add_subscription(Subscription(name="sub", profile_ids=[profile.id]))
+    args = app.build_parser().parse_args(
+        ["server", "add", "--port", "1082", sub.id, *extra_args]
+    )
+
+    assert app._server_command(store, args) == 0
+    server = store.get_server(capsys.readouterr().out.strip())
+    assert server is not None
+    assert server.failover == expected_failover
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_failover"),
+    [([], 0), (["--failover", "-1"], -1)],
+)
+def test_server_start_can_override_saved_failover(tmp_path, monkeypatch, capsys, extra_args, expected_failover):
+    from types import SimpleNamespace
+    from v2portal.models import Server
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="multi", port=1082, failover=0))
+    observed = []
+
+    class FakeServerManager:
+        def __init__(self, store):
+            self.store = store
+
+        def start(self, server_id):
+            observed.append(self.store.get_server(server_id).failover)
+            return SimpleNamespace(server_id=server_id, error=None)
+
+    monkeypatch.setattr("v2portal.servers.ServerManager", FakeServerManager)
+    args = app.build_parser().parse_args(["server", "start", server.id, *extra_args])
+
+    assert app._server_command(store, args) == 0
+    capsys.readouterr()
+    assert observed == [expected_failover]
+
+
 def test_profile_add_server_unknown_id_fails(tmp_path, capsys):
     store = _store(tmp_path)
     args = app.build_parser().parse_args(["profile", "add", "server", "x", "999"])

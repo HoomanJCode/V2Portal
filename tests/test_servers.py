@@ -378,9 +378,8 @@ def test_balancer_server_start_fails_when_all_endpoints_dead(tmp_path, monkeypat
         mgr._generate_server_config(server)
 
 
-def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
-    """Failover-enabled server keeps a health-checked balancer over healthy
-    nodes (fastest first) instead of pinning to one."""
+def test_balancer_server_failover_keeps_recovery_candidates(tmp_path, monkeypatch):
+    """Failover keeps initially dead nodes in the balancer for recovery."""
     from v2portal.test import latency
 
     store = _store(tmp_path)
@@ -405,18 +404,18 @@ def test_balancer_server_failover_keeps_healthy_balancer(tmp_path, monkeypatch):
     mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
     config, engine = mgr._generate_server_config(server)
 
-    # Failover was active over the two healthy nodes with a 5s probe interval.
-    assert mgr.failover_active == (2, 5)
-    # The generated config must keep both healthy nodes as an urltest balancer
-    # and the dead node must be dropped.
+    # The healthy nodes lead the balancer, while the initially dead node stays
+    # eligible for automatic recovery under the 5s health-check interval.
+    assert mgr.failover_active == (3, 5)
     urltest = next(o for o in config["outbounds"] if o.get("type") == "urltest")
     assert fast.id in urltest["outbounds"] and slow.id in urltest["outbounds"]
-    assert dead.id not in urltest["outbounds"]
+    assert dead.id in urltest["outbounds"]
+    assert urltest["outbounds"] == [fast.id, slow.id, dead.id]
     assert urltest.get("interval") == "5s"
     assert urltest.get("interrupt_exist_connections") is False
 
 
-def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch):
+def test_balancer_failover_single_healthy_keeps_monitoring_other_nodes(tmp_path, monkeypatch):
     from v2portal.test import latency
 
     store = _store(tmp_path)
@@ -440,12 +439,38 @@ def test_balancer_failover_single_healthy_degrades_to_pin(tmp_path, monkeypatch)
     mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
     config, engine = mgr._generate_server_config(server)
 
-    # Only one healthy node → degrade to a single pinned node.
-    assert mgr.selected_pinned is not None and mgr.selected_pinned.id == a.id
-    assert mgr.failover_active is None
-    tags = [o.get("tag") for o in config.get("outbounds", [])]
-    assert a.id in tags
-    assert dead.id not in tags
+    # Keep the only healthy node first, but continue probing the other node so
+    # it can rejoin the balancer after recovery.
+    assert mgr.selected_pinned is None
+    assert mgr.failover_active == (2, 5)
+    urltest = next(o for o in config["outbounds"] if o.get("type") == "urltest")
+    assert urltest["outbounds"] == [a.id, dead.id]
+    assert urltest["interval"] == "5s"
+
+
+@pytest.mark.parametrize("strategy", ["random", "roundRobin"])
+def test_non_latency_balancer_failover_uses_health_aware_strategy(tmp_path, monkeypatch, strategy):
+    from v2portal.test import latency
+
+    store = _store(tmp_path)
+    a = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
+    b = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
+    group = store.add_group(
+        Group(name=strategy, type="balancer", strategy=strategy, profile_ids=[a.id, b.id])
+    )
+    server = store.add_server(
+        Server(name="s1", port=1080, outbound_id=group.id, outbound_type="group", failover=5)
+    )
+    results = {a.id: _probe_result(a, 12.0), b.id: _probe_result(b, 20.0)}
+    monkeypatch.setattr(latency, "probe_endpoint", lambda profile, timeout=5.0: results[profile.id])
+
+    mgr = ServerManager(store, runtime_dir=tmp_path / "runtime")
+    config, engine = mgr._generate_server_config(server)
+
+    assert engine == "xray"
+    assert config["routing"]["balancers"][0]["strategy"]["type"] == "leastPing"
+    assert config["observatory"]["subjectSelector"] == [a.id, b.id]
+    assert config["observatory"]["probeInterval"] == "5s"
 
 
 def test_server_spawn_uses_args_kwarg(tmp_path, monkeypatch):
