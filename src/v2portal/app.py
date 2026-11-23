@@ -23,6 +23,32 @@ class _SubcommandParser(argparse.ArgumentParser):
     making it clear what actions are available.
     """
 
+    def parse_args(self, args=None, namespace=None):  # type: ignore[override]
+        # Accept root-level options before or after a nested action. argparse
+        # normally stops recognizing root options once it enters a subparser.
+        if self.prog == "v2portal":
+            tokens = list(sys.argv[1:] if args is None else args)
+            global_args: list[str] = []
+            command_args: list[str] = []
+            index = 0
+            while index < len(tokens):
+                token = tokens[index]
+                if token == "--":
+                    command_args.extend(tokens[index:])
+                    break
+                if token in ("--version", "--no-auto-update"):
+                    global_args.append(token)
+                elif token == "--config-dir" and index + 1 < len(tokens):
+                    global_args.extend((token, tokens[index + 1]))
+                    index += 1
+                elif token.startswith("--config-dir="):
+                    global_args.append(token)
+                else:
+                    command_args.append(token)
+                index += 1
+            args = [*global_args, *command_args]
+        return super().parse_args(args, namespace)
+
     def error(self, message: str) -> None:  # type: ignore[override]
         # Each subparser is an instance of this class, so its own help already
         # describes the relevant command level. Re-parsing [] here recurses

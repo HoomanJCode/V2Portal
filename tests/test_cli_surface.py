@@ -156,6 +156,21 @@ def test_every_command_path_handles_missing_arguments_without_traceback():
                 assert exc.code == 2, path
 
 
+@pytest.mark.parametrize(
+    ("argv", "config_dir", "no_auto_update"),
+    [
+        (["--config-dir", "/tmp/config", "status"], "/tmp/config", False),
+        (["status", "--config-dir", "/tmp/config"], "/tmp/config", False),
+        (["profile", "list", "--config-dir=/tmp/config", "--no-auto-update"], "/tmp/config", True),
+        (["--no-auto-update", "settings", "show", "--config-dir", "/tmp/config"], "/tmp/config", True),
+    ],
+)
+def test_global_options_parse_before_or_after_commands(argv, config_dir, no_auto_update):
+    args = app.build_parser().parse_args(argv)
+    assert args.config_dir == config_dir
+    assert args.no_auto_update is no_auto_update
+
+
 def test_nested_group_member_arguments_are_normalized_by_handler(tmp_path):
     from v2portal.models import Group, Profile
 
