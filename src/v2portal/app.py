@@ -1758,11 +1758,15 @@ def _subscription_command(store: ConfigStore, args) -> int:
         return 0
     if action == "add":
         from .subs.fetcher import resolve_proxy_arg
+        from .subs.fetcher import validate_subscription_url
         from .subs.parser import import_subscription
 
+        if not args.name.strip():
+            raise ValueError("subscription name must be non-empty text")
+        url = validate_subscription_url(args.url)
         proxy = resolve_proxy_arg(store, args.proxy)
         sub, profiles, errors = import_subscription(
-            args.name, args.url, user_agent=args.user_agent, proxy=proxy
+            args.name, url, user_agent=args.user_agent, proxy=proxy
         )
         store.add_subscription(sub)
         for profile in profiles:
@@ -1804,10 +1808,18 @@ def _subscription_command(store: ConfigStore, args) -> int:
         if sub is None:
             _not_found("subscription", args.id, store)
             return 1
-        if args.name is not None:
-            sub.name = args.name
+        if args.name is not None and not args.name.strip():
+            raise ValueError("subscription name must be non-empty text")
         if args.url is not None:
-            sub.url = args.url
+            from .subs.fetcher import validate_subscription_url
+
+            url = validate_subscription_url(args.url)
+        if args.auto_update_days is not None and args.auto_update_days < 0:
+            raise ValueError("subscription auto-update days must be non-negative")
+        if args.name is not None:
+            sub.name = args.name.strip()
+        if args.url is not None:
+            sub.url = url
         if args.user_agent is not None:
             sub.user_agent = args.user_agent or None
         if args.auto_update_days is not None:
@@ -1822,7 +1834,9 @@ def _subscription_command(store: ConfigStore, args) -> int:
         if sub is None:
             _not_found("subscription", args.id, store)
             return 1
-        sub.name = args.name
+        if not args.name.strip():
+            raise ValueError("subscription name must be non-empty text")
+        sub.name = args.name.strip()
         store.save()
         print(f"renamed subscription {args.id} -> {args.name}")
         return 0

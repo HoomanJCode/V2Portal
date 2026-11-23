@@ -18,6 +18,31 @@ class FetchError(V2RayCLIError):
     """A typed failure while fetching a subscription."""
 
 
+def validate_subscription_url(url: str) -> str:
+    """Validate and normalize a supported subscription URL without fetching it."""
+    if not isinstance(url, str) or not url.strip():
+        raise FetchError("subscription URL must be non-empty text")
+    url = url.strip()
+    raw_scheme, separator, remainder = url.partition(":")
+    scheme = raw_scheme.lower()
+    if not separator or scheme not in ("http", "https", "file", "paste"):
+        raise FetchError("unsupported subscription URL scheme")
+    url = f"{scheme}:{remainder}"
+    parsed = urlsplit(url)
+    if scheme in ("http", "https"):
+        if not parsed.hostname:
+            raise FetchError(f"{scheme} subscription URL must include a host")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise FetchError(f"invalid subscription URL port: {exc}") from exc
+    elif scheme == "file" and not parsed.path and not parsed.netloc:
+        raise FetchError("file subscription URL must include a path")
+    elif scheme == "paste" and not (parsed.netloc or parsed.path).strip():
+        raise FetchError("paste subscription URL must include a payload")
+    return url
+
+
 def resolve_proxy_arg(store, proxy: str | None) -> str | None:
     """Normalize a proxy argument into an httpx proxy URL.
 
@@ -49,9 +74,7 @@ def fetch(url: str, user_agent: str | None = None, proxy: str | None = None) -> 
     When *proxy* is given (e.g. ``socks5://127.0.0.1:1080``), HTTP requests
     are routed through it.
     """
-    if not isinstance(url, str) or not url.strip():
-        raise FetchError("subscription URL must be non-empty text")
-    url = url.strip()
+    url = validate_subscription_url(url)
     if user_agent is not None and not isinstance(user_agent, str):
         raise FetchError("subscription user agent must be text")
     if proxy is not None and not isinstance(proxy, str):

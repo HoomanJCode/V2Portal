@@ -28,7 +28,19 @@ def test_paste_fetch():
     assert headers == {}
 
 
-@pytest.mark.parametrize("url", [None, "", "   ", "ftp://example.com/sub"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        None,
+        "",
+        "   ",
+        "ftp://example.com/sub",
+        "https://",
+        "http://example.com:bad/sub",
+        "file://",
+        "paste://",
+    ],
+)
 def test_invalid_subscription_urls_raise_typed_error(url):
     with pytest.raises(FetchError):
         fetch(url)
@@ -75,6 +87,9 @@ def test_http_fetch_mocked(monkeypatch):
 
     fetch("https://example.com/sub", user_agent="custom-client")
     assert captured["headers"]["User-Agent"] == "custom-client"
+
+    fetch("HTTPS://example.com/sub")
+    assert captured["headers"]["User-Agent"] == fetcher.DEFAULT_USER_AGENT
 
 
 def test_http_fetch_passes_proxy(monkeypatch):

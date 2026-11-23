@@ -682,6 +682,36 @@ def test_subscription_edit_and_rename(tmp_path, capsys):
     assert store.get_subscription(sub.id).name == "renamed"
 
 
+@pytest.mark.parametrize(
+    ("option", "value", "message"),
+    [
+        ("--auto-update-days", "-1", "auto-update days must be non-negative"),
+        ("--url", "", "subscription URL must be non-empty text"),
+        ("--url", "gopher://example.com/sub", "unsupported subscription URL scheme"),
+        ("--name", "   ", "subscription name must be non-empty text"),
+    ],
+)
+def test_subscription_edit_rejects_invalid_values_without_mutating(
+    tmp_path, option, value, message,
+):
+    from v2portal.subs.fetcher import FetchError
+
+    store = _store(tmp_path)
+    sub = store.add_subscription(
+        Subscription(name="provider", url="https://example.com/sub", auto_update_days=3)
+    )
+    args = app.build_parser().parse_args(
+        ["subscription", "edit", sub.id, option, value]
+    )
+
+    with pytest.raises((ValueError, FetchError), match=message):
+        app._subscription_command(store, args)
+
+    assert sub.name == "provider"
+    assert sub.url == "https://example.com/sub"
+    assert sub.auto_update_days == 3
+
+
 def test_subscription_remove_prunes_groups_and_deletes_profiles(tmp_path, capsys):
     store = _store(tmp_path)
     sub = store.add_subscription(Subscription(name="myprovider"))
