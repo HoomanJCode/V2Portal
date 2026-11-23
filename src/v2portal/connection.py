@@ -120,7 +120,11 @@ class ConnectionController:
     def traffic(self) -> dict | None:
         """Return the engine's cumulative ``{"up", "down"}`` bytes, or None."""
         settings = self.store.config.settings
-        if not settings.traffic_api or self.status.state != "connected":
+        if (
+            not settings.traffic_api
+            or self.status.state != "connected"
+            or self.status.engine != "sing-box"
+        ):
             return None
         from .traffic import read_traffic
 

@@ -1,3 +1,5 @@
+from subprocess import CompletedProcess
+
 from v2portal import service
 from v2portal.models import Profile
 from v2portal.storage import ConfigStore
@@ -38,6 +40,15 @@ def test_build_systemd_unit():
     assert "server start --all" in unit
     assert "--config-dir /tmp/cfg" in unit
     assert "WantedBy=default.target" in unit
+
+
+def test_build_systemd_unit_quotes_paths_without_shell_syntax(monkeypatch):
+    monkeypatch.setattr(service.sys, "executable", "/opt/V2 Portal/python")
+    unit = service.build_systemd_unit('/tmp/config "& data')
+
+    assert 'ExecStart="/opt/V2 Portal/python"' in unit
+    assert '"/tmp/config \\"& data"' in unit
+    assert "'" not in unit
 
 
 def test_build_systemd_unit_no_config_dir():
@@ -91,11 +102,21 @@ def test_uninstall_service_removes(tmp_path, monkeypatch):
     unit = unit_dir / "v2portal.service"
     unit.parent.mkdir(parents=True)
     unit.write_text("x")
+    commands = []
     monkeypatch.setattr(service, "platform", lambda: "linux")
     monkeypatch.setattr(service, "systemd_unit_dir", lambda: unit_dir)
+    monkeypatch.setattr(
+        service.subprocess,
+        "run",
+        lambda argv, **kwargs: commands.append(argv) or CompletedProcess(argv, 0, "", ""),
+    )
 
     assert service.uninstall_service() == unit
     assert not unit.exists()
+    assert commands == [
+        ["systemctl", "--user", "disable", "--now", "v2portal.service"],
+        ["systemctl", "--user", "daemon-reload"],
+    ]
 
 
 def test_uninstall_service_nothing(tmp_path, monkeypatch):
@@ -119,6 +140,15 @@ def test_build_launchd_plist():
     assert "RunAtLoad" in plist
     assert "KeepAlive" in plist
     assert plist.strip().startswith('<?xml')
+
+
+def test_build_launchd_plist_escapes_xml_path(monkeypatch):
+    import plistlib
+
+    plist = service.build_launchd_plist("/tmp/V2 & <Portal>")
+    data = plistlib.loads(plist.encode("utf-8"))
+
+    assert data["ProgramArguments"][-1] == "/tmp/V2 & <Portal>"
 
 
 def test_build_launchd_plist_no_config_dir():
@@ -145,8 +175,16 @@ def test_uninstall_service_darwin(tmp_path, monkeypatch):
     plist_file = plist_dir / "v2portal.plist"
     plist_file.parent.mkdir(parents=True)
     plist_file.write_text("<plist></plist>")
+    commands = []
     monkeypatch.setattr(service, "platform", lambda: "darwin")
     monkeypatch.setattr(service, "launchd_plist_dir", lambda: plist_dir)
+    monkeypatch.setattr(service.os, "getuid", lambda: 501, raising=False)
+    monkeypatch.setattr(
+        service.subprocess,
+        "run",
+        lambda argv, **kwargs: commands.append(argv) or CompletedProcess(argv, 0, "", ""),
+    )
 
     assert service.uninstall_service() == plist_file
     assert not plist_file.exists()
+    assert commands == [["launchctl", "bootout", "gui/501", str(plist_file)]]

@@ -35,7 +35,7 @@ A non-interactive command-line client that wraps two proxy engines
 | **Subscription as outbound target** | Resolves as a strategy-based balancer over its current profiles (strategy configurable, default `latency`). |
 | **Nested groups** | Groups can hold profiles + subscriptions + other groups + servers; cycles rejected, members deduped. A server member resolves to a socks/http profile through its local inbound. |
 | Uniform CLI | Every resource uses `list` / `add` / `edit` / `remove` + resource-specific actions (`group add` unifies `group create`; `subscription edit`/`rename`; `server edit --outbound REF`; `group tree`). Ad-hoc `connect` was dropped — connections are persistent servers. |
-| Language | **Python 3.10+** (Linux, Windows, Termux; fastest to iterate) |
+| Language | **Python 3.10+** (Linux, Windows, macOS, Termux; fastest to iterate) |
 | Engines | **Dual engine**: sing-box (default) + xray-core (fallback), behind an adapter layer |
 | Protocol coverage | vmess, vless, trojan, ss, ssr, wireguard, hysteria2, tuic, socks, http |
 | OpenVPN / Cisco AnyConnect | Integrate via system `openvpn` / `openconnect` clients as a separate "VPN profile" type (not chainable/balanceable with proxy outbounds) |
@@ -115,7 +115,7 @@ A non-interactive command-line client that wraps two proxy engines
 ### Directory layout
 
 ```
-v2ray-cli/
+v2portal/
 ├── pyproject.toml
 ├── README.md
 ├── PLAN.md
@@ -131,7 +131,7 @@ v2ray-cli/
 │   ├── storage.py               # load/save/migrate config.json
 │   ├── connection.py            # ConnectionController: engine process lifecycle
 │   ├── servers.py               # server model + resolution helpers
-│   ├── service.py               # boot service (systemd/termux) → server start --all
+│   ├── service.py               # boot service (systemd/launchd/termux) → server start --all
 │   ├── traffic.py               # sing-box Clash API traffic polling
 │   ├── backup.py                # rolling backups + restore
 │   ├── exchange.py              # full-config and share-link export/import
@@ -176,8 +176,9 @@ v2ray-cli/
 
 ## 5. Data model (`config.json`)
 
-Stored at `<platform config dir>/v2ray-cli/config.json`
-(Linux/Termux `~/.config/v2ray-cli/`, Windows `%APPDATA%\v2ray-cli\`).
+Stored at `<platform config dir>/v2portal/config.json`
+(Linux/Termux `~/.config/v2portal/`, Windows `%APPDATA%\v2portal\`,
+macOS via `platformdirs`).
 
 ```jsonc
 {

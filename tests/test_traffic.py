@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from v2portal import traffic
-from v2portal.connection import ConnectionController
+from v2portal.connection import ConnectionController, ConnectionStatus
 from v2portal.models import Group, Profile, Settings
 from v2portal.storage import ConfigStore
 
@@ -83,6 +83,22 @@ def test_traffic_disabled_when_api_off(tmp_path):
     store.load()
     ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
     ctl.status.state = "connected"
+    assert ctl.traffic() is None
+
+
+def test_traffic_api_is_not_queried_for_xray(tmp_path, monkeypatch):
+    store = ConfigStore(tmp_path / "c.json")
+    store.load()
+    store.config.settings.traffic_api = True
+    store.config.settings.traffic_api_port = 19090
+    ctl = ConnectionController(store, bin_dir=tmp_path, runtime_dir=tmp_path)
+    ctl.status = ConnectionStatus(state="connected", engine="xray")
+    monkeypatch.setattr(
+        traffic,
+        "read_traffic",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected API request")),
+    )
+
     assert ctl.traffic() is None
 
 
@@ -168,7 +184,7 @@ def test_controller_records_traffic_for_group(tmp_path, monkeypatch):
     store.load()
     a = store.add_profile(Profile(name="a", kind="socks", outbound=SOCKS))
     b = store.add_profile(Profile(name="b", kind="socks", outbound=SOCKS))
-    group = store.add_group(Group(name="g", type="balancer", strategy="random", profile_ids=[a.id, b.id]))
+    group = store.add_group(Group(name="g", type="balancer", strategy="latency", profile_ids=[a.id, b.id]))
     store.config.settings.traffic_api = True
     store.config.settings.traffic_api_port = 19090
     binary = _fake_binary(tmp_path)

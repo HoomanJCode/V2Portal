@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shlex
+import subprocess
 import sys
+from xml.sax.saxutils import escape as xml_escape
 from pathlib import Path
 
 SERVICE_NAME = "v2portal"
@@ -38,17 +41,34 @@ def platform() -> str:
 
 
 def _cmdline(config_dir: str | None = None) -> str:
-    args = [shlex.quote(sys.executable), "-m", "v2portal", "server", "start", "--all"]
+    args = [sys.executable, "-m", "v2portal", "server", "start", "--all"]
     if config_dir:
-        args += ["--config-dir", shlex.quote(config_dir)]
-    return " ".join(args)
+        args += ["--config-dir", config_dir]
+    return " ".join(shlex.quote(arg) for arg in args)
+
+
+def _systemd_quote(value: str) -> str:
+    """Quote one systemd ExecStart argument without invoking a shell."""
+    escaped = (
+        value.replace("%", "%%")
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    if re.fullmatch(r"[A-Za-z0-9_./:@+-]+", value):
+        return escaped
+    return f'"{escaped}"'
 
 
 def build_systemd_unit(
     config_dir: str | None = None, restart: str = "on-failure"
 ) -> str:
     """Return the text of a systemd *user* unit that boots all servers."""
-    exec_start = _cmdline(config_dir)
+    argv = [sys.executable, "-m", "v2portal", "server", "start", "--all"]
+    if config_dir:
+        argv += ["--config-dir", config_dir]
+    exec_start = " ".join(_systemd_quote(arg) for arg in argv)
     return (
         "[Unit]\n"
         "Description=v2portal LAN proxy\n"
@@ -76,7 +96,7 @@ def build_launchd_plist(config_dir: str | None = None) -> str:
     if config_dir:
         argv += ["--config-dir", config_dir]
     log_dir = Path.home() / "Library" / "Logs"
-    args_xml = ''.join(f'    <string>{arg}</string>\n' for arg in argv)
+    args_xml = "".join(f"    <string>{xml_escape(arg)}</string>\n" for arg in argv)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
@@ -153,10 +173,31 @@ def uninstall_service() -> Path | None:
     removed = None
     for path in candidates:
         if path.exists():
+            if plat == "linux":
+                _run_manager_command(["systemctl", "--user", "disable", "--now", f"{SERVICE_NAME}.service"])
+            elif plat == "termux":
+                _run_manager_command(["sv", "down", SERVICE_NAME])
+                _run_manager_command(["sv-disable", SERVICE_NAME])
+            elif plat == "darwin":
+                _run_manager_command(["launchctl", "bootout", f"gui/{os.getuid()}", str(path)])
             try:
                 path.unlink()
             except OSError as exc:
                 _log.warning("failed to remove service %s: %s", path, exc)
                 continue
             removed = path
+    if removed is not None and plat == "linux":
+        _run_manager_command(["systemctl", "--user", "daemon-reload"])
     return removed
+
+
+def _run_manager_command(argv: list[str]) -> None:
+    """Best-effort stop/unregister; missing managers must not block cleanup."""
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        _log.debug("could not run %s: %s", argv[0], exc)
+        return
+    if result.returncode:
+        detail = (result.stderr or result.stdout or "").strip()
+        _log.debug("%s failed (%d): %s", argv[0], result.returncode, detail)

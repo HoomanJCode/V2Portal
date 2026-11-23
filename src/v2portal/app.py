@@ -922,11 +922,11 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
     # service install/uninstall under settings
     service_sub = settings_sub.add_parser(
         "service",
-        help="install or uninstall a boot service (Linux systemd / Termux)",
+        help="install or uninstall a boot service (Linux, macOS, or Termux)",
         description=(
             "Keep all enabled servers running across reboots by installing\n"
-            "a system service. Supported platforms: Linux (systemd user unit),\n"
-            "Termux (termux-services).\n\n"
+            "a user service. Supported platforms: Linux (systemd user unit),\n"
+            "macOS (launchd), and Termux (termux-services).\n\n"
             "Examples:\n"
             "  v2portal settings service install\n"
             "  v2portal settings service uninstall"
@@ -939,10 +939,12 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         help="create a boot service that starts all enabled servers",
         description=(
             "Write a systemd user unit (Linux) or termux-services script\n"
-            "(Termux) that launches 'v2portal server start --all' on boot.\n\n"
+            "(Termux), or a launchd plist (macOS), to launch\n"
+            "'v2portal server start --all' on boot.\n\n"
             "After install, enable with:\n"
             "  systemctl --user enable --now v2portal    (Linux)\n"
-            "  sv-enable v2portal                        (Termux)\n\n"
+            "  sv-enable v2portal                        (Termux)\n"
+            "  launchctl load ~/Library/LaunchAgents/v2portal.plist (macOS)\n\n"
             "Example:\n"
             "  v2portal settings service install"
         ),
@@ -952,7 +954,8 @@ def _add_command_parser(parser: argparse.ArgumentParser) -> None:
         "uninstall",
         help="remove the installed boot service",
         description=(
-            "Remove the systemd unit or termux-services script.\n\n"
+            "Stop/unregister the loaded service when available, then remove its\n"
+            "platform-specific service file.\n\n"
             "Example:\n"
             "  v2portal settings service uninstall"
         ),
@@ -2760,10 +2763,6 @@ def _uninstall_service() -> int:
         print("no service installed")
         return 0
     print(f"removed service -> {removed}")
-    if service.platform() == "linux":
-        print("disable with: systemctl --user disable --now v2portal")
-    elif service.platform() == "darwin":
-        print("unload with: launchctl unload ~/Library/LaunchAgents/v2portal.plist")
     return 0
 
 
