@@ -28,6 +28,11 @@ def validate_subscription_url(url: str) -> str:
     if not separator or scheme not in ("http", "https", "file", "paste"):
         raise FetchError("unsupported subscription URL scheme")
     url = f"{scheme}:{remainder}"
+    if scheme == "paste":
+        payload = remainder[2:] if remainder.startswith("//") else remainder
+        if not payload.strip():
+            raise FetchError("paste subscription URL must include a payload")
+        return url
     parsed = urlsplit(url)
     if scheme in ("http", "https"):
         if not parsed.hostname:
@@ -38,8 +43,6 @@ def validate_subscription_url(url: str) -> str:
             raise FetchError(f"invalid subscription URL port: {exc}") from exc
     elif scheme == "file" and not parsed.path and not parsed.netloc:
         raise FetchError("file subscription URL must include a path")
-    elif scheme == "paste" and not (parsed.netloc or parsed.path).strip():
-        raise FetchError("paste subscription URL must include a payload")
     return url
 
 

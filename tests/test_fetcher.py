@@ -28,6 +28,12 @@ def test_paste_fetch():
     assert headers == {}
 
 
+def test_paste_fetch_accepts_json_array_payload():
+    body, headers = fetch("paste://[]")
+    assert body == "[]"
+    assert headers == {}
+
+
 @pytest.mark.parametrize(
     "url",
     [
