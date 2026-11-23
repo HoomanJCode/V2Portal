@@ -24,34 +24,12 @@ class _SubcommandParser(argparse.ArgumentParser):
     """
 
     def error(self, message: str) -> None:  # type: ignore[override]
-        ns, _ = self.parse_known_args([])
-        command = getattr(ns, "command", None)
-        if command is None:
-            self.print_help()
-        else:
-            subcmd_attr = f"{command}_command"
-            subcmd = getattr(ns, subcmd_attr, None)
-            if subcmd is not None:
-                # nested group (e.g. profile add foo, routing move ID bad)
-                self._print_subcommand_help(command, subcmd)
-            else:
-                self._print_subcommand_help(command)
+        # Each subparser is an instance of this class, so its own help already
+        # describes the relevant command level. Re-parsing [] here recurses
+        # forever for parsers with required positional arguments.
+        self.print_help()
+        self._print_message(f"{self.prog}: error: {message}\n", sys.stderr)
         raise SystemExit(2)
-
-    def _print_subcommand_help(self, command: str, action: str | None = None) -> None:
-        """Walk the parser tree to print the help for *command [action]*."""
-        current = self
-        for name in (command, *([action] if action else [])):
-            for sub_action in current._actions:  # type: ignore[attr-defined]
-                if (
-                    isinstance(sub_action, argparse._SubParsersAction)
-                    and name in sub_action._name_parser_map
-                ):
-                    current = sub_action._name_parser_map[name]
-                    break
-            else:
-                break
-        current.print_help()
 
 
 
