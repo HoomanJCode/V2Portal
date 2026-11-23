@@ -12,6 +12,16 @@ def test_file_fetch(tmp_path):
     assert headers == {}
 
 
+def test_file_fetch_decodes_url_escaped_path(tmp_path):
+    f = tmp_path / "sub with spaces.txt"
+    f.write_text("vless://x\n")
+
+    body, headers = fetch(f.as_uri())
+
+    assert body == "vless://x\n"
+    assert headers == {}
+
+
 def test_paste_fetch():
     body, headers = fetch("paste://vless://x")
     assert body == "vless://x"

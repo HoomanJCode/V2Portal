@@ -62,6 +62,29 @@ def test_load_rejects_unsupported_schema_version(tmp_path):
         ConfigStore(path).load()
 
 
+def test_load_rejects_duplicate_ids_across_entity_types(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "profiles": [{"id": "001", "name": "p"}],
+                "subscriptions": [{"id": "001", "name": "s"}],
+            }
+        )
+    )
+
+    with pytest.raises(ConfigLoadError, match="duplicate entity id: 001"):
+        ConfigStore(path).load()
+
+
+def test_load_rejects_non_text_routing_rule_id(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"routing": {"rules": [{"id": 1}]}}))
+
+    with pytest.raises(ConfigLoadError, match=r"routing rules\[0\]\.id must be text"):
+        ConfigStore(path).load()
+
+
 def test_round_trip(tmp_path):
     path = tmp_path / "config.json"
     store = ConfigStore(path)

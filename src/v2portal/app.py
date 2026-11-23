@@ -1416,7 +1416,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "health":
         return _command(store, args)
     if args.command:
-        if not args.no_auto_update:
+        explicit_subscription_update = (
+            args.command in ("subscription", "subscriptions", "sub")
+            and getattr(args, "subscription_command", None) in ("update", "refresh")
+        )
+        if not args.no_auto_update and not explicit_subscription_update:
             _auto_update(store)
         # Only show health warnings on status/health, not every command.
         if args.command in ("status", "health") and not args.no_auto_update:
@@ -1612,24 +1616,35 @@ def _profile_command(store: ConfigStore, args) -> int:
         updates = {}
         if args.name is not None:
             updates["name"] = args.name
-        if args.host is not None:
-            if isinstance(profile.outbound, dict):
-                profile.outbound["server"] = args.host
-            else:
-                updates["name"] = profile.name  # only name is editable
-        if args.port is not None:
-            if isinstance(profile.outbound, dict):
-                profile.outbound["server_port"] = args.port
+        if args.host is not None and not args.host.strip():
+            raise ValueError("profile host must be non-empty text")
+        if args.port is not None and not 1 <= args.port <= 65535:
+            raise ValueError("profile port must be between 1 and 65535")
+        if (args.username is not None or args.password is not None) and profile.kind not in ("socks", "http"):
+            raise ValueError("username/password editing is only supported for socks/http profiles")
+        endpoint = None
+        if args.host is not None or args.port is not None:
+            endpoint, _, _ = _profile_endpoint(profile)
+        users = None
         if args.username is not None or args.password is not None:
-            if profile.kind in ("socks", "http") and isinstance(profile.outbound, dict):
-                users = profile.outbound.get("users", [])
-                if not users:
-                    users = [{}]
-                    profile.outbound["users"] = users
-                if args.username is not None:
-                    users[0]["user"] = args.username
-                if args.password is not None:
-                    users[0]["pass"] = args.password
+            endpoint, _, _ = _profile_endpoint(profile)
+            users = endpoint.get("users")
+            if users is not None and (not isinstance(users, list) or not users or not isinstance(users[0], dict)):
+                raise ValueError(f"profile {profile.id} has malformed authentication data")
+            if users is None:
+                users = [{}]
+        if args.host is not None or args.port is not None:
+            endpoint, host_key, port_key = _profile_endpoint(profile)
+            if args.host is not None:
+                endpoint[host_key] = args.host.strip()
+            if args.port is not None:
+                endpoint[port_key] = args.port
+        if users is not None:
+            endpoint["users"] = users
+            if args.username is not None:
+                users[0]["user"] = args.username
+            if args.password is not None:
+                users[0]["pass"] = args.password
         if args.engine is not None:
             profile.engine = args.engine
         if args.enabled is not None:
@@ -1709,6 +1724,25 @@ def _profile_add_command(store: ConfigStore, args) -> int:
     store.save()
     print(profile.id)
     return 0
+
+
+def _profile_endpoint(profile):
+    """Return the stored endpoint object and its address/port field names."""
+    outbound = profile.outbound
+    if not isinstance(outbound, dict):
+        raise ValueError(f"profile {profile.id} has no editable proxy endpoint")
+    if profile.kind in ("hysteria2", "tuic"):
+        return outbound, "server", "server_port"
+    settings = outbound.get("settings")
+    if not isinstance(settings, dict):
+        raise ValueError(f"profile {profile.id} has malformed endpoint settings")
+    collection = "vnext" if profile.kind in ("vmess", "vless") else "servers"
+    servers = settings.get(collection)
+    if profile.kind not in ("vmess", "vless", "socks", "http", "trojan", "ss", "ssr"):
+        raise ValueError(f"profile kind {profile.kind} does not support endpoint editing")
+    if not isinstance(servers, list) or not servers or not isinstance(servers[0], dict):
+        raise ValueError(f"profile {profile.id} has malformed {collection} endpoint data")
+    return servers[0], "address", "port"
 
 
 def _subscription_command(store: ConfigStore, args) -> int:
@@ -2155,15 +2189,55 @@ def _settings_command(store: ConfigStore, args) -> int:
             value = False
         else:
             raise ValueError(f"settings.{attr} must be true or false")
+        if attr == "traffic_api" and value and store.config.settings.traffic_api_port == 0:
+            raise ValueError("settings.traffic-api-port must be set before enabling traffic-api")
     if attr in ("mixed_port", "socks_port", "http_port", "traffic_api_port", "backup_keep"):
         try:
             value = int(value)
         except (ValueError, TypeError):
             raise ValueError(f"settings.{attr} must be an integer")
-        if attr in ("mixed_port", "socks_port", "http_port") and not (0 <= value <= 65534):
-            raise ValueError(f"settings.{attr} must be between 0 and 65534")
-        if attr in ("traffic_api_port", "backup_keep") and value < 0:
-            raise ValueError(f"settings.{attr} must be a non-negative integer")
+        if attr == "mixed_port" and not 0 <= value <= 65534:
+            raise ValueError("settings.mixed_port must be between 0 and 65534")
+        if attr in ("socks_port", "http_port") and not 0 <= value <= 65535:
+            raise ValueError(f"settings.{attr} must be between 0 and 65535")
+        if attr == "traffic_api_port" and not 0 <= value <= 65535:
+            raise ValueError("settings.traffic-api-port must be between 0 and 65535")
+        if attr == "traffic_api_port" and value == 0 and store.config.settings.traffic_api:
+            raise ValueError("disable traffic-api before setting its port to 0")
+        if attr == "backup_keep" and value < 0:
+            raise ValueError("settings.backup-keep must be a non-negative integer")
+    if attr == "dns":
+        value = [server.strip() for server in value.split(",")]
+        if not value or any(not server for server in value):
+            raise ValueError("settings.dns must be a comma-separated list of servers")
+    if attr == "default_engine" and value not in ("sing-box", "xray"):
+        raise ValueError("settings.default-engine must be sing-box or xray")
+    if attr == "log_level" and value not in ("debug", "info", "warn", "error"):
+        raise ValueError("settings.log-level must be debug, info, warn, or error")
+    if attr == "listen" and not value.strip():
+        raise ValueError("settings.listen must be non-empty text")
+    settings = store.config.settings
+    ports = {
+        "mixed_port": value if attr == "mixed_port" else settings.mixed_port,
+        "socks_port": value if attr == "socks_port" else settings.socks_port,
+        "http_port": value if attr == "http_port" else settings.http_port,
+    }
+    if attr in ("mixed_port", "socks_port", "http_port", "default_engine"):
+        occupied = set()
+        mixed_port = ports["mixed_port"]
+        if mixed_port:
+            occupied.add(mixed_port)
+            engine = value if attr == "default_engine" else settings.default_engine
+            if engine == "xray":
+                occupied.add(mixed_port + 1)
+        if not any(ports.values()):
+            raise ValueError("at least one inbound port must be enabled")
+        for name in ("socks_port", "http_port"):
+            port = ports[name]
+            if port and port in occupied:
+                raise ValueError(f"settings.{name} conflicts with another inbound port")
+            if port:
+                occupied.add(port)
     setattr(store.config.settings, attr, value)
     store.save()
     print(f"{action}={json.dumps(value, ensure_ascii=False)}")
@@ -2331,6 +2405,35 @@ def _outbound_label(row: dict) -> str:
     return label
 
 
+def _validate_server_config(store: ConfigStore, server: Server) -> None:
+    """Validate a server and its local listening ports before saving or starting it."""
+    if isinstance(server.port, bool) or not isinstance(server.port, int) or not 1 <= server.port <= 65535:
+        raise ValueError("server port must be between 1 and 65535")
+    if server.protocol not in ("mixed", "socks", "http"):
+        raise ValueError("server protocol must be mixed, socks, or http")
+    if not isinstance(server.listen, str) or not server.listen.strip():
+        raise ValueError("server listen address must be non-empty text")
+    api_port = server.traffic_api_port
+    if isinstance(api_port, bool) or not isinstance(api_port, int) or not 0 <= api_port <= 65535:
+        raise ValueError("server API port must be between 0 and 65535")
+    if isinstance(server.failover, bool) or not isinstance(server.failover, int) or server.failover < -1:
+        raise ValueError("server failover must be -1, 0, or a positive number of seconds")
+    if api_port and api_port == server.port:
+        raise ValueError("server API port must differ from its inbound port")
+
+    for other in store.list_servers():
+        if other.id == server.id or not other.enabled:
+            continue
+        if other.port == server.port:
+            raise ValueError(f"server inbound port {server.port} is already used by {other.id}")
+        if api_port and api_port == other.port:
+            raise ValueError(f"server API port {api_port} is already used by {other.id}")
+        if other.traffic_api_port and other.traffic_api_port == server.port:
+            raise ValueError(f"server inbound port {server.port} is already used by {other.id} API")
+        if api_port and api_port == other.traffic_api_port:
+            raise ValueError(f"server API port {api_port} is already used by {other.id}")
+
+
 def _server_command(store: ConfigStore, args) -> int:
     from .models import Server
 
@@ -2373,6 +2476,7 @@ def _server_command(store: ConfigStore, args) -> int:
             # chain), not just the raw reference.
             outbound_kind = "direct"
             outbound_strategy = ""
+            outbound_engine = None
             outbound_profiles: list[dict] = []
             try:
                 resolved = resolve_outbound(
@@ -2384,12 +2488,13 @@ def _server_command(store: ConfigStore, args) -> int:
             if resolved is not None:
                 outbound_kind = resolved.type  # single | balancer | chain
                 outbound_strategy = resolved.strategy or ""
+                outbound_engine = resolved.engine
                 outbound_profiles = [
                     {"id": p.id, "name": p.name} for p in resolved.profiles
                 ]
 
             active_outbound = None
-            if running and s.traffic_api_port:
+            if running and s.traffic_api_port and outbound_engine == "sing-box":
                 from .traffic import read_active_outbound
 
                 active_outbound = read_active_outbound(
@@ -2458,6 +2563,7 @@ def _server_command(store: ConfigStore, args) -> int:
         else:
             server.outbound_type = "direct"
             server.outbound_id = ""
+        _validate_server_config(store, server)
         store.add_server(server)
         store.save()
         print(server.id)
@@ -2474,6 +2580,8 @@ def _server_command(store: ConfigStore, args) -> int:
             """Temporarily override failover for a server during this start."""
             fo = getattr(args, "failover", None)
             if fo is not None:
+                if fo < -1:
+                    raise ValueError("failover must be -1, 0, or a positive number of seconds")
                 srv.failover = fo
 
         # Default to --all when no specific ID is given.
@@ -2488,13 +2596,14 @@ def _server_command(store: ConfigStore, args) -> int:
             for s in servers:
                 try:
                     _apply_failover_override(s)
+                    _validate_server_config(store, s)
                     state = mgr.start(s.id)
                     if state.error:
                         failed = True
                         _status_line(s.id, "FAILED", state.error)
                     else:
                         _status_line(s.id, "started", f":{s.port}{_pinned_detail(mgr)}")
-                except (ValueError, OSError) as exc:
+                except (ValueError, OSError, V2RayCLIError) as exc:
                     failed = True
                     _status_line(s.id, "FAILED", str(exc))
             return 1 if failed else 0
@@ -2505,6 +2614,7 @@ def _server_command(store: ConfigStore, args) -> int:
             srv = store.get_server(args.id)
             if srv:
                 _apply_failover_override(srv)
+                _validate_server_config(store, srv)
             state = mgr.start(args.id)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -2558,7 +2668,7 @@ def _server_command(store: ConfigStore, args) -> int:
                         _status_line(s.id, "FAILED", state.error)
                     else:
                         _status_line(s.id, "restarted", f":{s.port}{_pinned_detail(mgr)}")
-                except (ValueError, OSError) as exc:
+                except (ValueError, OSError, V2RayCLIError) as exc:
                     failed = True
                     _status_line(s.id, "FAILED", str(exc))
             return 1 if failed else 0
@@ -2585,30 +2695,34 @@ def _server_command(store: ConfigStore, args) -> int:
         if server is None:
             _not_found("server", args.id, store)
             return 1
+        from copy import copy
+        updated_server = copy(server)
         if args.name is not None:
-            server.name = args.name
+            updated_server.name = args.name
         if args.port is not None:
-            server.port = args.port
+            updated_server.port = args.port
         if args.protocol is not None:
-            server.protocol = args.protocol
+            updated_server.protocol = args.protocol
         if args.listen is not None:
-            server.listen = args.listen
+            updated_server.listen = args.listen
         api_port = getattr(args, "api_port", None)
         if api_port is not None and api_port != -1:
-            server.traffic_api_port = api_port
+            updated_server.traffic_api_port = api_port
         ft = getattr(args, "failover", None)
         if ft is not None:
-            server.failover = ft
+            updated_server.failover = ft
         ref = getattr(args, "outbound", None) or getattr(args, "legacy_profile", None) or getattr(args, "legacy_group", None)
         if ref:
             try:
-                server.outbound_type, server.outbound_id = _detect_outbound(store, ref, from_server_id=args.id)
+                updated_server.outbound_type, updated_server.outbound_id = _detect_outbound(store, ref, from_server_id=args.id)
             except ValueError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
         elif args.direct:
-            server.outbound_id = ""
-            server.outbound_type = "direct"
+            updated_server.outbound_id = ""
+            updated_server.outbound_type = "direct"
+        _validate_server_config(store, updated_server)
+        server.__dict__.update(updated_server.__dict__)
         store.save()
         # Restart if the server was running so changes take effect.
         mgr = ServerManager(store)
@@ -2616,10 +2730,17 @@ def _server_command(store: ConfigStore, args) -> int:
         if state and state.is_running():
             mgr.stop(args.id)
             try:
-                mgr.start(args.id)
+                state = mgr.start(args.id)
+                if state.error:
+                    print(
+                        f"edited server {args.id} but restart failed: {state.error}",
+                        file=sys.stderr,
+                    )
+                    return 1
                 print(f"edited and restarted server {args.id}")
-            except (ValueError, OSError) as exc:
+            except (ValueError, OSError, V2RayCLIError) as exc:
                 print(f"edited server {args.id} but restart failed: {exc}", file=sys.stderr)
+                return 1
         else:
             print(f"edited server {args.id}")
         return 0
@@ -3097,6 +3218,7 @@ def _temp_server_start(store: ConfigStore, args) -> int:
         protocol=args.protocol,
         listen=args.listen,
     )
+    _validate_server_config(store, server)
 
     ref = getattr(args, "outbound", None) or getattr(args, "profile", None) or getattr(args, "group", None)
     if ref:

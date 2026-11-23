@@ -232,11 +232,26 @@ def _validate_settings(settings) -> None:
     mixed_port = getattr(settings, "mixed_port", None)
     socks_port = getattr(settings, "socks_port", 0)
     http_port = getattr(settings, "http_port", 0)
-    has_dedicated = (isinstance(socks_port, int) and socks_port > 0) or (isinstance(http_port, int) and http_port > 0)
-    if isinstance(mixed_port, bool) or not isinstance(mixed_port, int):
-        raise ValueError("sing-box mixed_port must be between 1 and 65535")
-    if not (1 <= mixed_port <= 65535) and not has_dedicated:
-        raise ValueError("sing-box mixed_port must be between 1 and 65535")
+    for label, port in (
+        ("mixed_port", mixed_port),
+        ("socks_port", socks_port),
+        ("http_port", http_port),
+    ):
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError(f"sing-box {label} must be between 0 and 65535")
+    occupied_ports = set()
+    for label, port in (
+        ("mixed_port", mixed_port),
+        ("socks_port", socks_port),
+        ("http_port", http_port),
+    ):
+        if not port:
+            continue
+        if port in occupied_ports:
+            raise ValueError(f"sing-box {label} conflicts with another inbound port")
+        occupied_ports.add(port)
+    if not occupied_ports:
+        raise ValueError("sing-box requires at least one inbound port")
 
     auth = getattr(settings, "inbound_auth", None)
     if not isinstance(auth, dict):

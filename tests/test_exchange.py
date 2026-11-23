@@ -110,6 +110,24 @@ def test_redacted_export_has_no_secrets(tmp_path):
     assert "REDACTED" in text
 
 
+def test_redacted_export_masks_subscription_and_proxy_urls(tmp_path):
+    store = _store(tmp_path)
+    store.add_subscription(
+        Subscription(
+            name="provider",
+            url="https://user:sub-secret@example.com/sub?token=query-secret",
+        )
+    )
+    store.config.settings.subscription_proxy = "socks5://user:proxy-secret@127.0.0.1:1080"
+
+    text = json.dumps(exchange.export_full(store, redact=True))
+
+    for secret in ("sub-secret", "query-secret", "proxy-secret"):
+        assert secret not in text
+    assert '"url": "REDACTED"' in text
+    assert '"subscription_proxy": "REDACTED"' in text
+
+
 def test_import_merge_dedupes_on_conflict(tmp_path):
     store = _store(tmp_path)
     existing = store.add_profile(Profile(name="keep", kind="socks", outbound=SOCKS))
@@ -123,6 +141,101 @@ def test_import_merge_dedupes_on_conflict(tmp_path):
     assert len(store.config.profiles) == 1
     assert store.config.profiles[0].id == existing.id
     assert store.config.profiles[0].name == "keep"
+
+
+def test_import_merge_relinks_references_when_profile_is_deduped(tmp_path):
+    from v2portal.models import Group, Server, Subscription
+
+    store = _store(tmp_path)
+    store.add_subscription(Subscription(id="011", name="sub"))
+    existing = store.add_profile(
+        Profile(
+            id="001",
+            name="keep",
+            kind="socks",
+            outbound=SOCKS,
+            source="subscription",
+            subscription_id="011",
+        )
+    )
+
+    incoming = _store(tmp_path, "incoming.json")
+    sub = incoming.add_subscription(Subscription(id="011", name="sub"))
+    duplicate = incoming.add_profile(
+        Profile(
+            id="010",
+            name="duplicate",
+            kind="socks",
+            outbound=SOCKS,
+            source="subscription",
+            subscription_id=sub.id,
+        )
+    )
+    sub.profile_ids = [duplicate.id]
+    group = incoming.add_group(
+        Group(id="012", name="group", type="single", profile_ids=[duplicate.id])
+    )
+    server = incoming.add_server(
+        Server(
+            id="013",
+            name="server",
+            outbound_type="profile",
+            outbound_id=duplicate.id,
+        )
+    )
+    path = _export(tmp_path, incoming)
+
+    exchange.import_full(store, path, mode="merge")
+
+    assert store.get_subscription(sub.id).profile_ids == [existing.id]
+    assert store.get_group(group.id).profile_ids == [existing.id]
+    assert store.get_server(server.id).outbound_id == existing.id
+
+
+def test_import_merge_rejects_cross_type_id_collision(tmp_path):
+    from v2portal.models import Group
+
+    store = _store(tmp_path)
+    store.add_group(Group(id="001", name="existing"))
+    incoming = _store(tmp_path, "incoming.json")
+    incoming.add_profile(Profile(id="001", name="profile", kind="socks", outbound=SOCKS))
+    path = _export(tmp_path, incoming)
+
+    with pytest.raises(ValueError, match="cannot import it as a profile"):
+        exchange.import_full(store, path, mode="merge")
+
+    assert store.get_group("001") is not None
+    assert store.get_profile("001") is None
+
+
+def test_import_merge_includes_routing_rules(tmp_path):
+    from v2portal.models import RoutingRule
+
+    store = _store(tmp_path)
+    store.config.routing.mode = "all"
+    store.config.routing.rules = [RoutingRule(id="route-1", action="direct")]
+    incoming = _store(tmp_path, "incoming.json")
+    incoming.config.routing.mode = "split"
+    incoming.config.routing.rules = [RoutingRule(id="route-2", action="block")]
+    path = _export(tmp_path, incoming)
+
+    exchange.import_full(store, path, mode="merge")
+
+    assert store.config.routing.mode == "split"
+    assert [rule.id for rule in store.config.routing.rules] == ["route-1", "route-2"]
+
+
+def test_import_merge_rejects_routing_rule_id_collision_with_entity(tmp_path):
+    from v2portal.models import RoutingRule
+
+    store = _store(tmp_path)
+    store.add_profile(Profile(id="shared-id", name="existing", kind="socks", outbound=SOCKS))
+    incoming = _store(tmp_path, "incoming.json")
+    incoming.config.routing.rules = [RoutingRule(id="shared-id", action="direct")]
+    path = _export(tmp_path, incoming)
+
+    with pytest.raises(ValueError, match="cannot import it as a routing rule"):
+        exchange.import_full(store, path, mode="merge")
 
 
 def test_import_merge_updates_by_id(tmp_path):

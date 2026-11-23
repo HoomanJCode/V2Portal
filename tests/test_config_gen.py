@@ -433,7 +433,7 @@ def test_singbox_rejects_malformed_settings(tmp_path):
 
     store.config.settings.dns = ["1.1.1.1"]
     store.config.settings.mixed_port = 0
-    with pytest.raises(ValueError, match="mixed_port must be between"):
+    with pytest.raises(ValueError, match="requires at least one inbound port"):
         _generate(store, profile, default="sing-box")
 
     store.config.settings.mixed_port = 1080
@@ -445,6 +445,17 @@ def test_singbox_rejects_malformed_settings(tmp_path):
     store.config.settings.traffic_api_port = 1234
     store.config.settings.allow_lan = "yes"
     with pytest.raises(ValueError, match="allow_lan must be boolean"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.allow_lan = True
+    store.config.settings.mixed_port = 1080
+    store.config.settings.socks_port = 1080
+    with pytest.raises(ValueError, match="socks_port conflicts"):
+        _generate(store, profile, default="sing-box")
+
+    store.config.settings.mixed_port = 0
+    store.config.settings.socks_port = 65536
+    with pytest.raises(ValueError, match="socks_port must be between"):
         _generate(store, profile, default="sing-box")
 
 

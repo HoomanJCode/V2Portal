@@ -5,7 +5,7 @@ import json
 import pytest
 
 from v2portal import app
-from v2portal.models import Group, Profile, Subscription
+from v2portal.models import Group, Profile, Server, Subscription
 from v2portal.storage import ConfigStore
 
 SOCKS = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
@@ -48,6 +48,101 @@ def test_settings_get_and_set_commands(tmp_path, capsys):
     )
     assert app._settings_command(store, set_args) == 0
     assert store.config.settings.listen == "127.0.0.1"
+
+
+def test_settings_set_dns_parses_comma_separated_servers(tmp_path, capsys):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(
+        ["settings", "set", "dns", "1.1.1.1, 8.8.8.8"]
+    )
+
+    assert app._settings_command(store, args) == 0
+    assert store.config.settings.dns == ["1.1.1.1", "8.8.8.8"]
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("dns", "1.1.1.1,,8.8.8.8", "comma-separated list"),
+        ("default-engine", "not-an-engine", "sing-box or xray"),
+        ("log-level", "verbose", "debug, info, warn, or error"),
+        ("traffic-api-port", "65536", "between 0 and 65535"),
+    ],
+)
+def test_settings_set_rejects_invalid_values(tmp_path, key, value, message):
+    store = _store(tmp_path)
+    args = app.build_parser().parse_args(["settings", "set", key, value])
+
+    with pytest.raises(ValueError, match=message):
+        app._settings_command(store, args)
+
+
+def test_explicit_subscription_update_skips_startup_auto_update(tmp_path, monkeypatch):
+    for name in ("CONFIG_PATH", "RUNTIME_DIR", "BIN_DIR", "GEO_DIR", "BACKUP_DIR"):
+        monkeypatch.setattr(app.config, name, tmp_path / name.lower())
+    calls = []
+    monkeypatch.setattr(app, "_auto_update", lambda store: calls.append("auto"))
+    monkeypatch.setattr(app, "_command", lambda store, args: 0)
+
+    assert app.main(["subscription", "update", "001"]) == 0
+    assert calls == []
+
+    assert app.main(["subscription", "list"]) == 0
+    assert calls == ["auto"]
+
+
+def test_server_start_all_continues_after_engine_errors(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from v2portal.engines.binary import BinaryError
+
+    store = _store(tmp_path)
+    first = store.add_server(Server(name="first", port=1080))
+    second = store.add_server(Server(name="second", port=1081))
+    calls = []
+
+    class FakeManager:
+        def __init__(self, _store):
+            self.failover_active = None
+
+        def start(self, server_id):
+            calls.append(server_id)
+            if server_id == first.id:
+                raise BinaryError("engine binary unavailable")
+            return SimpleNamespace(error=None, server_id=server_id)
+
+    monkeypatch.setattr("v2portal.servers.ServerManager", FakeManager)
+    args = app.build_parser().parse_args(["server", "start", "--all"])
+
+    assert app._command(store, args) == 1
+    assert calls == [first.id, second.id]
+    assert "engine binary unavailable" in capsys.readouterr().out
+
+
+def test_server_edit_returns_failure_when_restart_state_has_error(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    store = _store(tmp_path)
+    server = store.add_server(Server(name="old", port=1080))
+
+    class FakeManager:
+        def __init__(self, _store):
+            pass
+
+        def get_state(self, _server_id):
+            return SimpleNamespace(is_running=lambda: True)
+
+        def stop(self, _server_id):
+            return True
+
+        def start(self, _server_id):
+            return SimpleNamespace(error="engine exited immediately")
+
+    monkeypatch.setattr("v2portal.servers.ServerManager", FakeManager)
+    args = app.build_parser().parse_args(["server", "edit", server.id, "--name", "new"])
+
+    assert app._command(store, args) == 1
+    assert "restart failed: engine exited immediately" in capsys.readouterr().err
 
 
 def test_config_export_command_writes_full_config(tmp_path, capsys):
@@ -101,6 +196,53 @@ def test_profile_add_link_with_name_override(tmp_path, capsys):
     assert len(profiles) == 1
     assert profiles[0].name == "US proxy"
     assert profiles[0].kind == "vless"
+
+
+def test_profile_edit_updates_nested_socks_endpoint_and_auth(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(
+        Profile(
+            name="proxy",
+            kind="socks",
+            outbound={"settings": {"servers": [{"address": "127.0.0.1", "port": 1080}]}},
+        )
+    )
+    args = app.build_parser().parse_args(
+        [
+            "profile", "edit", profile.id,
+            "--host", "proxy.example",
+            "--port", "8080",
+            "--username", "alice",
+            "--password", "secret",
+        ]
+    )
+
+    assert app._command(store, args) == 0
+    endpoint = profile.outbound["settings"]["servers"][0]
+    assert endpoint == {
+        "address": "proxy.example",
+        "port": 8080,
+        "users": [{"user": "alice", "pass": "secret"}],
+    }
+
+
+def test_profile_edit_updates_vless_vnext_endpoint(tmp_path):
+    store = _store(tmp_path)
+    profile = store.add_profile(
+        Profile(
+            name="vless",
+            kind="vless",
+            outbound={"settings": {"vnext": [{"address": "old.example", "port": 443, "users": [{"id": "uuid"}]}]}},
+        )
+    )
+    args = app.build_parser().parse_args(
+        ["profile", "edit", profile.id, "--host", "new.example", "--port", "8443"]
+    )
+
+    assert app._command(store, args) == 0
+    endpoint = profile.outbound["settings"]["vnext"][0]
+    assert endpoint["address"] == "new.example"
+    assert endpoint["port"] == 8443
 
 
 def test_profile_add_link_invalid_returns_error(tmp_path, capsys):
@@ -401,6 +543,36 @@ def test_server_start_can_override_saved_failover(tmp_path, monkeypatch, capsys,
     assert app._server_command(store, args) == 0
     capsys.readouterr()
     assert observed == [expected_failover]
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--port", "0"], "server port must be between 1 and 65535"),
+        (["--port", "1082", "--api-port", "70000"], "server API port must be between 0 and 65535"),
+        (["--port", "1082", "--api-port", "1082"], "API port must differ"),
+        (["--port", "1082", "--failover", "-2"], "failover must be -1"),
+    ],
+)
+def test_server_add_rejects_invalid_values(tmp_path, args, message):
+    store = _store(tmp_path)
+    parsed = app.build_parser().parse_args(["server", "add", *args, "--direct"])
+
+    with pytest.raises(ValueError, match=message):
+        app._server_command(store, parsed)
+    assert store.list_servers() == []
+
+
+def test_server_edit_rejects_port_collision_without_mutating_saved_server(tmp_path):
+    store = _store(tmp_path)
+    first = store.add_server(Server(name="first", port=1080))
+    second = store.add_server(Server(name="second", port=1081))
+    parsed = app.build_parser().parse_args(["server", "edit", second.id, "--port", "1080"])
+
+    with pytest.raises(ValueError, match="already used"):
+        app._server_command(store, parsed)
+    assert second.port == 1081
+    assert store.get_server(second.id).port == 1081
 
 
 def test_profile_add_server_unknown_id_fails(tmp_path, capsys):

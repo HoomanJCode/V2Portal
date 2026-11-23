@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -57,7 +59,16 @@ def fetch(url: str, user_agent: str | None = None, proxy: str | None = None) -> 
     if url.startswith("paste://"):
         return url[len("paste://") :], {}
     if url.startswith("file://"):
-        path = Path(url[len("file://") :])
+        parsed = urlsplit(url)
+        if parsed.netloc not in ("", "localhost"):
+            if os.name != "nt":
+                raise FetchError("file subscription URL must reference a local path")
+            path = Path(f"//{parsed.netloc}{unquote(parsed.path)}")
+        else:
+            path_text = unquote(parsed.path)
+            if os.name == "nt" and len(path_text) >= 3 and path_text[0] == "/" and path_text[2] == ":":
+                path_text = path_text[1:]
+            path = Path(path_text)
         if not path.exists():
             raise FetchError(f"file not found: {path}")
         try:

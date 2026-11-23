@@ -187,6 +187,39 @@ def test_server_list_resolves_balancer_group(tmp_path, capsys, monkeypatch):
     assert f"→ {p2.id} (EU proxy)" in out
 
 
+def test_server_list_skips_singbox_api_query_for_xray(tmp_path, capsys, monkeypatch):
+    from v2portal import traffic
+
+    store = _store(tmp_path)
+    profile = store.add_profile(
+        Profile(name="xray node", kind="socks", engine="xray", outbound=SOCKS)
+    )
+    server = Server(
+        name="xray server",
+        port=1080,
+        outbound_id=profile.id,
+        outbound_type="profile",
+        traffic_api_port=19090,
+    )
+    store.add_server(server)
+    monkeypatch.setattr(ServerState, "is_running", lambda self: True)
+    monkeypatch.setattr(
+        ServerManager,
+        "get_state",
+        lambda self, server_id: ServerState(server_id=server_id, pid=99999),
+    )
+    monkeypatch.setattr(
+        traffic,
+        "read_active_outbound",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected API request")),
+    )
+
+    args = app.build_parser().parse_args(["server", "list"])
+
+    assert app._server_command(store, args) == 0
+    assert "xray node" in capsys.readouterr().out
+
+
 def test_server_add_requires_profile_or_group(tmp_path, capsys):
     store = _store(tmp_path)
     profile = store.add_profile(Profile(name="p", kind="socks", outbound=SOCKS))

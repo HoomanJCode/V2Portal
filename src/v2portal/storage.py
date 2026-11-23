@@ -74,6 +74,8 @@ def _validate_persisted_shape(raw: dict) -> None:
     rules = _require_list(routing.get("rules", []), "config routing rules")
     for index, rule in enumerate(rules):
         rule = _require_dict(rule, f"config routing rules[{index}]")
+        if "id" in rule and not isinstance(rule["id"], str):
+            raise ValueError(f"config routing rules[{index}].id must be text")
         if "action" in rule and not isinstance(rule["action"], str):
             raise ValueError(f"config routing rules[{index}].action must be text")
         if "target_id" in rule and rule["target_id"] is not None and not isinstance(
@@ -179,6 +181,27 @@ def _validate_persisted_shape(raw: dict) -> None:
             for key in ("username", "password"):
                 if key in auth and not isinstance(auth[key], str):
                     raise ValueError(f"config servers[{index}].auth.{key} must be text")
+
+    # IDs are the single lookup key across every entity kind. Duplicates make
+    # commands and references ambiguous, even when the collision is across
+    # different collections.
+    seen_ids: set[str] = set()
+    for collection_name, items in (
+        ("profiles", profiles),
+        ("subscriptions", subscriptions),
+        ("groups", groups),
+        ("servers", servers),
+        ("routing rules", rules),
+    ):
+        for index, item in enumerate(items):
+            entity_id = item.get("id")
+            if entity_id is None:
+                continue
+            if not entity_id.strip():
+                raise ValueError(f"config {collection_name}[{index}].id must be non-empty")
+            if entity_id in seen_ids:
+                raise ValueError(f"duplicate entity id: {entity_id}")
+            seen_ids.add(entity_id)
 
 
 class ConfigStore:

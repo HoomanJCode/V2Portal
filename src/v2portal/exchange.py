@@ -32,6 +32,7 @@ _SECRET_KEYS = {
     "share_link",
     "inline",
     "auth_hint",
+    "subscription_proxy",
 }
 
 
@@ -46,8 +47,9 @@ def _redact(value, in_users: bool = False):
     """Recursively mask credentials/keys; returns a new structure."""
     if isinstance(value, dict):
         result: dict = {}
+        is_subscription = "url" in value and "profile_ids" in value and "auto_update_days" in value
         for key, item in value.items():
-            if key in _SECRET_KEYS:
+            if key in _SECRET_KEYS or (key == "url" and is_subscription):
                 result[key] = "REDACTED"
             elif key == "id" and in_users:
                 result[key] = "REDACTED"
@@ -91,21 +93,66 @@ def _index_of_id(items, item_id: str) -> int | None:
 
 
 def _merge_config(current: Config, incoming: Config) -> None:
+    current_types = {}
+    for entity_type, items in (
+        ("profile", current.profiles),
+        ("subscription", current.subscriptions),
+        ("group", current.groups),
+        ("server", current.servers),
+        ("routing rule", current.routing.rules),
+    ):
+        current_types.update({item.id: entity_type for item in items})
+    for entity_type, items in (
+        ("profile", incoming.profiles),
+        ("subscription", incoming.subscriptions),
+        ("group", incoming.groups),
+        ("server", incoming.servers),
+        ("routing rule", incoming.routing.rules),
+    ):
+        for item in items:
+            existing_type = current_types.get(item.id)
+            if existing_type is not None and existing_type != entity_type:
+                raise ValueError(
+                    f"entity id {item.id} belongs to an existing {existing_type}, "
+                    f"cannot import it as a {entity_type}"
+                )
+
     profiles = list(current.profiles)
     keys = {_profile_key(p) for p in profiles}
+    profile_id_map: dict[str, str] = {}
 
     for profile in incoming.profiles:
         key = _profile_key(profile)
         if key in keys:
-            continue  # duplicate by key; keep the existing profile
+            matches = [p for p in profiles if _profile_key(p) == key]
+            existing = next(
+                (p for p in matches if p.subscription_id == profile.subscription_id),
+                None,
+            )
+            if existing is not None:
+                profile_id_map[profile.id] = existing.id
+                continue  # duplicate node from the same source; keep the existing profile
+            if profile.subscription_id is None and matches:
+                profile_id_map[profile.id] = matches[0].id
+                continue  # duplicate manual profile; keep the existing profile
         index = _index_of_id(profiles, profile.id)
         if index is not None:
+            keys.discard(_profile_key(profiles[index]))
             profiles[index] = profile  # same id but different key → update
+            keys.add(key)
             continue
         profiles.append(profile)
         keys.add(key)
 
     current.profiles = profiles
+    if profile_id_map:
+        for sub in incoming.subscriptions:
+            sub.profile_ids = [profile_id_map.get(pid, pid) for pid in sub.profile_ids]
+        for group in incoming.groups:
+            group.profile_ids = [profile_id_map.get(pid, pid) for pid in group.profile_ids]
+        for server in incoming.servers:
+            if server.outbound_type == "profile":
+                server.outbound_id = profile_id_map.get(server.outbound_id, server.outbound_id)
 
     for sub in incoming.subscriptions:
         index = _index_of_id(current.subscriptions, sub.id)
@@ -127,6 +174,15 @@ def _merge_config(current: Config, incoming: Config) -> None:
             current.servers[index] = server
         else:
             current.servers.append(server)
+
+    for rule in incoming.routing.rules:
+        index = _index_of_id(current.routing.rules, rule.id)
+        if index is not None:
+            current.routing.rules[index] = rule
+        else:
+            current.routing.rules.append(rule)
+    if incoming.routing.rules:
+        current.routing.mode = incoming.routing.mode
 
     for name, options in incoming.engines.items():
         current.engines.setdefault(name, {}).update(options)
