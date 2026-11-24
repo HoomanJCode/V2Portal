@@ -1,4 +1,4 @@
-from scripts.verify_engines import Checks, acquire_binaries, build_parser
+from scripts.verify_engines import Checks, acquire_binaries, arch_name, build_parser, platform_name
 
 
 def test_verify_engines_parser_accepts_ephemeral_proxy():
@@ -26,18 +26,26 @@ def test_acquire_binaries_reports_missing_engine_without_raising(tmp_path, monke
 
 
 def test_acquire_binaries_reuses_existing_files_without_download(tmp_path, monkeypatch):
+    from v2portal.engines import get_adapter
+
     checks = Checks()
-    (tmp_path / "sing-box").write_bytes(b"sing-box")
-    (tmp_path / "xray").write_bytes(b"xray")
+    platform = platform_name()
+    arch = arch_name()
+    binaries = {
+        engine: tmp_path / get_adapter(engine).binary_filename(platform, arch)
+        for engine in ("sing-box", "xray")
+    }
+    for engine, binary in binaries.items():
+        binary.write_bytes(engine.encode())
 
     def fail_download(*args, **kwargs):
         raise AssertionError("download should be skipped")
 
     monkeypatch.setattr("scripts.verify_engines.download_binary", fail_download)
 
-    binaries = acquire_binaries(checks, tmp_path, skip_download=True)
+    resolved = acquire_binaries(checks, tmp_path, skip_download=True)
 
-    assert binaries == {"sing-box": tmp_path / "sing-box", "xray": tmp_path / "xray"}
+    assert resolved == binaries
     assert all(ok for _, ok, _ in checks.results)
 
 

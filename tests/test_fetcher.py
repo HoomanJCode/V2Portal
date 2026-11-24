@@ -7,7 +7,7 @@ from v2portal.subs.fetcher import FetchError, fetch
 def test_file_fetch(tmp_path):
     f = tmp_path / "sub.txt"
     f.write_text("vmess://x\n")
-    body, headers = fetch(f"file://{f}")
+    body, headers = fetch(f.as_uri())
     assert body == "vmess://x\n"
     assert headers == {}
 
@@ -59,7 +59,7 @@ def test_invalid_user_agent_raises_typed_error():
 
 def test_file_missing_raises(tmp_path):
     with pytest.raises(FetchError):
-        fetch(f"file://{tmp_path}/nope.txt")
+        fetch((tmp_path / "nope.txt").as_uri())
 
 
 def test_http_fetch_mocked(monkeypatch):

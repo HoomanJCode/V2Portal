@@ -54,7 +54,7 @@ def test_userinfo_normalizes_malformed_counters_and_expiry():
 
 def test_sample_fixture_imports_all_protocols():
     fixture = Path(__file__).parent / "fixtures" / "sample_subscription.txt"
-    sub, profiles, errors = import_subscription("S", f"file://{fixture}")
+    sub, profiles, errors = import_subscription("S", fixture.as_uri())
     assert not errors
     kinds = {p.kind for p in profiles}
     assert {"vless", "trojan", "socks", "http", "hysteria2", "tuic"} <= kinds
@@ -102,7 +102,7 @@ def test_import_xray_json_subscription(tmp_path):
     path = tmp_path / "xray.json"
     path.write_text(body)
 
-    sub, profiles, errors = import_subscription("JSON", f"file://{path}")
+    sub, profiles, errors = import_subscription("JSON", path.as_uri())
 
     assert not errors
     assert [profile.name for profile in profiles] == ["json-vless", "json-ss"]
@@ -117,7 +117,7 @@ def test_import_xray_json_reports_unsupported_nodes(tmp_path):
     path = tmp_path / "xray.json"
     path.write_text(json.dumps([{"remarks": "direct-only", "outbounds": [{"protocol": "freedom"}]}]))
 
-    _sub, profiles, errors = import_subscription("JSON", f"file://{path}")
+    _sub, profiles, errors = import_subscription("JSON", path.as_uri())
 
     assert profiles == []
     assert errors == ["json node 1: config has no supported proxy outbound"]
@@ -126,7 +126,7 @@ def test_import_xray_json_reports_unsupported_nodes(tmp_path):
 def test_import_subscription(tmp_path):
     f = tmp_path / "sub.txt"
     f.write_text("\n".join(FIXTURE_LINKS))
-    sub, profiles, errors = import_subscription("S", f"file://{f}")
+    sub, profiles, errors = import_subscription("S", f.as_uri())
     assert not errors
     assert len(profiles) == len(FIXTURE_LINKS)
     assert sub.profile_ids == [p.id for p in profiles]
@@ -136,7 +136,7 @@ def test_import_subscription(tmp_path):
 def test_import_subscription_reports_bad_links(tmp_path):
     f = tmp_path / "sub.txt"
     f.write_text("foo://bar\n" + FIXTURE_LINKS[0])
-    _sub, profiles, errors = import_subscription("S", f"file://{f}")
+    _sub, profiles, errors = import_subscription("S", f.as_uri())
     assert len(profiles) == 1
     assert len(errors) == 1
 
@@ -145,7 +145,7 @@ def test_import_subscription_reports_malformed_handler_errors(tmp_path):
     f = tmp_path / "sub.txt"
     f.write_text("vmess://not-base64\n" + FIXTURE_LINKS[0])
 
-    _sub, profiles, errors = import_subscription("S", f"file://{f}")
+    _sub, profiles, errors = import_subscription("S", f.as_uri())
 
     assert len(profiles) == 1
     assert len(errors) == 1
@@ -157,7 +157,7 @@ def test_update_rejects_all_invalid_payload_without_pruning(tmp_path):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
 
-    sub, profiles, errors = import_subscription("S", f"file://{f}")
+    sub, profiles, errors = import_subscription("S", f.as_uri())
     assert not errors
     store.add_subscription(sub)
     store.add_profile(profiles[0])
@@ -177,7 +177,7 @@ def test_update_deletes_vanished_and_prunes_groups(tmp_path):
     store = ConfigStore(tmp_path / "config.json")
     store.load()
 
-    sub, profiles, errors = import_subscription("S", f"file://{f}")
+    sub, profiles, errors = import_subscription("S", f.as_uri())
     assert not errors
     store.add_subscription(sub)
     for p in profiles:

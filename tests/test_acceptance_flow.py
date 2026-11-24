@@ -56,7 +56,7 @@ def test_mixed_subscription_nodes_fail_individually(tmp_path, monkeypatch):
 
     path = tmp_path / "mixed.json"
     path.write_text(json.dumps(MIXED_JSON), encoding="utf-8")
-    sub, profiles, errors = import_subscription("mixed", f"file://{path}")
+    sub, profiles, errors = import_subscription("mixed", path.as_uri())
 
     assert len(profiles) == 3
     assert len(errors) == 1
