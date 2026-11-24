@@ -219,6 +219,17 @@ def _validate_settings(settings) -> None:
             raise ValueError("xray DNS servers must contain non-empty text")
 
 
+def _set_dialer_proxy(outbound: dict, tag: str) -> None:
+    """Route an Xray outbound through the preceding chain hop."""
+    stream = outbound.setdefault("streamSettings", {})
+    if not isinstance(stream, dict):
+        raise ValueError("xray streamSettings must be an object for chained outbounds")
+    sockopt = stream.setdefault("sockopt", {})
+    if not isinstance(sockopt, dict):
+        raise ValueError("xray streamSettings.sockopt must be an object for chained outbounds")
+    sockopt["dialerProxy"] = tag
+
+
 @register
 class XrayAdapter(EngineAdapter):
     name = "xray"
@@ -236,10 +247,7 @@ class XrayAdapter(EngineAdapter):
         for idx, profile in enumerate(target.profiles):
             outbound = self._outbound_for(profile)
             if target.type == "chain" and idx > 0:
-                outbound["proxySettings"] = {
-                    "tag": target.profiles[idx - 1].id,
-                    "transportLayer": False,
-                }
+                _set_dialer_proxy(outbound, target.profiles[idx - 1].id)
             outbounds.append(outbound)
 
         # Direct mode: no profiles → route straight to the direct outbound.
@@ -289,10 +297,7 @@ class XrayAdapter(EngineAdapter):
                     if idx > 0:
                         ob = next((o for o in outbounds if o.get("tag") == pid), None)
                         if ob is not None:
-                            ob["proxySettings"] = {
-                                "tag": member_ids[idx - 1],
-                                "transportLayer": False,
-                            }
+                            _set_dialer_proxy(ob, member_ids[idx - 1])
             extra_added.add(group.id)
 
         listen = settings.listen if settings.allow_lan else "127.0.0.1"

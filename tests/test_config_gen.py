@@ -284,7 +284,7 @@ def test_xray_balancer_and_chain(tmp_path):
     chain = store.add_group(Group(name="chain", type="chain", profile_ids=[a.id, b.id]))
     cfg2 = _generate(store, chain, default="xray")
     b_ob = next(o for o in cfg2["outbounds"] if o.get("tag") == b.id)
-    assert b_ob["proxySettings"]["tag"] == a.id
+    assert b_ob["streamSettings"]["sockopt"]["dialerProxy"] == a.id
     assert cfg2["routing"]["rules"][-1]["outboundTag"] == b.id
 
 
@@ -1031,7 +1031,7 @@ def test_xray_split_route_to_balancer_group(tmp_path):
 
 
 def test_xray_split_route_to_chain_group(tmp_path):
-    """xray: a routing rule targeting a chain group emits chained proxySettings."""
+    """xray: a routing rule targeting a chain group emits chained dialerProxy."""
     store = _store(tmp_path)
     main = store.add_profile(_vmess("main"))
     a = store.add_profile(_vmess("a"))
@@ -1044,7 +1044,7 @@ def test_xray_split_route_to_chain_group(tmp_path):
     cfg = _generate_with_extras(store, main, routing, default="xray")
     ob_b = next((o for o in cfg["outbounds"] if o.get("tag") == b.id), None)
     assert ob_b is not None
-    assert ob_b["proxySettings"]["tag"] == a.id
+    assert ob_b["streamSettings"]["sockopt"]["dialerProxy"] == a.id
 
 
 def test_split_route_direct_and_block_with_target(tmp_path):
