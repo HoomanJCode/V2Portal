@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "v2portal"
-version = "0.2.2"
+version = "0.3.0"
 description = "Cross-platform V2Ray CLI proxy client for sing-box and Xray-core with subscriptions, proxy groups, split routing, and LAN servers"
 readme = "README.md"
 keywords = [
