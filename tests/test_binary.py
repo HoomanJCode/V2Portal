@@ -117,6 +117,42 @@ def test_latest_tag_accepts_explicit_proxy(monkeypatch):
     assert captured["proxy"] == "socks5://proxy.example:1080"
 
 
+def test_latest_tag_falls_back_to_release_page_when_api_is_forbidden(monkeypatch):
+    import httpx
+
+    urls = []
+
+    class Response:
+        url = httpx.URL("https://github.com/example/repo/releases/tag/v1.2.3")
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url, **kwargs):
+            urls.append(url)
+            if "api.github.com" in url:
+                raise httpx.ProxyError("403 Forbidden")
+            return Response()
+
+    monkeypatch.setattr("v2portal.engines.binary.httpx.Client", Client)
+
+    assert _latest_tag("example/repo") == "v1.2.3"
+    assert urls == [
+        "https://api.github.com/repos/example/repo/releases/latest",
+        "https://github.com/example/repo/releases/latest",
+    ]
+
+
 def test_download_accepts_explicit_proxy(tmp_path, monkeypatch):
     captured = {}
 

@@ -12,6 +12,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import httpx
 from rich.console import Console
@@ -108,6 +109,24 @@ def _latest_tag(repo: str, proxy: str | None = None) -> str:
             resp.raise_for_status()
             payload = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
+        # GitHub's API can be rate-limited or blocked while release pages are
+        # still available. Resolve the canonical latest page's redirect in
+        # that case so engine installs do not depend on API access.
+        if "403" in str(exc) or "429" in str(exc):
+            try:
+                with httpx.Client(**client_options) as client:
+                    page = client.get(
+                        f"https://github.com/{repo}/releases/latest"
+                    )
+                    page.raise_for_status()
+                    prefix = f"/{repo}/releases/tag/"
+                    path = urlsplit(str(page.url)).path
+                    if path.startswith(prefix):
+                        tag = unquote(path[len(prefix) :]).strip()
+                        if tag and "/" not in tag and "\\" not in tag:
+                            return tag
+            except (httpx.HTTPError, ValueError):
+                pass
         msg = str(exc).lower()
         if "timeout" in msg or "handshake" in msg or "connect" in msg:
             hint = (
