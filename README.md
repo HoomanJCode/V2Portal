@@ -113,12 +113,20 @@ v2portal profile list
 ```
 
 The command prints the new subscription ID and imports its proxy nodes as
-profiles. The same subscription can be refreshed later:
+profiles. `subscription list` shows each configured subscription URL, profile
+count, name, and ID. The same subscription can be refreshed later:
 
 ```bash
 v2portal subscription refresh SUBSCRIPTION_ID
 # or update every enabled subscription
 v2portal subscription refresh --all
+```
+
+Subscription sources can also be local files or pasted share-link text:
+
+```bash
+v2portal subscription add local-list file:///path/to/subscription.txt
+v2portal subscription add inline-list 'paste://vless://UUID@example.com:443?security=tls&type=ws#node'
 ```
 
 You can also add an individual V2Ray share link directly:
@@ -244,6 +252,13 @@ v2portal server add --help
 v2portal route add --help
 ```
 
+The global `--config-dir` and `--no-auto-update` options can appear before or
+after the command. For example:
+
+```bash
+v2portal profile list --json --config-dir ./my-v2portal-config --no-auto-update
+```
+
 ### Useful examples
 
 ```bash
@@ -319,7 +334,15 @@ cd V2Portal
 python -m pip install -e ".[dev]"
 python -m pytest
 python scripts/verify_acceptance.py --json
+python scripts/verify_engines.py
 ```
+
+`verify_engines.py` downloads the latest sing-box and Xray binaries into a
+temporary directory, validates generated configs, and runs local inbound,
+routing, chaining, traffic-statistics, LAN-binding, and WebSocket smoke checks.
+Use `--bin-dir PATH --skip-download` to run against cached binaries without
+downloading; both platform-appropriate engine binaries must already be in that
+directory.
 
 The project uses Python 3.10+, `argparse`, `httpx`, `platformdirs`, and the
 sing-box/Xray adapter layer. The data model is defined in

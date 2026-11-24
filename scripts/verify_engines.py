@@ -175,7 +175,7 @@ def stop(proc: subprocess.Popen) -> None:
             proc.kill()
 
 
-def check_configs(checks: Checks, bin_dir: Path) -> None:
+def check_configs(checks: Checks, binaries: dict[str, Path]) -> None:
     store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
     store.load()
     a = store.add_profile(Profile(name="s1", kind="socks", outbound=SOCKS_OUTBOUND))
@@ -223,7 +223,7 @@ def check_configs(checks: Checks, bin_dir: Path) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             json.dump(cfg, fh)
             path = fh.name
-        binary = bin_dir / ("sing-box" if engine == "sing-box" else "xray")
+        binary = binaries[engine]
         result = run_config(binary, check_args, Path(path))
         checks.check(f"{engine} {label} config", result.returncode == 0, (result.stdout + result.stderr).strip().splitlines()[-1] if result.returncode else "")
 
@@ -592,9 +592,13 @@ def acquire_binaries(
     """
     binaries: dict[str, Path] = {}
     for engine in ("sing-box", "xray"):
-        binary = bin_dir / engine
+        binary_name = get_adapter(engine).binary_filename(platform_name(), arch_name())
+        binary = bin_dir / binary_name
         try:
-            if not skip_download or not binary.exists():
+            if skip_download:
+                if not binary.is_file():
+                    raise FileNotFoundError(binary)
+            else:
                 binary = download_binary(
                     engine,
                     "latest",
@@ -603,7 +607,7 @@ def acquire_binaries(
                     bin_dir=bin_dir,
                     proxy=proxy,
                 )
-            if not binary.exists():
+            if not binary.is_file():
                 raise FileNotFoundError(binary)
         except Exception as exc:  # pragma: no cover - network/platform dependent
             checks.check(f"{engine} binary", False, f"{type(exc).__name__}: {exc}")
@@ -643,14 +647,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if checks.summary() else 1
 
     live_checks = (
-        ("configs", check_configs, bin_dir),
-        ("mixed inbound", check_mixed_inbound, bin_dir / "sing-box"),
-        ("outbound routing", check_outbound_routing, bin_dir / "sing-box"),
-        ("chain", check_chain, bin_dir / "sing-box"),
-        ("split routing", check_split_routing, bin_dir / "sing-box"),
-        ("LAN binding", check_lan_binding, bin_dir / "sing-box"),
-        ("traffic stats", check_traffic_stats, bin_dir / "sing-box"),
-        ("WebSocket transport", check_websocket_transport, bin_dir / "sing-box"),
+        ("configs", check_configs, binaries),
+        ("mixed inbound", check_mixed_inbound, binaries["sing-box"]),
+        ("outbound routing", check_outbound_routing, binaries["sing-box"]),
+        ("chain", check_chain, binaries["sing-box"]),
+        ("split routing", check_split_routing, binaries["sing-box"]),
+        ("LAN binding", check_lan_binding, binaries["sing-box"]),
+        ("traffic stats", check_traffic_stats, binaries["sing-box"]),
+        ("WebSocket transport", check_websocket_transport, binaries["sing-box"]),
     )
     for label, check, argument in live_checks:
         try:

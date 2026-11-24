@@ -39,3 +39,37 @@ def test_acquire_binaries_reuses_existing_files_without_download(tmp_path, monke
 
     assert binaries == {"sing-box": tmp_path / "sing-box", "xray": tmp_path / "xray"}
     assert all(ok for _, ok, _ in checks.results)
+
+
+def test_acquire_binaries_skip_download_reports_missing_files(tmp_path, monkeypatch):
+    checks = Checks()
+
+    def fail_download(*args, **kwargs):
+        raise AssertionError("skip_download must not download")
+
+    monkeypatch.setattr("scripts.verify_engines.download_binary", fail_download)
+
+    binaries = acquire_binaries(checks, tmp_path, skip_download=True)
+
+    assert binaries == {}
+    assert all(not ok for _, ok, _ in checks.results)
+    assert all("FileNotFoundError" in detail for _, _, detail in checks.results)
+
+
+def test_acquire_binaries_uses_platform_binary_names(tmp_path, monkeypatch):
+    checks = Checks()
+    singbox = tmp_path / "sing-box.exe"
+    xray = tmp_path / "xray.exe"
+    singbox.write_bytes(b"sing-box")
+    xray.write_bytes(b"xray")
+    monkeypatch.setattr("scripts.verify_engines.platform_name", lambda: "windows")
+    monkeypatch.setattr("scripts.verify_engines.arch_name", lambda: "amd64")
+    monkeypatch.setattr(
+        "scripts.verify_engines.download_binary",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("download should be skipped")),
+    )
+
+    binaries = acquire_binaries(checks, tmp_path, skip_download=True)
+
+    assert binaries == {"sing-box": singbox, "xray": xray}
+    assert all(ok for _, ok, _ in checks.results)
