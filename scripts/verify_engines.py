@@ -35,7 +35,6 @@ from v2portal.models import Profile, RoutingConfig, RoutingRule
 from v2portal.outbounds.groups import create_balancer_group, create_chain_group, resolve_target
 from v2portal.storage import ConfigStore
 
-TEST_URL = "http://example.com/"
 SOCKS_OUTBOUND = {"settings": {"servers": [{"address": "1.2.3.4", "port": 1080}]}}
 VMESS_OUTBOUND = {
     "settings": {
@@ -141,6 +140,32 @@ def start_socks_server(binary: Path, port: int) -> subprocess.Popen:
     return subprocess.Popen([str(binary), "run", "-c", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def start_http_server(host: str = "127.0.0.1"):
+    """Start a small local destination so engine smoke checks need no internet."""
+    import http.server
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"v2portal engine smoke ok\n"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer((host, 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1]
+
+
+def stop_http_server(server) -> None:
+    server.shutdown()
+    server.server_close()
+
+
 def stop(proc: subprocess.Popen) -> None:
     if proc.poll() is None:
         proc.terminate()
@@ -205,6 +230,7 @@ def check_configs(checks: Checks, bin_dir: Path) -> None:
 
 def check_mixed_inbound(checks: Checks, singbox: Path) -> None:
     port = free_port()
+    httpd, http_port = start_http_server()
     store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
     store.load()
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS_OUTBOUND))
@@ -223,17 +249,19 @@ def check_mixed_inbound(checks: Checks, singbox: Path) -> None:
             return
         import httpx
         with httpx.Client(proxy=f"http://127.0.0.1:{port}", timeout=15, follow_redirects=False) as client:
-            r = client.get(TEST_URL)
+            r = client.get(f"http://127.0.0.1:{http_port}/")
             checks.check("mixed inbound HTTP proxy", 200 <= r.status_code < 400, f"status={r.status_code}")
-        status = socks_http_get(port, "example.com")
+        status = socks_http_get(port, "127.0.0.1", dst_port=http_port)
         checks.check("mixed inbound SOCKS5", status.startswith("HTTP/1."), status)
     finally:
         stop(proc)
+        stop_http_server(httpd)
 
 
 def check_outbound_routing(checks: Checks, singbox: Path) -> None:
     upstream_port = free_port()
     inbound_port = free_port()
+    httpd, http_port = start_http_server()
     upstream = start_socks_server(singbox, upstream_port)
     try:
         if not wait_port(upstream_port):
@@ -262,12 +290,13 @@ def check_outbound_routing(checks: Checks, singbox: Path) -> None:
                 checks.check("outbound routing (inbound listen)", False, "inbound port never opened")
                 return
             checks.check("outbound routing (connect)", True, f"engine={status.engine}")
-            line = socks_http_get(inbound_port, "example.com")
+            line = socks_http_get(inbound_port, "127.0.0.1", dst_port=http_port)
             checks.check("outbound routing (egress via socks outbound)", line.startswith("HTTP/1."), line)
         finally:
             controller.disconnect()
     finally:
         stop(upstream)
+        stop_http_server(httpd)
 
 
 def _socks_profile(name: str, port: int) -> Profile:
@@ -282,6 +311,7 @@ def check_chain(checks: Checks, singbox: Path) -> None:
     hop1_port, hop2_port, inbound_port = free_port(), free_port(), free_port()
     hop1 = start_socks_server(singbox, hop1_port)
     hop2 = start_socks_server(singbox, hop2_port)
+    httpd, http_port = start_http_server()
     try:
         if not (wait_port(hop1_port) and wait_port(hop2_port)):
             checks.check("chain (upstreams)", False, "upstream ports never opened")
@@ -303,7 +333,7 @@ def check_chain(checks: Checks, singbox: Path) -> None:
             if not wait_port(inbound_port):
                 checks.check("chain egress (2 hops)", False, "inbound port never opened")
                 return
-            line = socks_http_get(inbound_port, "example.com")
+            line = socks_http_get(inbound_port, "127.0.0.1", dst_port=http_port)
             checks.check("chain egress (2 hops)", line.startswith("HTTP/1."), line)
         finally:
             controller.disconnect()
@@ -322,7 +352,7 @@ def check_chain(checks: Checks, singbox: Path) -> None:
                 checks.check("chain dead first hop fails", False, "inbound port never opened")
                 return
             try:
-                line = socks_http_get(inbound_port, "example.com")
+                line = socks_http_get(inbound_port, "127.0.0.1", dst_port=http_port)
                 checks.check("chain dead first hop fails", False, f"unexpected success: {line}")
             except Exception as exc:
                 checks.check("chain dead first hop fails", True, type(exc).__name__)
@@ -331,10 +361,12 @@ def check_chain(checks: Checks, singbox: Path) -> None:
     finally:
         stop(hop1)
         stop(hop2)
+        stop_http_server(httpd)
 
 
 def check_split_routing(checks: Checks, singbox: Path) -> None:
     dead, inbound_port = free_port(), free_port()  # dead port = the "proxy"
+    httpd, http_port = start_http_server(host="0.0.0.0")
     store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
     store.load()
     store.config.settings.mixed_port = inbound_port
@@ -342,7 +374,7 @@ def check_split_routing(checks: Checks, singbox: Path) -> None:
     proxy = store.add_profile(_socks_profile("proxy", dead))
     store.config.routing = RoutingConfig(
         mode="split",
-        rules=[RoutingRule(action="direct", match={"domains": ["example.com"]})],
+        rules=[RoutingRule(action="direct", match={"ips": ["127.0.0.1/32"]})],
     )
 
     controller = ConnectionController(store, bin_dir=singbox.parent, runtime_dir=Path(tempfile.mkdtemp()))
@@ -355,17 +387,18 @@ def check_split_routing(checks: Checks, singbox: Path) -> None:
             checks.check("split routing (inbound listen)", False, "inbound port never opened")
             return
         try:
-            line = socks_http_get(inbound_port, "example.com")
+            line = socks_http_get(inbound_port, "127.0.0.1", dst_port=http_port)
             checks.check("split routing direct rule", line.startswith("HTTP/1."), line)
         except Exception as exc:
             checks.check("split routing direct rule", False, type(exc).__name__)
         try:
-            line2 = socks_http_get(inbound_port, "www.gstatic.com")
+            line2 = socks_http_get(inbound_port, "127.0.0.2", dst_port=http_port)
             checks.check("split routing fallthrough to proxy", False, f"unexpected: {line2}")
         except Exception as exc:
             checks.check("split routing fallthrough to proxy", True, type(exc).__name__)
     finally:
         controller.disconnect()
+        stop_http_server(httpd)
 
 
 def check_lan_binding(checks: Checks, singbox: Path) -> None:
@@ -374,6 +407,7 @@ def check_lan_binding(checks: Checks, singbox: Path) -> None:
         checks.check("LAN binding", False, "no LAN IP detected")
         return
     port = free_port()
+    httpd, http_port = start_http_server(host="0.0.0.0")
     store = ConfigStore(Path(tempfile.mkdtemp()) / "config.json")
     store.load()
     profile = store.add_profile(Profile(name="s", kind="socks", outbound=SOCKS_OUTBOUND))
@@ -390,10 +424,11 @@ def check_lan_binding(checks: Checks, singbox: Path) -> None:
         if not wait_port(port):
             checks.check("LAN binding (engine start)", False, "port never opened")
             return
-        line = socks_http_get(port, "example.com", proxy_host=ips[0])
+        line = socks_http_get(port, ips[0], dst_port=http_port, proxy_host=ips[0])
         checks.check(f"LAN binding (0.0.0.0 via {ips[0]})", line.startswith("HTTP/1."), line)
     finally:
         stop(proc)
+        stop_http_server(httpd)
 
 
 def check_traffic_stats(checks: Checks, singbox: Path) -> None:
@@ -607,14 +642,21 @@ def main(argv: list[str] | None = None) -> int:
         checks.check("engine checks", False, "skipped because both engine binaries are required")
         return 0 if checks.summary() else 1
 
-    check_configs(checks, bin_dir)
-    check_mixed_inbound(checks, bin_dir / "sing-box")
-    check_outbound_routing(checks, bin_dir / "sing-box")
-    check_chain(checks, bin_dir / "sing-box")
-    check_split_routing(checks, bin_dir / "sing-box")
-    check_lan_binding(checks, bin_dir / "sing-box")
-    check_traffic_stats(checks, bin_dir / "sing-box")
-    check_websocket_transport(checks, bin_dir / "sing-box")
+    live_checks = (
+        ("configs", check_configs, bin_dir),
+        ("mixed inbound", check_mixed_inbound, bin_dir / "sing-box"),
+        ("outbound routing", check_outbound_routing, bin_dir / "sing-box"),
+        ("chain", check_chain, bin_dir / "sing-box"),
+        ("split routing", check_split_routing, bin_dir / "sing-box"),
+        ("LAN binding", check_lan_binding, bin_dir / "sing-box"),
+        ("traffic stats", check_traffic_stats, bin_dir / "sing-box"),
+        ("WebSocket transport", check_websocket_transport, bin_dir / "sing-box"),
+    )
+    for label, check, argument in live_checks:
+        try:
+            check(checks, argument)
+        except Exception as exc:  # keep later checks running and report a normal failure
+            checks.check(f"{label} verifier", False, f"{type(exc).__name__}: {exc}")
 
     return 0 if checks.summary() else 1
 
